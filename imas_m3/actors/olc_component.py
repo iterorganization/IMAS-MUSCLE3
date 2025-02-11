@@ -10,8 +10,10 @@ import logging
 import sys
 from datetime import datetime
 
+from pathlib import Path
+
 from ids_validator.report.summaryReportGenerator import SummaryReportGenerator
-from ids_validator.validate import validate
+from ids_validator.validate.validate import validate
 from ids_validator.validate_options import RuleFilter, ValidateOptions
 from imaspy import DBEntry, IDSFactory
 from libmuscle import Instance
@@ -20,7 +22,6 @@ from ymmsl import Operator
 from imas_m3.utils import get_port_list, get_setting_optional
 
 logger = logging.getLogger()
-IMAS_URI = "imas:memory?path=/"
 
 
 def main():
@@ -51,38 +52,38 @@ def main():
 
         # we have now received one message on each of the ports, and can launch a
         # validation action
-        with DBEntry(IMAS_URI, "w") as db:
-            # write all IDSes to the memory entry, since ids_validator prefers to load
-            # stuff itself. Some performance improvement could be made there by making
-            # a second entrypoint that does not load by imas_uri but accepts a
-            # collection of toplevels.
-            for ids in ids_data:
-                db.put(ids)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            IMAS_URI = f"imas:hdf5?path={tmpdir}"
+            with DBEntry(IMAS_URI, "w") as db:
+                # write all IDSes to the memory entry, since ids_validator prefers to load
+                # stuff itself. Some performance improvement could be made there by making
+                # a second entrypoint that does not load by imas_uri but accepts a
+                # collection of toplevels.
+                for ids in ids_data.values():
+                    # db.put(ids)
+                    db.put_slice(ids)
 
             validate_options = ValidateOptions(
                 rulesets=get_setting_optional(
-                    instance, "rulesets", default=["PDS-OLC"]
-                ),
-                extra_rule_dirs=get_setting_optional(
-                    instance, "extra_rule_dirs", default=[]
-                ),
+                    instance, "rulesets", default="PDS-OLC"
+                ).split(';'),
+                extra_rule_dirs=[Path(x) for x in get_setting_optional(
+                    instance, "extra_rule_dirs", default=''
+                ).split(';')],
                 apply_generic=get_setting_optional(
                     instance, "apply_generic", default=True
                 ),
-                use_pdb=get_setting_optional(instance, "use_pdb", default=False),
-                rule_filter=RuleFilter(
-                    ids=ids_data.keys()
-                ),  # this one may not be needed
             )
 
             result = validate(IMAS_URI, validate_options)
-            validation_passed = all([r.success for r in result])
+            validation_passed = all([r.success for r in result.results])
             if validation_passed:
                 logger.info("Check passed")
             else:
                 today = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                 # not sure whether we need the summary report generator or the detailed
-                summary_generator = SummaryReportGenerator(result, today)
+                summary_generator = SummaryReportGenerator([result], today)
                 summary_generator.save_html(f"{t_cur}_report.html")
 
                 if get_setting_optional(instance, "halt_on_error", default=False):
