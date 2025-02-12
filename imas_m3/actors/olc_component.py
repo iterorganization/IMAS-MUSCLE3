@@ -56,13 +56,12 @@ def main():
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
-                # write all IDSes to the memory entry, since ids_validator prefers to load
+                # write all IDSes to the temporary HDF5 entry, since ids_validator prefers to load
                 # stuff itself. Some performance improvement could be made there by making
                 # a second entrypoint that does not load by imas_uri but accepts a
                 # collection of toplevels.
                 for ids in ids_data.values():
-                    # db.put(ids)
-                    db.put_slice(ids)
+                    db.put(ids)
 
             validate_options = ValidateOptions(
                 rulesets=get_setting_optional(
