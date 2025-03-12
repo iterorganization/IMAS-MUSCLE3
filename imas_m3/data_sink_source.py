@@ -174,10 +174,12 @@ def handle_sink(
         msg_in = instance.receive(port_name)
         t_cur = msg_in.timestamp
         if db_entry is not None:
-            # ids_data = getattr(imas, ids_name)()
             ids_data = getattr(IDSFactory(), ids_name)()
             ids_data.deserialize(msg_in.data)
-            db_entry.put_slice(ids_data, occurrence=occ)
+            if len(ids_data.time) > 1:
+                db_entry.put(ids_data, occurrence=occ)
+            else:
+                db_entry.put_slice(ids_data, occurrence=occ)
     return t_cur
 
 
