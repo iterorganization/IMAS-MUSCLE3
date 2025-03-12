@@ -1,4 +1,4 @@
-r"""
+"""
 MUSCLE3 actor performing IDS timeslice accumulation.
 
 Only compatible with actors that send out whether their next timestamp in None.
@@ -41,17 +41,14 @@ def main():
                 first_round = False
                 for port_name in port_list_in:
                     ids_name = port_name.replace("_in", "")
-                    if port_name.endswith("_beep"):
-                        continue
+                    if ids_next.get(ids_name, True) and not port_name.endswith("_beep"):
+                        # receive _in
+                        msg_in = instance.receive(port_name)
+                        ids = getattr(IDSFactory(), ids_name)()
+                        ids.deserialize(msg_in.data)
+                        db.put_slice(ids)
 
-                    # receive _in
-                    msg_in = instance.receive(port_name)
-                    ids = getattr(IDSFactory(), ids_name)()
-                    ids.deserialize(msg_in.data)
-                    db.put_slice(ids)
-
-                    # receive _beep
-                    if ids_next.get(ids_name, True):
+                        # receive _beep
                         msg_in = instance.receive(port_name.replace("_in", "_beep"))
                         ids_next[ids_name] = msg_in.next_timestamp is not None
 

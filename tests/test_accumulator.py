@@ -43,13 +43,13 @@ settings:
 implementations:
   sink_component:
     executable: python
-    args: -u -m pds.utils.sink_component
+    args: -u -m imas_m3.actors.sink_component
   source_component:
     executable: python
-    args: -u -m pds.utils.source_component
+    args: -u -m imas_m3.actors.source_component
   accumulator_component:
     executable: python
-    args: -u -m pds.utils.accumulator_component
+    args: -u -m imas_m3.actors.accumulator_component
 resources:
   source_component:
     threads: 1
@@ -74,4 +74,6 @@ resources:
 
     assert data_sink_path.exists()
     with DBEntry(sink_uri, "r") as entry:
+        print(core_profiles.time)
+        print(entry.get("core_profiles").time)
         assert all(entry.get("core_profiles").time == core_profiles.time)

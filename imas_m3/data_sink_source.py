@@ -100,9 +100,15 @@ def muscled_source() -> None:
             sanity_check_ports(instance)
             first_run = False
 
-        for t_inner in t_array:
+        for i, t_inner in enumerate(t_array):
             # O_I
-            handle_source(instance, source_db_entry, port_list_out, t_inner)
+            if i < len(t_array) - 1:
+                next_t = t_array[i + 1]
+            else:
+                next_t = None
+            handle_source(
+                instance, source_db_entry, port_list_out, t_inner, next_timestamp=next_t
+            )
     source_db_entry.close()
 
 
@@ -143,6 +149,7 @@ def handle_source(
     db_entry: Optional[DBEntry],
     port_list: List[str],
     t_cur: float,
+    next_timestamp: Optional[float] = None,
 ) -> None:
     """Loop through source ids_names and send all outgoing messages"""
     if db_entry is None:
@@ -157,7 +164,9 @@ def handle_source(
             time_requested=t_cur,
             interpolation_method=CLOSEST_INTERP,
         )
-        msg_out = Message(t_cur, data=slice_out.serialize())
+        msg_out = Message(
+            t_cur, data=slice_out.serialize(), next_timestamp=next_timestamp
+        )
         instance.send(port_name, msg_out)
 
 
