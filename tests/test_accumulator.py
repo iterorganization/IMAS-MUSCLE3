@@ -27,7 +27,7 @@ model:
     accumulator_component:
       implementation: accumulator_component
       ports:
-        s: [core_profiles_in, core_profiles_beep]
+        s: [core_profiles_in, core_profiles_t_next]
         o_f: [core_profiles_out]
     sink_component:
       implementation: sink_component
@@ -35,7 +35,7 @@ model:
         f_init: [core_profiles_in]
   conduits:
     source_component.core_profiles_out: accumulator_component.core_profiles_in
-    source_component.core_profiles_out: accumulator_component.core_profiles_beep
+    source_component.core_profiles_out: accumulator_component.core_profiles_t_next
     accumulator_component.core_profiles_out: sink_component.core_profiles_in
 settings:
   source_component.source_uri: {source_uri}
