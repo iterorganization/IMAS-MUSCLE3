@@ -136,9 +136,11 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
+        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in) or 0
         # O_F
-        handle_source(instance, source_db_entry, port_list_out, t_cur)
+        handle_source(
+            instance, source_db_entry, port_list_out, t_cur, next_timestamp=t_next
+        )
 
     sink_db_entry.close()
     source_db_entry.close()
@@ -177,11 +179,13 @@ def handle_sink(
 ) -> Optional[float]:
     """Loop through sink ids_names and receive all incoming messages"""
     t_cur = None
+    t_next = None
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
         occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
         msg_in = instance.receive(port_name)
         t_cur = msg_in.timestamp
+        t_next = msg_in.next_timestamp
         if db_entry is not None:
             ids_data = getattr(IDSFactory(), ids_name)()
             ids_data.deserialize(msg_in.data)
@@ -189,7 +193,7 @@ def handle_sink(
                 db_entry.put(ids_data, occurrence=occ)
             else:
                 db_entry.put_slice(ids_data, occurrence=occ)
-    return t_cur
+    return t_cur, t_next
 
 
 def sanity_check_ports(instance: Instance) -> None:
