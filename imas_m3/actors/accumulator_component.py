@@ -1,10 +1,18 @@
 """
 MUSCLE3 actor performing IDS timeslice accumulation.
 
-Only compatible with actors that send out whether their next timestamp in None.
+This actor can receive timeslices for various IDSs at the same time on the S port,
+keeping track of whether or not it was the last timeslice for a given inner loop.
+Optionally the 't_next' S port is used to override this behavior and match with the
+last timeslice of a specific actor. It then sends out all the IDSs with all accumulated
+timeslices on the O_F port.
 
-Receives multiple timeslices for a given IDS on the S port and sends out the
-IDS with all accumulated timeslices on the O_F port.
+If no actors are available that pass information for the next_timestep, it will default
+to None and this actor will only be able to receive the first timeslice.
+
+This actor might have difficulty handling other actors with dynamic timesteps that
+cannot accurately predict whether their current timeslice will be the last, possibly
+leading to deadlocks. It is advised to use predictable or constant timestepping.
 """
 
 import logging
@@ -20,43 +28,50 @@ logger = logging.getLogger()
 
 
 def main() -> None:
-    """Create instance and enter submodel execution loop"""
-    logger.info("Starting accumulator Actor")
+    """Create instance and accumulate IDS timeslices before sending out the full IDS"""
+    logger.info("Starting accumulator actor")
+    # Initiate MUSCLE3 instance
     instance = Instance(
         {
             Operator.S: [f"{ids_name}_in" for ids_name in IDSFactory().ids_names()]
-            + [f"{ids_name}_t_next" for ids_name in IDSFactory().ids_names()],
+            + ["t_next"],
             Operator.O_F: [f"{ids_name}_out" for ids_name in IDSFactory().ids_names()],
         }
     )
+    # fix connected ports
     port_list_in = get_port_list(instance, Operator.S)
+    if "t_next" in port_list_in:
+        port_list_in.remove("t_next")
     port_list_out = get_port_list(instance, Operator.O_F)
     sanity_check_ports(port_list_in, port_list_out)
 
     while instance.reuse_instance():
+        # keep track of whether or not each IDS should keep receiving
+        ids_next: Dict[str, bool] = {
+            port.replace("_in", ""): True for port in port_list_in
+        }
 
-        ids_next: Dict[str, bool] = {}
-        first_round = True
-
+        # use memory backend db entry to accumulate timeslices in a single IDS
         with DBEntry("imas:memory?path=/", "w") as db:
-            while first_round or any(ids_next.values()):
-                first_round = False
+            while any(ids_next.values()):
+                # loop over IDSs and receive until the last timeslice in encountered
                 for port_name in port_list_in:
                     ids_name = port_name.replace("_in", "")
-                    if ids_next.get(ids_name, True) and not port_name.endswith(
-                        "_t_next"
-                    ):
-                        # receive _in
+                    if ids_next.get(ids_name, True):
+                        # receive IDS
                         msg_in = instance.receive(port_name)
                         ids = getattr(IDSFactory(), ids_name)()
                         ids.deserialize(msg_in.data)
                         db.put_slice(ids)
-
-                        # receive _t_next
-                        msg_in = instance.receive(port_name.replace("_in", "_t_next"))
+                        # get t_next from received IDS message
                         ids_next[ids_name] = msg_in.next_timestamp is not None
+                # override t_next with optional port
+                if instance.is_connected("t_next"):
+                    msg_in = instance.receive("t_next")
+                    if msg_in.next_timestamp is not None:
+                        break
 
-            # send output
+            # send output with all timeslices at once
             for port_name in port_list_out:
                 ids_name = port_name.replace("_out", "")
                 ids = db.get(ids_name)
@@ -66,12 +81,11 @@ def main() -> None:
 
 def sanity_check_ports(port_list_in: List[str], port_list_out: List[str]) -> None:
     """Check whether any obvious problems are present in the instance config"""
-    # check port name
+    # check port names
     for port_name in port_list_in:
-        if not port_name.endswith(("_in", "_t_next")):
+        if not port_name.endswith("_in"):
             raise Exception(
-                "Incoming port names should use the format '*ids_name*_in' or"
-                "'*ids_name*_t_next'."
+                "Incoming port names should use the format '*ids_name*_in'."
                 f"Problem port is {port_name}."
             )
     for port_name in port_list_out:
@@ -81,14 +95,12 @@ def sanity_check_ports(port_list_in: List[str], port_list_out: List[str]) -> Non
                 f"Problem port is {port_name}."
             )
     # check matching incoming and outgoing ports
-    ids_in_set = set(
-        [port.replace("_in", "") for port in port_list_in if port.endswith("_in")]
-    )
+    ids_in_set = set([port.replace("_in", "") for port in port_list_in])
     ids_out_set = set([port.replace("_out", "") for port in port_list_out])
-    if len(ids_in_set & ids_out_set) > 0:
+    if len(ids_in_set ^ ids_out_set) > 0:
         raise Exception(
             "Any incoming port should have an outgoing port and vice versa."
-            f"Problem ports are {ids_in_set & ids_out_set}."
+            f"Problem ports are {ids_in_set ^ ids_out_set}."
         )
 
 
