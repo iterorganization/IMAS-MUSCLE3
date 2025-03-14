@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 import ymmsl
 from imaspy import DBEntry
@@ -6,7 +7,8 @@ from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
 
-def test_accumulator(tmpdir, core_profiles):
+@pytest.mark.parametrize('use_t_next', [True, False])
+def test_accumulator(tmpdir, core_profiles, use_t_next):
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
@@ -14,6 +16,13 @@ def test_accumulator(tmpdir, core_profiles):
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
     tmppath = Path(str(tmpdir))
+    # whether or not optional override port is used for t_next
+    if use_t_next:
+        ports = '[core_profiles_in, t_next]'
+        conduit = 'source_component.core_profiles_out: accumulator_component.t_next'
+    else:
+        ports = '[core_profiles_in]'
+        conduit = ''
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
@@ -27,7 +36,7 @@ model:
     accumulator_component:
       implementation: accumulator_component
       ports:
-        s: [core_profiles_in, core_profiles_t_next]
+        s: {ports}
         o_f: [core_profiles_out]
     sink_component:
       implementation: sink_component
@@ -35,7 +44,7 @@ model:
         f_init: [core_profiles_in]
   conduits:
     source_component.core_profiles_out: accumulator_component.core_profiles_in
-    source_component.core_profiles_out: accumulator_component.core_profiles_t_next
+    {conduit}
     accumulator_component.core_profiles_out: sink_component.core_profiles_in
 settings:
   source_component.source_uri: {source_uri}
@@ -51,9 +60,9 @@ implementations:
     executable: python
     args: -u -m imas_m3.actors.accumulator_component
 resources:
-  source_component:
-    threads: 1
   sink_component:
+    threads: 1
+  source_component:
     threads: 1
   accumulator_component:
     threads: 1

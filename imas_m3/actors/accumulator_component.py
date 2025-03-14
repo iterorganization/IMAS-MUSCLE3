@@ -68,7 +68,7 @@ def main() -> None:
                 # override t_next with optional port
                 if instance.is_connected("t_next"):
                     msg_in = instance.receive("t_next")
-                    if msg_in.next_timestamp is not None:
+                    if msg_in.next_timestamp is None:
                         break
 
             # send output with all timeslices at once
