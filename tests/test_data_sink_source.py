@@ -144,3 +144,65 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles):
         assert all(entry.get("core_profiles").time == core_profiles.time)
     with DBEntry(hybrid_sink_uri, "r") as entry:
         assert all(entry.get("core_profiles").time == core_profiles.time)
+
+
+def test_source_time_range(tmpdir, core_profiles):
+    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
+    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+    source_uri = f"imas:hdf5?path={data_source_path}"
+    sink_uri = f"imas:hdf5?path={data_sink_path}"
+    with DBEntry(source_uri, "w") as entry:
+        entry.put(core_profiles)
+    tmppath = Path(str(tmpdir))
+    # make config
+    ymmsl_text = f"""
+ymmsl_version: v0.1
+model:
+  name: test_model
+  components:
+    source_component:
+      implementation: source_component
+      ports:
+        o_i: [core_profiles_out]
+    sink_component:
+      implementation: sink_component
+      ports:
+        f_init: [core_profiles_in]
+  conduits:
+    source_component.core_profiles_out: sink_component.core_profiles_in
+settings:
+  source_component.source_uri: {source_uri}
+  source_component.t_min: 0.5
+  source_component.t_max: 1.5
+  sink_component.sink_uri: {sink_uri}
+implementations:
+  sink_component:
+    executable: python
+    args: -u -m pds.utils.sink_component
+  source_component:
+    executable: python
+    args: -u -m pds.utils.source_component
+resources:
+  source_component:
+    threads: 1
+  sink_component:
+    threads: 1
+"""
+
+    config = ymmsl.load(ymmsl_text)
+
+    # set up
+    run_dir = RunDir(tmppath / "run")
+
+    # launch MUSCLE Manager with simulation
+    manager = Manager(config, run_dir)
+    manager.start_instances()
+    success = manager.wait()
+
+    # check that all went well
+    assert success
+
+    assert data_sink_path.exists()
+    with DBEntry(sink_uri, "r") as entry:
+        assert core_profiles.time == [0, 1, 2]
+        assert entry.get("core_profiles").time == [1]
