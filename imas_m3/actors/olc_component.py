@@ -53,6 +53,7 @@ def main():
         # we have now received one message on each of the ports, and can launch a
         # validation action
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
@@ -66,10 +67,13 @@ def main():
             validate_options = ValidateOptions(
                 rulesets=get_setting_optional(
                     instance, "rulesets", default="PDS-OLC"
-                ).split(';'),
-                extra_rule_dirs=[Path(x) for x in get_setting_optional(
-                    instance, "extra_rule_dirs", default=''
-                ).split(';')],
+                ).split(";"),
+                extra_rule_dirs=[
+                    Path(x)
+                    for x in get_setting_optional(
+                        instance, "extra_rule_dirs", default=""
+                    ).split(";")
+                ],
                 apply_generic=get_setting_optional(
                     instance, "apply_generic", default=True
                 ),

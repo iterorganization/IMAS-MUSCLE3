@@ -104,8 +104,12 @@ def muscled_source() -> None:
             t_array = source_db_entry.get(
                 port_list_out[0].replace("_out", ""), lazy=True
             ).time
-            t_min = max(get_setting_optional(instance, "t_min", -1e20), t_array[0])
-            t_max = min(get_setting_optional(instance, "t_max", 1e20), t_array[-1])
+            t_min = max(
+                get_setting_optional(instance, "t_min", default=-1e20), t_array[0]
+            )
+            t_max = min(
+                get_setting_optional(instance, "t_max", default=1e20), t_array[-1]
+            )
             t_array = [t for t in t_array if t_min <= t <= t_max]
             sanity_check_ports(instance)
             first_run = False
