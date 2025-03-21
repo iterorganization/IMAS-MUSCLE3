@@ -14,7 +14,8 @@ Muscled data sink and/or source actor.
 - Available settings are
     sink_uri: which db entry uri the data should be saved to
     source_uri: which db entry uri the data should be loaded from
-    interpolation_method: which imas interpolation method to use for load
+    interpolation_method: which imas interpolation method to use for load,
+                          defaults to CLOSEST_INTERP
     dd_version: which IMAS DD version should be used
     {port_name}_occ: occurrence number for loading and saving of given ids
 
