@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import ymmsl
-from imaspy import DBEntry
+from imas import DBEntry
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 

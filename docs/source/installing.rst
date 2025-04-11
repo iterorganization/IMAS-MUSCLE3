@@ -26,8 +26,8 @@ SDCC setup
 
   .. code-block:: bash
 
-    # load IMAS and IMASPy before install
-    module load IMAS/3.40.1-5.1.0-intel-2020b IMASPy MUSCLE3
+    # load IMAS-Python before install
+    module load IMAS-Python MUSCLE3
     python3 -m venv ./venv
     . venv/bin/activate
     pip install --upgrade pip
@@ -35,12 +35,12 @@ SDCC setup
     # For development an installation in editable mode may be more convenient
     pip install -e .[all]
 
-* Load IMAS and IMASPy
+* Load IMAS-Python
 
   .. code-block:: bash
 
     # Load modules every time you use torax-m3
-    module load IMAS/3.40.1-5.1.0-intel-2020b IMASPy MUSCLE3
+    module load IMAS-Python MUSCLE3
     # And activate the Python virtual environment
     . venv/bin/activate
 
@@ -83,9 +83,9 @@ Ubuntu installation
     # For development an installation in editable mode may be more convenient
     pip install .[all]
 
-* Install IMASPy.
+* Install IMAS-Python.
 
-  Follow the instructions from `IMASPy installation docs <https://git.iter.org/projects/IMAS/repos/imaspy/browse/docs/source/installing.rst>`_
+  Follow the instructions from `IMAS-Python installation docs <https://imas-python.readthedocs.io/en/stable/installing.html>`_
 
 * Test the installation
 

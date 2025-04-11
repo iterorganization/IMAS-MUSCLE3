@@ -11,6 +11,13 @@ Muscled data sink and/or source actor.
     source: O_I
     sink: F_INIT
     sink_source: F_INIT, O_F
+- Available settings are
+    sink_uri: which db entry uri the data should be saved to
+    source_uri: which db entry uri the data should be loaded from
+    interpolation_method: which imas interpolation method to use for load,
+                          defaults to CLOSEST_INTERP
+    dd_version: which IMAS DD version should be used
+    {port_name}_occ: occurrence number for loading and saving of given ids
 
 How to use in ymmsl file::
 
@@ -42,8 +49,8 @@ How to use in ymmsl file::
 import logging
 from typing import List, Optional
 
-from imaspy import DBEntry, IDSFactory
-from imaspy.ids_defs import CLOSEST_INTERP
+from imas import DBEntry, IDSFactory
+from imas.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
@@ -160,11 +167,12 @@ def handle_source(
     for port_name in port_list:
         ids_name = port_name.replace("_out", "")
         occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
+        interp_method = fix_interpolation_method(instance)
         slice_out = db_entry.get_slice(
             ids_name=ids_name,
             occurrence=occ,
             time_requested=t_cur,
-            interpolation_method=CLOSEST_INTERP,
+            interpolation_method=interp_method,
         )
         msg_out = Message(
             t_cur, data=slice_out.serialize(), next_timestamp=next_timestamp
@@ -225,6 +233,19 @@ def sanity_check_ports(instance: Instance) -> None:
             "Component needs a DBEntry URI to act as source. "
             "Add source_uri in the ymmsl settings file."
         )
+
+
+def fix_interpolation_method(instance: Instance) -> int:
+    setting = get_setting_optional(instance, "interpolation_method")
+    if setting == 'CLOSEST_INTERP':
+        interp = CLOSEST_INTERP
+    elif setting == 'PREVIOUS_INTERP':
+        interp = PREVIOUS_INTERP
+    elif setting == 'LINEAR_INTERP':
+        interp = LINEAR_INTERP
+    else:
+        interp = CLOSEST_INTERP
+    return interp
 
 
 if __name__ == "__main__":
