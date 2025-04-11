@@ -33,5 +33,5 @@ pip freeze
 # Clean artifacts created by pytest
 rm -f junit.xml
 rm -rf htmlcov
-export IMAS_VERSION="3.40.1" # set default version because IMASPy module on SDCC doesn't have latest one yet
+export IMAS_VERSION="4.0.0" # set default version because IMAS-Python module on SDCC doesn't have latest one yet
 python -m pytest -n=auto --cov=torax-m3 --cov-report=term-missing --cov-report=html --junit-xml=junit.xml
