@@ -65,7 +65,8 @@ resources:
         assert all(entry.get("core_profiles").time == core_profiles.time)
 
 
-def test_source_to_hybrid_to_sink(tmpdir, core_profiles):
+@pytest.mark.parametrize('use_sink', [True, False])
+def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
     data_hybrid_source_path = (Path(tmpdir) / "source_hybrid_component_data").absolute()
@@ -105,7 +106,7 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles):
       source_component.source_uri: {source_uri}
       sink_component.sink_uri: {sink_uri}
       hybrid_component.source_uri: {hybrid_source_uri}
-      hybrid_component.sink_uri: {hybrid_sink_uri}
+      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ''}
     implementations:
       sink_component:
         executable: python

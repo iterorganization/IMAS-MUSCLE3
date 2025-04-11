@@ -127,7 +127,7 @@ def muscled_sink_source() -> None:
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
-            sink_uri = instance.get_setting("sink_uri")
+            sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
             sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
@@ -137,7 +137,8 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
+        if sink_uri is not None:
+            t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
         # O_F
         handle_source(instance, source_db_entry, port_list_out, t_cur)
 
