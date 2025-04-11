@@ -15,7 +15,7 @@ from pathlib import Path
 from ids_validator.report.summaryReportGenerator import SummaryReportGenerator
 from ids_validator.validate.validate import validate
 from ids_validator.validate_options import RuleFilter, ValidateOptions
-from imaspy import DBEntry, IDSFactory
+from imas import DBEntry, IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
 

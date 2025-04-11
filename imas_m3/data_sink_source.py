@@ -51,8 +51,8 @@ How to use in ymmsl file::
 import logging
 from typing import List, Optional
 
-from imaspy import DBEntry, IDSFactory
-from imaspy.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
+from imas import DBEntry, IDSFactory
+from imas.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
 from libmuscle import Instance, Message
 from ymmsl import Operator
 

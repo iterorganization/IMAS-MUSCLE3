@@ -1,11 +1,15 @@
-import imaspy
+import imas
 import numpy
 import pytest
 
 
 @pytest.fixture
 def core_profiles():
+<<<<<<< HEAD
     cp = imaspy.IDSFactory("3.40.1").core_profiles()
+=======
+    cp = imas.IDSFactory("3.40.1").core_profiles()
+>>>>>>> origin/main
     # Fill some properties:
     cp.ids_properties.homogeneous_time = 0  # INT_0D
     cp.ids_properties.comment = "Comment"  # STR_0D
