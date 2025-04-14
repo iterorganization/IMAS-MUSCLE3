@@ -18,7 +18,7 @@ leading to deadlocks. It is advised to use predictable or constant timestepping.
 import logging
 from typing import Dict, List
 
-from imaspy import DBEntry, IDSFactory
+from imas import DBEntry, IDSFactory
 from libmuscle import Instance, Message
 from ymmsl import Operator
 

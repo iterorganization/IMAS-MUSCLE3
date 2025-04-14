@@ -47,7 +47,7 @@ How to use in ymmsl file::
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
@@ -129,13 +129,15 @@ def muscled_sink_source() -> None:
             Operator.O_F: [f"{ids_name}_out" for ids_name in IDSFactory().ids_names()],
         }
     )
+    sink_db_entry = None
     first_run = True
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
-            sink_uri = instance.get_setting("sink_uri")
+            sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
-            sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+            if sink_uri is not None:
+                sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
@@ -143,13 +145,14 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in) or 0
+        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in) or (0, None)
         # O_F
         handle_source(
             instance, source_db_entry, port_list_out, t_cur, next_timestamp=t_next
         )
 
-    sink_db_entry.close()
+    if sink_db_entry is not None:
+        sink_db_entry.close()
     source_db_entry.close()
 
 
@@ -184,9 +187,9 @@ def handle_sink(
     instance: Instance,
     db_entry: Optional[DBEntry],
     port_list: List[str],
-) -> Optional[float]:
+) -> Tuple[float, Optional[float]]:
     """Loop through sink ids_names and receive all incoming messages"""
-    t_cur = None
+    t_cur = 0.
     t_next = None
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
@@ -237,11 +240,11 @@ def sanity_check_ports(instance: Instance) -> None:
 
 def fix_interpolation_method(instance: Instance) -> int:
     setting = get_setting_optional(instance, "interpolation_method")
-    if setting == 'CLOSEST_INTERP':
+    if setting == "CLOSEST_INTERP":
         interp = CLOSEST_INTERP
-    elif setting == 'PREVIOUS_INTERP':
+    elif setting == "PREVIOUS_INTERP":
         interp = PREVIOUS_INTERP
-    elif setting == 'LINEAR_INTERP':
+    elif setting == "LINEAR_INTERP":
         interp = LINEAR_INTERP
     else:
         interp = CLOSEST_INTERP
