@@ -121,6 +121,7 @@ module = [
     "imas.*",
     "numpy.*",
     "rich.*",
+    "ids_validator.*",
 ]
 ignore_missing_imports = true
 

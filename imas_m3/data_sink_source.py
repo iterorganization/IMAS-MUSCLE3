@@ -49,7 +49,7 @@ How to use in ymmsl file::
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
@@ -116,9 +116,15 @@ def muscled_source() -> None:
             sanity_check_ports(instance)
             first_run = False
 
-        for t_inner in t_array:
+        for i, t_inner in enumerate(t_array):
             # O_I
-            handle_source(instance, source_db_entry, port_list_out, t_inner)
+            if i < len(t_array) - 1:
+                next_t = t_array[i + 1]
+            else:
+                next_t = None
+            handle_source(
+                instance, source_db_entry, port_list_out, t_inner, next_timestamp=next_t
+            )
     source_db_entry.close()
 
 
@@ -133,6 +139,7 @@ def muscled_sink_source() -> None:
             Operator.O_F: [f"{ids_name}_out" for ids_name in IDSFactory().ids_names()],
         }
     )
+    sink_db_entry = None
     first_run = True
     while instance.reuse_instance():
         if first_run:
@@ -148,9 +155,11 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
+        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in)
         # O_F
-        handle_source(instance, source_db_entry, port_list_out, t_cur)
+        handle_source(
+            instance, source_db_entry, port_list_out, t_cur, next_timestamp=t_next
+        )
 
     if sink_db_entry is not None:
         sink_db_entry.close()
@@ -162,6 +171,7 @@ def handle_source(
     db_entry: Optional[DBEntry],
     port_list: List[str],
     t_cur: float,
+    next_timestamp: Optional[float] = None,
 ) -> None:
     """Loop through source ids_names and send all outgoing messages"""
     if db_entry is None:
@@ -177,7 +187,9 @@ def handle_source(
             time_requested=t_cur,
             interpolation_method=interp_method,
         )
-        msg_out = Message(t_cur, data=slice_out.serialize())
+        msg_out = Message(
+            t_cur, data=slice_out.serialize(), next_timestamp=next_timestamp
+        )
         instance.send(port_name, msg_out)
 
 
@@ -185,20 +197,24 @@ def handle_sink(
     instance: Instance,
     db_entry: Optional[DBEntry],
     port_list: List[str],
-) -> Optional[float]:
+) -> Tuple[float, Optional[float]]:
     """Loop through sink ids_names and receive all incoming messages"""
-    t_cur = None
+    t_cur = 0.
+    t_next = None
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
         occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
         msg_in = instance.receive(port_name)
         t_cur = msg_in.timestamp
+        t_next = msg_in.next_timestamp
         if db_entry is not None:
-            # ids_data = getattr(imas, ids_name)()
             ids_data = getattr(IDSFactory(), ids_name)()
             ids_data.deserialize(msg_in.data)
-            db_entry.put_slice(ids_data, occurrence=occ)
-    return t_cur
+            if len(ids_data.time) > 1:
+                db_entry.put(ids_data, occurrence=occ)
+            else:
+                db_entry.put_slice(ids_data, occurrence=occ)
+    return t_cur, t_next
 
 
 def sanity_check_ports(instance: Instance) -> None:
@@ -234,11 +250,11 @@ def sanity_check_ports(instance: Instance) -> None:
 
 def fix_interpolation_method(instance: Instance) -> int:
     setting = get_setting_optional(instance, "interpolation_method")
-    if setting == 'CLOSEST_INTERP':
+    if setting == "CLOSEST_INTERP":
         interp = CLOSEST_INTERP
-    elif setting == 'PREVIOUS_INTERP':
+    elif setting == "PREVIOUS_INTERP":
         interp = PREVIOUS_INTERP
-    elif setting == 'LINEAR_INTERP':
+    elif setting == "LINEAR_INTERP":
         interp = LINEAR_INTERP
     else:
         interp = CLOSEST_INTERP

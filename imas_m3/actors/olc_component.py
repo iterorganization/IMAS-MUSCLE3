@@ -8,13 +8,13 @@ with the same timestamp.
 
 import logging
 import sys
+import tempfile
 from datetime import datetime
-
 from pathlib import Path
 
 from ids_validator.report.summaryReportGenerator import SummaryReportGenerator
 from ids_validator.validate.validate import validate
-from ids_validator.validate_options import RuleFilter, ValidateOptions
+from ids_validator.validate_options import ValidateOptions
 from imas import DBEntry, IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
@@ -52,7 +52,6 @@ def main():
 
         # we have now received one message on each of the ports, and can launch a
         # validation action
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"

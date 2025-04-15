@@ -142,11 +142,14 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
     assert success
 
     assert data_sink_path.exists()
-    assert data_hybrid_sink_path.exists()
     with DBEntry(sink_uri, "r") as entry:
         assert all(entry.get("core_profiles").time == core_profiles.time)
-    with DBEntry(hybrid_sink_uri, "r") as entry:
-        assert all(entry.get("core_profiles").time == core_profiles.time)
+    if use_sink:
+        assert data_hybrid_sink_path.exists()
+        with DBEntry(hybrid_sink_uri, "r") as entry:
+            assert all(entry.get("core_profiles").time == core_profiles.time)
+    else:
+        assert not data_hybrid_sink_path.exists()
 
 
 def test_source_time_range(tmpdir, core_profiles):
