@@ -15,45 +15,29 @@ import sphinx_autosummary_accessors
 from jinja2.defaults import DEFAULT_FILTERS
 from packaging.version import Version
 
-import imas_m3
+import imas_muscle3
 
 print("python exec:", sys.executable)
 print("sys.path:", sys.path)
 
 # -- Project information -----------------------------------------------------
 # The documented project’s name
-project = src_project = PROJECT = "imas-m3"
-PACKAGE = "imas-m3"
-src_group = GROUP = "IMEX"
+project = src_project = PROJECT = "imas-muscle3"
+PACKAGE = "imas-muscle3"
 
 # A copyright statement in the style '2008, Author Name'.
-copyright = f"2020-{datetime.datetime.now().year}, ITER Organization"
+copyright = f"2025-{datetime.datetime.now().year}, ITER Organization"
 # The author name(s) of the document
 author = "ITER Organization"
-src_host = "git.iter.org"
-
-# Parse urls here for convenience, to be re-used
-
-# ITER docs
-iter_projects = "https://git.iter.org/projects/"
-imas_repos = urljoin(iter_projects, "IMAS/")
-imex_repos = urljoin(iter_projects, "IMEX/")
-issue_url = jira_url = "https://jira.iter.org/browse/"
-
-# PDS
-repository_url = f"{iter_projects}/{src_group}/repos/{src_project}/"
-blob_url = urljoin(repository_url, "browse/")
-mr_url = urljoin(repository_url, "/pull-requests")
-
+src_host = "github.com"
 
 # Configuration of sphinx.ext.extlinks
 # See https://www.sphinx-doc.org/en/master/usage/extensions/extlinks.html
 # unique name: (base URL, label prefix)
-extlinks = {
-    "src": (blob_url + "%s", f"{src_group}/{src_project}/%s"),
-}
+extlinks = {}
 
-full_version = Version(imas_m3.__version__)
+
+full_version = Version(imas_muscle3.__version__)
 
 # version: The major project version, used as the replacement for |version|.
 #   For example, for the Python documentation, this may be something like 2.6.
@@ -127,10 +111,10 @@ html_theme = "sphinx_immaterial"
 # and
 # https://sphinx-immaterial.readthedocs.io/en/latest/customization.html#confval-html_theme_options
 html_theme_options = {
-    "repo_url": "https://git.iter.org/projects/SCEN/repos/imas-m3",
-    "repo_name": "imas-m3",
+    "repo_url": "https://github.com/iterorganization/IMAS-MUSCLE3",
+    "repo_name": "IMAS-MUSCLE3",
     "icon": {
-        "repo": "fontawesome/brands/bitbucket",
+        "repo": "fontawesome/brands/github",
     },
     "features": [
         # "navigation.expand",
@@ -251,7 +235,7 @@ html_last_updated_fmt = today_fmt
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "imas-m3_doc"
+htmlhelp_basename = "imas-muscle3_doc"
 
 
 # -- Extension configuration -------------------------------------------------
@@ -296,4 +280,4 @@ def escape_underscores(string):
 
 def setup(app):
     DEFAULT_FILTERS["escape_underscores"] = escape_underscores
-    app.add_css_file("imas-m3.css")
+    app.add_css_file("imas-muscle3.css")
