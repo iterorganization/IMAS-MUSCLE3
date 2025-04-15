@@ -124,6 +124,7 @@ def muscled_source() -> None:
 
 def muscled_sink_source() -> None:
     """Implementation of hybrid sink source component"""
+    sink_db_entry = None
     instance = Instance(
         {
             Operator.F_INIT: [
@@ -138,7 +139,8 @@ def muscled_sink_source() -> None:
             dd_version = get_setting_optional(instance, "dd_version")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
-            sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+            if sink_uri is not None:
+                sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
@@ -146,12 +148,12 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        if sink_uri is not None:
-            t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
+        t_cur = handle_sink(instance, sink_db_entry, port_list_in) or 0
         # O_F
         handle_source(instance, source_db_entry, port_list_out, t_cur)
 
-    sink_db_entry.close()
+    if sink_db_entry is not None:
+        sink_db_entry.close()
     source_db_entry.close()
 
 

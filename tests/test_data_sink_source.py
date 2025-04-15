@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 import ymmsl
 from imas import DBEntry
 from libmuscle.manager.manager import Manager
