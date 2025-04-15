@@ -12,8 +12,10 @@ Muscled data sink and/or source actor.
     sink: F_INIT
     sink_source: F_INIT, O_F
 - Available settings are
-    sink_uri: which db entry uri the data should be saved to
+    sink_uri: which db entry uri the data should be saved to 
     source_uri: which db entry uri the data should be loaded from
+    t_min: left boundary of loaded time range
+    t_max: right boundary of loaded time range
     interpolation_method: which imas interpolation method to use for load,
                           defaults to CLOSEST_INTERP
     dd_version: which IMAS DD version should be used
@@ -104,6 +106,13 @@ def muscled_source() -> None:
             t_array = source_db_entry.get(
                 port_list_out[0].replace("_out", ""), lazy=True
             ).time
+            t_min = max(
+                get_setting_optional(instance, "t_min", default=-1e20), t_array[0]
+            )
+            t_max = min(
+                get_setting_optional(instance, "t_max", default=1e20), t_array[-1]
+            )
+            t_array = [t for t in t_array if t_min <= t <= t_max]
             sanity_check_ports(instance)
             first_run = False
 
