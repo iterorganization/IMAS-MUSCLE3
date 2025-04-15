@@ -52,6 +52,7 @@ def main():
 
         # we have now received one message on each of the ports, and can launch a
         # validation action
+
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
