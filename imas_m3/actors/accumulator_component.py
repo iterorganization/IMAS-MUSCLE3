@@ -60,7 +60,7 @@ def main() -> None:
                     if ids_next.get(ids_name, True):
                         # receive IDS
                         msg_in = instance.receive(port_name)
-                        ids = getattr(IDSFactory(), ids_name)()
+                        ids = db.factory.new(ids_name)
                         ids.deserialize(msg_in.data)
                         db.put_slice(ids)
                         # get t_next from received IDS message

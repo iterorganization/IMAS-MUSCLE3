@@ -155,7 +155,7 @@ def muscled_sink_source() -> None:
             first_run = False
 
         # F_INIT
-        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in) or (0, None)
+        t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in)
         # O_F
         handle_source(
             instance, source_db_entry, port_list_out, t_cur, next_timestamp=t_next
