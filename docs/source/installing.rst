@@ -1,7 +1,7 @@
 .. _`installing`:
 
 Installing IMAS-MUSCLE3
-=================================
+=======================
 
 SDCC setup
 ----------

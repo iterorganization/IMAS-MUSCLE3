@@ -4,9 +4,9 @@
    Main "index". This will be converted to a landing index.html by sphinx. We
    define TOC here, but it'll be put in the sidebar by the theme
 
-=========================
+===================
 IMAS-MUSCLE3 Manual
-=========================
+===================
 
 IMAS-MUSCLE3 is a collection of helper actors and for working with IMAS data in MUSCLE3 simulations.
 
@@ -45,7 +45,7 @@ Manual
 LICENSE
 -------
 
-.. literalinclude:: ../../LICENSE.md
+.. literalinclude:: ../../LICENSE.txt
    :language: text
 
 

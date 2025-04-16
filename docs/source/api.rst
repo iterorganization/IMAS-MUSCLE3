@@ -5,8 +5,8 @@ This page provides an auto-generated summary of IMAS-MUSCLE3's API. For more det
 and examples, refer to the relevant chapters in the main part of the
 documentation.
 
-PDS
----
+IMAS-MUSCLE3
+------------
 
 .. autosummary::
    :toctree: generated/
