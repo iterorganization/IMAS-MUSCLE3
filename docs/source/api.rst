@@ -13,5 +13,5 @@ IMAS-MUSCLE3
    :recursive:
    :template: custom-module-template.rst
 
-   IMAS-MUSCLE3
+   imas_muscle3
    

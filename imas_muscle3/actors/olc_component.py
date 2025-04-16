@@ -65,8 +65,8 @@ def main() -> None:
 
             rulesets = get_setting_optional(instance, "rulesets", default="PDS-OLC")
             ruledirs = get_setting_optional(instance, "extra_rule_dirs", default="")
-            assert rulesets is not None
-            assert ruledirs is not None
+            assert isinstance(rulesets, str)
+            assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
                 rulesets=rulesets.split(";"),
                 extra_rule_dirs=[Path(x) for x in ruledirs.split(";")],

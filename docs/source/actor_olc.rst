@@ -20,7 +20,7 @@ Available Ports
 All IDS's are available for the OLC actor. They will be active if connected in the ymmsl file and will be skipped otherwise.
 
 * Optional
-- ***<ids_name>_in (F_INIT)***: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
+  - ***<ids_name>_in (F_INIT)***: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
 
 General
 -------

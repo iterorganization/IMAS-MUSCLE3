@@ -57,8 +57,8 @@ All IDS's are available for the sink/source actor. They will be active if connec
 The source actor uses only the O_I port. The sink actor uses only the F_INIT port. The combined actor uses the F_INIT and O_F ports.
 
 * Optional
-- ***<ids_name>_in (F_INIT)***: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
-- ***<ids_name>_out (O_F, O_I)***: Any outgoing IDS's on the O_F and O_I ports. Replace <ids_name> with the required ids i.e. equilibrium_out.
+  - ***<ids_name>_in (F_INIT)***: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
+  - ***<ids_name>_out (O_F, O_I)***: Any outgoing IDS's on the O_F and O_I ports. Replace <ids_name> with the required ids i.e. equilibrium_out.
 
 General
 -------
