@@ -1,6 +1,6 @@
 .. _`usage`:
 
-Using the IMAS PDS
+Using IMAS-MUSCLE3
 ============================
 
 insert text
