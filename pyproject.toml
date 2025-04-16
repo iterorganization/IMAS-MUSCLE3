@@ -125,6 +125,8 @@ module = [
     "numpy.*",
     "rich.*",
     "ids_validator.*",
+    "libmuscle.*",
+    "ymmsl.*",
 ]
 ignore_missing_imports = true
 
