@@ -38,10 +38,10 @@ settings:
 implementations:
   sink_component:
     executable: python
-    args: -u -m imas_m3.actors.sink_component
+    args: -u -m imas_muscle3.actors.sink_component
   source_component:
     executable: python
-    args: -u -m imas_m3.actors.source_component
+    args: -u -m imas_muscle3.actors.source_component
 resources:
   source_component:
     threads: 1
@@ -112,13 +112,13 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
     implementations:
       sink_component:
         executable: python
-        args: -u -m imas_m3.actors.sink_component
+        args: -u -m imas_muscle3.actors.sink_component
       source_component:
         executable: python
-        args: -u -m imas_m3.actors.source_component
+        args: -u -m imas_muscle3.actors.source_component
       hybrid_component:
         executable: python
-        args: -u -m imas_m3.actors.sink_source_component
+        args: -u -m imas_muscle3.actors.sink_source_component
     resources:
       source_component:
         threads: 1
@@ -184,10 +184,10 @@ settings:
 implementations:
   sink_component:
     executable: python
-    args: -u -m imas_m3.actors.sink_component
+    args: -u -m imas_muscle3.actors.sink_component
   source_component:
     executable: python
-    args: -u -m imas_m3.actors.source_component
+    args: -u -m imas_muscle3.actors.source_component
 resources:
   source_component:
     threads: 1

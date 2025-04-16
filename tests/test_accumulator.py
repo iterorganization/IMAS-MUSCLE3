@@ -52,13 +52,13 @@ settings:
 implementations:
   sink_component:
     executable: python
-    args: -u -m imas_m3.actors.sink_component
+    args: -u -m imas_muscle3.actors.sink_component
   source_component:
     executable: python
-    args: -u -m imas_m3.actors.source_component
+    args: -u -m imas_muscle3.actors.source_component
   accumulator_component:
     executable: python
-    args: -u -m imas_m3.actors.accumulator_component
+    args: -u -m imas_muscle3.actors.accumulator_component
 resources:
   sink_component:
     threads: 1

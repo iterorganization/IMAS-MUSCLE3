@@ -19,12 +19,12 @@ from imas import DBEntry, IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
 
-from imas_m3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list, get_setting_optional
 
 logger = logging.getLogger()
 
 
-def main():
+def main() -> None:
     """Create instance and enter submodel execution loop"""
     logger.info("Starting OLC Actor")
     instance = Instance(
@@ -56,23 +56,20 @@ def main():
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
-                # write all IDSes to the temporary HDF5 entry, since ids_validator prefers to load
-                # stuff itself. Some performance improvement could be made there by making
-                # a second entrypoint that does not load by imas_uri but accepts a
-                # collection of toplevels.
+                # write all IDSes to the temporary HDF5 entry, since ids_validator
+                # prefers to load # stuff itself. Some performance improvement could be
+                # made there by making # a second entrypoint that does not load by
+                # imas_uri but accepts a # collection of toplevels.
                 for ids in ids_data.values():
                     db.put(ids)
 
+            rulesets = get_setting_optional(instance, "rulesets", default="PDS-OLC")
+            ruledirs = get_setting_optional(instance, "extra_rule_dirs", default="")
+            assert rulesets is not None
+            assert ruledirs is not None
             validate_options = ValidateOptions(
-                rulesets=get_setting_optional(
-                    instance, "rulesets", default="PDS-OLC"
-                ).split(";"),
-                extra_rule_dirs=[
-                    Path(x)
-                    for x in get_setting_optional(
-                        instance, "extra_rule_dirs", default=""
-                    ).split(";")
-                ],
+                rulesets=rulesets.split(";"),
+                extra_rule_dirs=[Path(x) for x in ruledirs.split(";")],
                 apply_generic=get_setting_optional(
                     instance, "apply_generic", default=True
                 ),

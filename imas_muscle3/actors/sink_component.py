@@ -1,6 +1,6 @@
 import logging
 
-from imas_m3.data_sink_source import muscled_sink
+from imas_muscle3.data_sink_source import muscled_sink
 
 if __name__ == "__main__":
     logging.basicConfig()

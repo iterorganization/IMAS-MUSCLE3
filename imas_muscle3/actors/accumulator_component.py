@@ -22,7 +22,7 @@ from imas import DBEntry, IDSFactory
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
-from imas_m3.utils import get_port_list
+from imas_muscle3.utils import get_port_list
 
 logger = logging.getLogger()
 
