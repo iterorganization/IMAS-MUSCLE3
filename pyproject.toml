@@ -29,7 +29,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
 # The license is prepended by private which makes it a valid trove classifier,
 # it will also prevent uploading to package indices such as PyPI
-    "Private :: License :: LGPL 3.0",
+    "License :: LGPL 3.0",
     "Natural Language :: English",
     "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",

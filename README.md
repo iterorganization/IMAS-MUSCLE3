@@ -21,8 +21,8 @@ make -C docs html
 Quick developer installation guide for ITER SDCC
 
 ```bash
-module load IMAS-Python MUSCLE3
 python3 -m venv ./venv
 . venv/bin/activate
 pip install -e .[all]
+pytest
 ```
