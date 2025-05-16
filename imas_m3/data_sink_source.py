@@ -12,7 +12,7 @@ Muscled data sink and/or source actor.
     sink: F_INIT
     sink_source: F_INIT, O_F
 - Available settings are
-    sink_uri: which db entry uri the data should be saved to 
+    sink_uri: which db entry uri the data should be saved to
     source_uri: which db entry uri the data should be loaded from
     t_min: left boundary of loaded time range
     t_max: right boundary of loaded time range
@@ -52,7 +52,12 @@ import logging
 from typing import List, Optional, Tuple
 
 from imas import DBEntry, IDSFactory
-from imas.ids_defs import CLOSEST_INTERP, PREVIOUS_INTERP, LINEAR_INTERP
+from imas.ids_defs import (
+    CLOSEST_INTERP,
+    IDS_TIME_MODE_INDEPENDENT,
+    LINEAR_INTERP,
+    PREVIOUS_INTERP,
+)
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
@@ -199,7 +204,7 @@ def handle_sink(
     port_list: List[str],
 ) -> Tuple[float, Optional[float]]:
     """Loop through sink ids_names and receive all incoming messages"""
-    t_cur = 0.
+    t_cur = 0.0
     t_next = None
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
@@ -210,7 +215,10 @@ def handle_sink(
         if db_entry is not None:
             ids_data = getattr(IDSFactory(), ids_name)()
             ids_data.deserialize(msg_in.data)
-            if len(ids_data.time) > 1:
+            if (
+                len(ids_data.time) > 1
+                or ids_data.ids_properties.homogeneous_time == IDS_TIME_MODE_INDEPENDENT
+            ):
                 db_entry.put(ids_data, occurrence=occ)
             else:
                 db_entry.put_slice(ids_data, occurrence=occ)
