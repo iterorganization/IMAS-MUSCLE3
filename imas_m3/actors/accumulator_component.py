@@ -19,6 +19,7 @@ import logging
 from typing import Dict, List
 
 from imas import DBEntry, IDSFactory
+from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
@@ -62,10 +63,13 @@ def main() -> None:
                         msg_in = instance.receive(port_name)
                         ids = db.factory.new(ids_name)
                         ids.deserialize(msg_in.data)
-                        if ids.ids_properties.homogeneous_time == 2:
-                          db.put(ids)
+                        if (
+                            ids.ids_properties.homogeneous_time
+                            == IDS_TIME_MODE_INDEPENDENT
+                        ):
+                            db.put(ids)
                         else:
-                          db.put_slice(ids)
+                            db.put_slice(ids)
                         # get t_next from received IDS message
                         ids_next[ids_name] = msg_in.next_timestamp is not None
                 # override t_next with optional port
@@ -79,9 +83,9 @@ def main() -> None:
                 ids_name = port_name.replace("_out", "")
                 ids = db.get(ids_name)
                 if len(ids.time) > 0:
-                  time_out = ids.time[0]
+                    time_out = ids.time[0]
                 else:
-                  time_out = 0
+                    time_out = 0
                 msg_out = Message(time_out, data=ids.serialize())
                 instance.send(port_name, msg_out)
 
