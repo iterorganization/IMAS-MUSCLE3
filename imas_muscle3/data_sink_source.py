@@ -52,7 +52,12 @@ import logging
 from typing import List, Optional, Tuple
 
 from imas import DBEntry, IDSFactory
-from imas.ids_defs import CLOSEST_INTERP, LINEAR_INTERP, PREVIOUS_INTERP
+from imas.ids_defs import (
+    CLOSEST_INTERP,
+    IDS_TIME_MODE_INDEPENDENT,
+    LINEAR_INTERP,
+    PREVIOUS_INTERP,
+)
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
@@ -210,7 +215,10 @@ def handle_sink(
         if db_entry is not None:
             ids_data = getattr(IDSFactory(), ids_name)()
             ids_data.deserialize(msg_in.data)
-            if len(ids_data.time) > 1:
+            if (
+                len(ids_data.time) > 1
+                or ids_data.ids_properties.homogeneous_time == IDS_TIME_MODE_INDEPENDENT
+            ):
                 db_entry.put(ids_data, occurrence=occ)
             else:
                 db_entry.put_slice(ids_data, occurrence=occ)
