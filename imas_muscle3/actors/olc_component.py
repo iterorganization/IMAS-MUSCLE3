@@ -12,10 +12,10 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from imas import DBEntry, IDSFactory
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
-from imas import DBEntry, IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
 
