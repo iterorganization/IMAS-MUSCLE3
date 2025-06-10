@@ -18,6 +18,7 @@ make -C docs html
 ```
 
 # Installation
+Important: IMAS-Core is needed for IMAS-MUSCLE3 to work (which is not publicly available yet).
 As a user, simply install IMAS-MUSCLE3 with pip:
 
 ```bash
@@ -36,7 +37,7 @@ pytest
 ```
 
 # How to use
-To add an actor to your MUSCLE3 worklflow, add the following to the implementations in your ymmsl file:
+To add an actor to your MUSCLE3 workflow, add the following to the implementations in your ymmsl file:
 
 ```bash
 implementations:

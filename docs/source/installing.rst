@@ -33,6 +33,14 @@ Ubuntu installation
     pip install --upgrade wheel setuptools
     # For development an installation in editable mode may be more convenient
     pip install .[all]
+
+    # Make sure IMAS-Core is installed and available
+    # for local IMAS-Core installation
+    git clone ssh://git@git.iter.org/imas/al-core.git -b main
+    pip install ./al-core
+    # on SDCC
+    module load IMAS-AL-Core
+
     python3 -c "import imas_muscle3; print(imas_muscle3.__version__)"
     pytest
 

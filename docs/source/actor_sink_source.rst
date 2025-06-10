@@ -9,32 +9,32 @@ when creating simulation workflows, as well as providing starting conditions and
 Available Operational Modes
 ---------------------------
 
-  - ***Source actor***: Use an IDS as a data source. Loop over the timestamps and send them out one by one.
+- ***Source actor***: Use an IDS as a data source. Loop over the timestamps and send them out one by one.
 
-  .. code-block:: bash
+.. code-block:: bash
 
-    implementations:
-      source_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.source_component
+  implementations:
+    source_component:
+      executable: python
+      args: -u -m imas_muscle3.actors.source_component
 
-  - ***Sink actor***: Use an IDS as a data sink. Saves all incoming data to an IDS.
+- ***Sink actor***: Use an IDS as a data sink. Saves all incoming data to an IDS.
 
-  .. code-block:: bash
+.. code-block:: bash
 
-    implementations:
-      sink_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.sink_component
+  implementations:
+    sink_component:
+      executable: python
+      args: -u -m imas_muscle3.actors.sink_component
 
-  - ***Combined actor***: Receives data, optionally saves it and sends out preexisting IDS data for the timestamp closest to the incoming timestamp.
+- ***Combined actor***: Receives data, optionally saves it and sends out preexisting IDS data for the timestamp closest to the incoming timestamp.
 
-  .. code-block:: bash
+.. code-block:: bash
 
-    implementations:
-      sink_source_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.sink_source_component
+  implementations:
+    sink_source_component:
+      executable: python
+      args: -u -m imas_muscle3.actors.sink_source_component
 
 Available Settings
 ------------------
