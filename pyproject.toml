@@ -53,16 +53,14 @@ dependencies = [
     "rich",
     "packaging",
     "imas-python",
+    "imas-validator",
     "muscle3",
 ]
 
 [project.optional-dependencies]
 # these self-dependencies are available since pip 21.2
 all = [
-    "imas-muscle3[docs,test,linting,validator]"
-]
-validator = [
-    "ids_validator" # not on pypi yet! at https://git.iter.org/projects/IMEX/repos/ids-validator/browse
+    "imas-muscle3[docs,test,linting]"
 ]
 docs = [
     "sphinx>=6.0.0,<7.0.0",
@@ -124,7 +122,7 @@ module = [
     "imas.*",
     "numpy.*",
     "rich.*",
-    "ids_validator.*",
+    "imas_validator.*",
     "libmuscle.*",
     "ymmsl.*",
 ]

@@ -3,7 +3,7 @@
 OLC actor
 =================
 
-Actor for Operational Limit Checking of IMAS data in a simulation through the IDS-validator tool.
+Actor for Operational Limit Checking of IMAS data in a simulation through the IMAS-Validator tool.
 Useful for testing whether the simulation is still physical or to check whether a given workflow is viable for experiments.
 
 Available Settings
@@ -11,7 +11,7 @@ Available Settings
 
 * Optional
   - ***halt_on_error***: (bool) Whether or not the simulation should be forcibly stopped when a validation test fails. Defaults to False.
-  - ***extra_rule_dirs***: (str) The rule directories in which to look for IDS-validator rulesets. If inserting multiple, split them with a ';'. Defaults to ''.
+  - ***extra_rule_dirs***: (str) The rule directories in which to look for IMAS-Validator rulesets. If inserting multiple, split them with a ';'. Defaults to ''.
   - ***rulesets***: (str) The names of rulesets to run in the found rule directories. If inserting multiple, split them with a ';'. Defaults to 'PDS-OLC'.
   - ***apply-generic***: (bool) Whether or not to apply the generic bundled validation tests. Defaults to True.
 

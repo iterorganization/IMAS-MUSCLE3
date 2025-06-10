@@ -1,5 +1,5 @@
 r"""
-MUSCLE3 actor performing Operational Limit Checking with IDS-validator.
+MUSCLE3 actor performing Operational Limit Checking with IMAS-Validator.
 
 On message arrival on an F_INIT or S port validation is launched for that IDS.
 Multi-IDS validation is only performed if messages with all those IDSes arrive
@@ -12,9 +12,9 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from ids_validator.report.summaryReportGenerator import SummaryReportGenerator
-from ids_validator.validate.validate import validate
-from ids_validator.validate_options import ValidateOptions
+from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
+from imas_validator.validate.validate import validate
+from imas_validator.validate_options import ValidateOptions
 from imas import DBEntry, IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
@@ -56,7 +56,7 @@ def main() -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
-                # write all IDSes to the temporary HDF5 entry, since ids_validator
+                # write all IDSes to the temporary HDF5 entry, since imas_validator
                 # prefers to load # stuff itself. Some performance improvement could be
                 # made there by making # a second entrypoint that does not load by
                 # imas_uri but accepts a # collection of toplevels.
