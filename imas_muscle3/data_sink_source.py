@@ -17,7 +17,7 @@ Muscled data sink and/or source actor.
     t_min: left boundary of loaded time range
     t_max: right boundary of loaded time range
     interpolation_method: which imas interpolation method to use for load,
-                          defaults to CLOSEST_INTERP
+    defaults to CLOSEST_INTERP
     dd_version: which IMAS DD version should be used
     {port_name}_occ: occurrence number for loading and saving of given ids
 
@@ -61,7 +61,7 @@ from imas.ids_defs import (
 from libmuscle import Instance, Message
 from ymmsl import Operator
 
-from imas_m3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list, get_setting_optional
 
 # TODO: enable specifying time range
 # TODO: setting for full ids instead of separate time_slices

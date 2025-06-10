@@ -5,11 +5,12 @@ requires = ["setuptools>=61", "wheel", "packaging", "tomli;python_version<'3.11'
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "imas_m3"
+name = "imas-muscle3"
 authors = [
-  {name = "Daan van Vugt", email = "dvanvugt@ignitioncomputing.com"}
+  {name = "Daan van Vugt", email = "dvanvugt@ignitioncomputing.com"},
+  {name = "Mike Sanders", email = "msanders@ignitioncomputing.com"}
 ]
-description = "TORAX IMAS MUSCLE3 wrapper"
+description = "IMAS MUSCLE3 tools"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.7"
 license = {file = "LICENSE.md"}
@@ -28,7 +29,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
 # The license is prepended by private which makes it a valid trove classifier,
 # it will also prevent uploading to package indices such as PyPI
-    "Private :: License :: ITER License",
+    "License :: LGPL 3.0",
     "Natural Language :: English",
     "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",
@@ -52,14 +53,14 @@ dependencies = [
     "rich",
     "packaging",
     "imas-python",
-    "ids_validator",
+    "imas-validator",
     "muscle3",
 ]
 
 [project.optional-dependencies]
 # these self-dependencies are available since pip 21.2
 all = [
-    "imas-m3[docs,test,linting]"
+    "imas-muscle3[docs,test,linting]"
 ]
 docs = [
     "sphinx>=6.0.0,<7.0.0",
@@ -81,11 +82,11 @@ linting = [
 ]
 
 [project.urls]
-homepage = "https://git.iter.org/projects/SCEN/repos/imas-m3"
+homepage = "https://github.com/iterorganization/IMAS-MUSCLE3"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["imas_m3*"]
+include = ["imas_muscle3*"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -95,17 +96,17 @@ testpaths = "tests"
 [tool.versioneer]
 VCS = "git"
 style = "pep440"
-versionfile_source = "imas-m3/_version.py"
-versionfile_build = "imas-m3/_version.py"
+versionfile_source = "imas_muscle3/_version.py"
+versionfile_build = "imas_muscle3/_version.py"
 tag_prefix = ""
 parentdir_prefix = ""
 
 [tool.black]
 # Exclude versioneer-generated file
-force-exclude = "imas-m3/_version.py"
+force-exclude = "imas_muscle3/_version.py"
 
 [tool.mypy]
-packages = "imas_m3"
+packages = "imas_muscle3"
 disallow_untyped_calls = true
 disallow_untyped_defs = true
 disallow_untyped_decorators = true
@@ -121,7 +122,9 @@ module = [
     "imas.*",
     "numpy.*",
     "rich.*",
-    "ids_validator.*",
+    "imas_validator.*",
+    "libmuscle.*",
+    "ymmsl.*",
 ]
 ignore_missing_imports = true
 

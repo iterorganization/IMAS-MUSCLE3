@@ -4,16 +4,16 @@
    Main "index". This will be converted to a landing index.html by sphinx. We
    define TOC here, but it'll be put in the sidebar by the theme
 
-=========================
-IMAS PDS Manual
-=========================
+===================
+IMAS-MUSCLE3 Manual
+===================
 
-IMAS PDS is an integrated modeling tool for IMAS simulations.
+IMAS-MUSCLE3 is a collection of helper actors and for working with IMAS data in MUSCLE3 simulations.
 
 README
 ------
 
-The README is best read on the `git page <https://git.iter.org/projects/SCEN/repos/torax-m3/browse>`_.
+The README is best read on the `git page <https://github.com/iterorganization/IMAS-MUSCLE3>`_.
 
 Manual
 ------
@@ -45,7 +45,7 @@ Manual
 LICENSE
 -------
 
-.. literalinclude:: ../../LICENSE.md
+.. literalinclude:: ../../LICENSE.txt
    :language: text
 
 

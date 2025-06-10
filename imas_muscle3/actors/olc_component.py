@@ -1,5 +1,5 @@
 r"""
-MUSCLE3 actor performing Operational Limit Checking with IDS-validator.
+MUSCLE3 actor performing Operational Limit Checking with IMAS-Validator.
 
 On message arrival on an F_INIT or S port validation is launched for that IDS.
 Multi-IDS validation is only performed if messages with all those IDSes arrive
@@ -12,19 +12,19 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from ids_validator.report.summaryReportGenerator import SummaryReportGenerator
-from ids_validator.validate.validate import validate
-from ids_validator.validate_options import ValidateOptions
 from imas import DBEntry, IDSFactory
+from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
+from imas_validator.validate.validate import validate
+from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance
 from ymmsl import Operator
 
-from imas_m3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list, get_setting_optional
 
 logger = logging.getLogger()
 
 
-def main():
+def main() -> None:
     """Create instance and enter submodel execution loop"""
     logger.info("Starting OLC Actor")
     instance = Instance(
@@ -56,23 +56,20 @@ def main():
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
-                # write all IDSes to the temporary HDF5 entry, since ids_validator prefers to load
-                # stuff itself. Some performance improvement could be made there by making
-                # a second entrypoint that does not load by imas_uri but accepts a
-                # collection of toplevels.
+                # write all IDSes to the temporary HDF5 entry, since imas_validator
+                # prefers to load # stuff itself. Some performance improvement could be
+                # made there by making # a second entrypoint that does not load by
+                # imas_uri but accepts a # collection of toplevels.
                 for ids in ids_data.values():
                     db.put(ids)
 
+            rulesets = get_setting_optional(instance, "rulesets", default="PDS-OLC")
+            ruledirs = get_setting_optional(instance, "extra_rule_dirs", default="")
+            assert isinstance(rulesets, str)
+            assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
-                rulesets=get_setting_optional(
-                    instance, "rulesets", default="PDS-OLC"
-                ).split(";"),
-                extra_rule_dirs=[
-                    Path(x)
-                    for x in get_setting_optional(
-                        instance, "extra_rule_dirs", default=""
-                    ).split(";")
-                ],
+                rulesets=rulesets.split(";"),
+                extra_rule_dirs=[Path(x) for x in ruledirs.split(";")],
                 apply_generic=get_setting_optional(
                     instance, "apply_generic", default=True
                 ),
