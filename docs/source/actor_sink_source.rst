@@ -40,10 +40,12 @@ Available Settings
 ------------------
 
 * Mandatory
+
   - ***sink_uri***: (string) IMAS URI in which to save incoming data. (Only sink and sink_source)
   - ***source_uri***: (string) IMAS URI from which to load data. (Only source and sink_source)
 
 * Optional
+
   - ***dd_version***: (string) IMAS Data Dictionary version number to which data will be converted. Defaults to original dd_version of the data.
   - ***<ids_name>_occ***: (int) Occurence number to load from or save to for a given ids_name. Replace <ids_name> with the required ids i.e. equilibrium_occ. Defaults to 0.
   - ***t_min***: (float) Minimum time value for loading timeslices. Defaults to None.
@@ -57,6 +59,7 @@ All IDS's are available for the sink/source actor. They will be active if connec
 The source actor uses only the O_I port. The sink actor uses only the F_INIT port. The combined actor uses the F_INIT and O_F ports.
 
 * Optional
+
   - ***<ids_name>_in (F_INIT)***: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
   - ***<ids_name>_out (O_F, O_I)***: Any outgoing IDS's on the O_F and O_I ports. Replace <ids_name> with the required ids i.e. equilibrium_out.
 
