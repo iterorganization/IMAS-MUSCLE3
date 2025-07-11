@@ -98,7 +98,9 @@ def muscled_source() -> None:
     """Implementation of source component"""
     instance = Instance(
         {
-            Operator.O_I: [f"{ids_name}_out" for ids_name in IDSFactory().ids_names()],
+            Operator.O_I: [
+                f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
+            ],
         }
     )
     first_run = True
@@ -112,10 +114,12 @@ def muscled_source() -> None:
                 port_list_out[0].replace("_out", ""), lazy=True
             ).time
             t_min = max(
-                get_setting_optional(instance, "t_min", default=-1e20), t_array[0]
+                get_setting_optional(instance, "t_min", default=-1e20),
+                t_array[0],
             )
             t_max = min(
-                get_setting_optional(instance, "t_max", default=1e20), t_array[-1]
+                get_setting_optional(instance, "t_max", default=1e20),
+                t_array[-1],
             )
             t_array = [t for t in t_array if t_min <= t <= t_max]
             sanity_check_ports(instance)
@@ -128,7 +132,11 @@ def muscled_source() -> None:
             else:
                 next_t = None
             handle_source(
-                instance, source_db_entry, port_list_out, t_inner, next_timestamp=next_t
+                instance,
+                source_db_entry,
+                port_list_out,
+                t_inner,
+                next_timestamp=next_t,
             )
     source_db_entry.close()
 
@@ -141,7 +149,9 @@ def muscled_sink_source() -> None:
             Operator.F_INIT: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
             ],
-            Operator.O_F: [f"{ids_name}_out" for ids_name in IDSFactory().ids_names()],
+            Operator.O_F: [
+                f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
+            ],
         }
     )
     sink_db_entry = None
@@ -163,7 +173,11 @@ def muscled_sink_source() -> None:
         t_cur, t_next = handle_sink(instance, sink_db_entry, port_list_in)
         # O_F
         handle_source(
-            instance, source_db_entry, port_list_out, t_cur, next_timestamp=t_next
+            instance,
+            source_db_entry,
+            port_list_out,
+            t_cur,
+            next_timestamp=t_next,
         )
 
     if sink_db_entry is not None:
@@ -217,7 +231,8 @@ def handle_sink(
             ids_data.deserialize(msg_in.data)
             if (
                 len(ids_data.time) > 1
-                or ids_data.ids_properties.homogeneous_time == IDS_TIME_MODE_INDEPENDENT
+                or ids_data.ids_properties.homogeneous_time
+                == IDS_TIME_MODE_INDEPENDENT
             ):
                 db_entry.put(ids_data, occurrence=occ)
             else:
@@ -230,15 +245,19 @@ def sanity_check_ports(instance: Instance) -> None:
     # check port name
     for operator, ports in instance.list_ports().items():
         for port_name in ports:
-            if operator.name in ["F_INIT", "S"] and not port_name.endswith("_in"):
+            if operator.name in ["F_INIT", "S"] and not port_name.endswith(
+                "_in"
+            ):
                 raise Exception(
-                    "Incoming port names should use the format '*ids_name*_in'. "
-                    f"Problem port is {port_name}."
+                    "Incoming port names should use the format "
+                    f"'*ids_name*_in'. Problem port is {port_name}."
                 )
-            if operator.name in ["O_I", "O_F"] and not port_name.endswith("_out"):
+            if operator.name in ["O_I", "O_F"] and not port_name.endswith(
+                "_out"
+            ):
                 raise Exception(
-                    "Outgoing port names should use the format '*ids_name*_out'. "
-                    f"Problem port is {port_name}."
+                    "Outgoing port names should use the format "
+                    f"'*ids_name*_out'. Problem port is {port_name}."
                 )
     # check whether uri is provided if component acts as source
     no_source_uri = get_setting_optional(instance, "source_uri") is None

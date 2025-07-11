@@ -99,6 +99,7 @@ local_scheme = "no-local-version"
 
 [tool.black]
 force-exclude = "imas_muscle3/_version.py"
+line-length = 79
 
 [tool.mypy]
 packages = "imas_muscle3"
@@ -120,6 +121,7 @@ module = [
     "imas_validator.*",
     "libmuscle.*",
     "ymmsl.*",
+    "imas_muscle3._version",
 ]
 ignore_missing_imports = true
 
