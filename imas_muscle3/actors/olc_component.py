@@ -40,8 +40,8 @@ def main() -> None:
         port_list_in = get_port_list(instance, Operator.F_INIT)
         # wait for messages on all of the ports (one after the other)
         # Note: this does not handle uneven message counts on different ports.
-        # nor does it handle occurrances
-        # but it must be this way now, since there is no `select` for muscle3 ports
+        # nor does it handle occurrances but it must be this way now, since
+        # there is no `select` for muscle3 ports
         ids_data = {}
         for port_name in port_list_in:
             ids_name = port_name.replace("_in", "")
@@ -50,21 +50,26 @@ def main() -> None:
             ids_data[ids_name] = getattr(IDSFactory(), ids_name)()
             ids_data[ids_name].deserialize(msg_in.data)
 
-        # we have now received one message on each of the ports, and can launch a
-        # validation action
+        # we have now received one message on each of the ports, and can
+        # launch a # validation action
 
         with tempfile.TemporaryDirectory() as tmpdir:
             IMAS_URI = f"imas:hdf5?path={tmpdir}"
             with DBEntry(IMAS_URI, "w") as db:
-                # write all IDSes to the temporary HDF5 entry, since imas_validator
-                # prefers to load # stuff itself. Some performance improvement could be
-                # made there by making # a second entrypoint that does not load by
-                # imas_uri but accepts a # collection of toplevels.
+                # write all IDSes to the temporary HDF5 entry, since
+                # imas_validator prefers to load stuff itself. Some
+                # performance improvement could be made there by making a
+                # second entrypoint that does not load by imas_uri but accepts
+                # a collection of toplevels.
                 for ids in ids_data.values():
                     db.put(ids)
 
-            rulesets = get_setting_optional(instance, "rulesets", default="PDS-OLC")
-            ruledirs = get_setting_optional(instance, "extra_rule_dirs", default="")
+            rulesets = get_setting_optional(
+                instance, "rulesets", default="PDS-OLC"
+            )
+            ruledirs = get_setting_optional(
+                instance, "extra_rule_dirs", default=""
+            )
             assert isinstance(rulesets, str)
             assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
@@ -81,11 +86,14 @@ def main() -> None:
                 logger.info("Check passed")
             else:
                 today = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-                # not sure whether we need the summary report generator or the detailed
+                # not sure whether we need the summary report generator
+                # or the detailed
                 summary_generator = SummaryReportGenerator([result], today)
                 summary_generator.save_html(f"{t_cur}_report.html")
 
-                if get_setting_optional(instance, "halt_on_error", default=False):
+                if get_setting_optional(
+                    instance, "halt_on_error", default=False
+                ):
                     logger.critical("Check failed!")
                     sys.exit(1)
                 else:
