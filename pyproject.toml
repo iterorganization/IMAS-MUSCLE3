@@ -55,6 +55,9 @@ dependencies = [
     "imas-python",
     "imas-validator",
     "muscle3",
+    "panel>=1.6.3",
+    "holoviews",
+    "hvplot",
 ]
 
 [project.optional-dependencies]
