@@ -57,13 +57,14 @@ def main() -> None:
             ],
         }
     )
-    visualization_actor = VisualizationActor(None)
-    visualization_actor.start_server()
     first_run = True
     while instance.reuse_instance():
         if first_run:
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
+            plot_file_path = instance.get_setting("plot_file_path")
+            plot_function = instance.get_setting("plot_function")
+            visualization_actor = VisualizationActor(plot_file_path, plot_function)
             first_run = False
 
         handle_visualization(instance, port_list_in, visualization_actor)
@@ -76,8 +77,8 @@ def handle_visualization(instance, port_list, visualization_actor):
         msg_in = instance.receive(port_name)
         ids_data = getattr(IDSFactory(), ids_name)()
         ids_data.deserialize(msg_in.data)
-        visualization_actor.eq = ids_data
-        visualization_actor.param.trigger("eq")
+        visualization_actor.ids = ids_data
+        visualization_actor.param.trigger("ids")
 
 
 if __name__ == "__main__":

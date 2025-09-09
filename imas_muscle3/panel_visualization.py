@@ -1,3 +1,4 @@
+import runpy
 import webbrowser
 
 import holoviews as hv
@@ -10,36 +11,19 @@ hv.extension("bokeh")
 
 
 class VisualizationActor(param.Parameterized):
-    eq = param.ClassSelector(class_=imas.ids_toplevel.IDSToplevel)
-    OPTIONS = hv.opts.Curve(framewise=True, responsive=True)
+    ids = param.ClassSelector(class_=imas.ids_toplevel.IDSToplevel)
 
-    def __init__(self, plot_func=None):
+    def __init__(self, plot_file_path, plot_function):
         super().__init__()
         self.port = 5006
         self.server = None
-        self.plot = None
+        self.plot_func = runpy.run_path(plot_file_path)[plot_function]
+        self.dynamic_panel = hv.DynamicMap(self._plot)
+        self.start_server()
 
-        self.duration = 10
-        self.iter = 0
-        self.eq = None
-
-        if plot_func is not None:
-            self.plot_func = plot_func
-        else:
-            self.plot_func = self._plot
-        self.dynamic_panel = hv.DynamicMap(self.plot_func)
-
-    @pn.depends("eq")
+    @pn.depends("ids")
     def _plot(self):
-        print("plotting eq")
-        if self.eq:
-            ts = self.eq.time_slice[0]
-            f_df_dpsi = ts.profiles_1d.f_df_dpsi
-            psi = ts.profiles_1d.psi
-            curve = hv.Curve((psi, f_df_dpsi), "Psi", "ff'").opts(self.OPTIONS)
-        else:
-            curve = hv.Curve(([0, 1, 2], [0, 1, 2])).opts(self.OPTIONS)
-        return curve
+        return self.plot_func(self.ids)
 
     def start_server(self):
         self.server = pn.serve(
