@@ -15,35 +15,28 @@ class VisualizationActor(param.Parameterized):
 
     def __init__(self, plot_func=None):
         super().__init__()
-        self.port = 5006  # Change if needed
+        self.port = 5006
         self.server = None
         self.plot = None
 
         self.duration = 10
         self.iter = 0
         self.eq = None
-        self.ip_history = []
-        self.time_history = []
 
         if plot_func is not None:
             self.plot_func = plot_func
         else:
-            self.plot_func = self.eq_plot
+            self.plot_func = self._plot
         self.dynamic_panel = hv.DynamicMap(self.plot_func)
 
     @pn.depends("eq")
-    def eq_plot(self):
+    def _plot(self):
         print("plotting eq")
         if self.eq:
             ts = self.eq.time_slice[0]
-
-            time = self.eq.time[0]
-            self.ip_history.append(ts.global_quantities.ip)
-            self.time_history.append(time)
-
-            curve = hv.Curve(
-                (self.time_history, self.ip_history), "Time (s)", "Ip (A)"
-            ).opts(self.OPTIONS)
+            f_df_dpsi = ts.profiles_1d.f_df_dpsi
+            psi = ts.profiles_1d.psi
+            curve = hv.Curve((psi, f_df_dpsi), "Psi", "ff'").opts(self.OPTIONS)
         else:
             curve = hv.Curve(([0, 1, 2], [0, 1, 2])).opts(self.OPTIONS)
         return curve
@@ -57,12 +50,12 @@ class VisualizationActor(param.Parameterized):
             threaded=True,
             start=True,
         )
-        self.open_browser()
+        self._open_browser()
 
     def stop_server(self):
         self.server.stop()
 
-    def open_browser(self):
+    def _open_browser(self):
         url = f"http://localhost:{self.port}"
         try:
             webbrowser.open(url)

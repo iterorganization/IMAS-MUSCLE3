@@ -3,17 +3,14 @@ MUSCLE3 actor for visualization
 """
 
 import logging
-from typing import List, Optional, Tuple
 
-import imas
-from imas import DBEntry, IDSFactory
-from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
+from imas import IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
 
 from imas_muscle3.data_sink_source import sanity_check_ports
 from imas_muscle3.panel_visualization import VisualizationActor
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list
 
 logger = logging.getLogger()
 
@@ -69,27 +66,18 @@ def main() -> None:
             sanity_check_ports(instance)
             first_run = False
 
-        # F_INIT
         handle_visualization(instance, port_list_in, visualization_actor)
     visualization_actor.stop_server()
 
 
-def handle_visualization(
-    instance: Instance, port_list: List[str], visualization_actor
-) -> Tuple[float, Optional[float]]:
-    """Loop through sink ids_names and receive all incoming messages"""
-    t_cur = 0.0
-    t_next = None
+def handle_visualization(instance, port_list, visualization_actor):
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
         msg_in = instance.receive(port_name)
-        t_cur = msg_in.timestamp
-        t_next = msg_in.next_timestamp
         ids_data = getattr(IDSFactory(), ids_name)()
         ids_data.deserialize(msg_in.data)
         visualization_actor.eq = ids_data
         visualization_actor.param.trigger("eq")
-    return t_cur, t_next
 
 
 if __name__ == "__main__":
