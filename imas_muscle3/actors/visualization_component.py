@@ -82,10 +82,10 @@ def main() -> None:
                         ids_slice.deserialize(msg_in.data)
                         db.put_slice(ids_slice)
                         ids = db.get(ids_name)
-                        visualization_actor.ids = ids
-                        visualization_actor.param.trigger("ids")
+                        visualization_actor.ids_dict[ids_name] = ids
 
                         ids_next[ids_name] = msg_in.next_timestamp is not None
+                visualization_actor.param.trigger("ids_dict")
 
     visualization_actor.stop_server()
 

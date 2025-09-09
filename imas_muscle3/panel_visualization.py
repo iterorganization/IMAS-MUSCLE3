@@ -2,7 +2,6 @@ import runpy
 import webbrowser
 
 import holoviews as hv
-import imas
 import panel as pn
 import param
 
@@ -11,7 +10,7 @@ hv.extension("bokeh")
 
 
 class VisualizationActor(param.Parameterized):
-    ids = param.ClassSelector(class_=imas.ids_toplevel.IDSToplevel)
+    ids_dict = param.Dict(default={})
 
     def __init__(self, plot_file_path, plot_function, port):
         super().__init__()
@@ -21,9 +20,9 @@ class VisualizationActor(param.Parameterized):
         self.dynamic_panel = hv.DynamicMap(self._plot)
         self.start_server()
 
-    @pn.depends("ids")
+    @pn.depends("ids_dict")
     def _plot(self):
-        return self.plot_func(self.ids)
+        return self.plot_func(self.ids_dict)
 
     def start_server(self):
         self.server = pn.serve(

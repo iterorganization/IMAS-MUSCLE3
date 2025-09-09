@@ -5,15 +5,16 @@ model:
     source_component:
       implementation: source_component
       ports:
-        o_i: [equilibrium_out]
+        o_i: [equilibrium_out, pf_active_out]
     visualization_component:
       implementation: visualization_component
       ports:
-        f_init: [equilibrium_in]
+        f_init: [equilibrium_in, pf_active_in]
   conduits:
     source_component.equilibrium_out: visualization_component.equilibrium_in
+    source_component.pf_active_out: visualization_component.pf_active_in
 settings:
-  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/equilibrium_small
+  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/nice-input-dd4
   visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/plot.py
   visualization_component.plot_function: plot_func
   visualization_component.port: 5007
