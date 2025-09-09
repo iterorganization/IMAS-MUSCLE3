@@ -13,9 +13,9 @@ hv.extension("bokeh")
 class VisualizationActor(param.Parameterized):
     ids = param.ClassSelector(class_=imas.ids_toplevel.IDSToplevel)
 
-    def __init__(self, plot_file_path, plot_function):
+    def __init__(self, plot_file_path, plot_function, port):
         super().__init__()
-        self.port = 5006
+        self.port = port
         self.server = None
         self.plot_func = runpy.run_path(plot_file_path)[plot_function]
         self.dynamic_panel = hv.DynamicMap(self._plot)

@@ -10,7 +10,7 @@ from ymmsl import Operator
 
 from imas_muscle3.data_sink_source import sanity_check_ports
 from imas_muscle3.panel_visualization import VisualizationActor
-from imas_muscle3.utils import get_port_list
+from imas_muscle3.utils import get_port_list, get_setting_optional
 
 logger = logging.getLogger()
 
@@ -64,7 +64,10 @@ def main() -> None:
             sanity_check_ports(instance)
             plot_file_path = instance.get_setting("plot_file_path")
             plot_function = instance.get_setting("plot_function")
-            visualization_actor = VisualizationActor(plot_file_path, plot_function)
+            port = get_setting_optional(instance, "port", 5006)
+            visualization_actor = VisualizationActor(
+                plot_file_path, plot_function, port
+            )
             first_run = False
 
         handle_visualization(instance, port_list_in, visualization_actor)
