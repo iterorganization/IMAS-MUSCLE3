@@ -1,0 +1,31 @@
+ymmsl_version: v0.1
+model:
+  name: test_model
+  components:
+    source_component:
+      implementation: source_component
+      ports:
+        o_i: [equilibrium_out]
+    visualization_component:
+      implementation: visualization_component
+      ports:
+        f_init: [equilibrium_in]
+  conduits:
+    source_component.equilibrium_out: visualization_component.equilibrium_in
+settings:
+  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/equilibrium_small
+  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/plot.py
+  visualization_component.plot_function: plot_func
+  visualization_component.port: 5007
+implementations:
+  visualization_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.visualization_component
+  source_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
+resources:
+  source_component:
+    threads: 1
+  visualization_component:
+    threads: 1
