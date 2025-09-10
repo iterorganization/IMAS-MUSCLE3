@@ -16,7 +16,6 @@ model:
 settings:
   source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/nice-input-dd4
   visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/plot.py
-  visualization_component.plot_function: plot_func
   visualization_component.port: 5007
 implementations:
   visualization_component:

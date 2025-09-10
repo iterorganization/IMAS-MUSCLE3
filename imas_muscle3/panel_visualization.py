@@ -1,4 +1,5 @@
 import runpy
+import types
 import webbrowser
 
 import holoviews as hv
@@ -12,17 +13,21 @@ hv.extension("bokeh")
 class VisualizationActor(param.Parameterized):
     ids_dict = param.Dict(default={})
 
-    def __init__(self, plot_file_path, plot_function, port):
+    def __init__(self, plot_file_path, port):
         super().__init__()
         self.port = port
         self.server = None
-        self.plot_func = runpy.run_path(plot_file_path)[plot_function]
-        self.dynamic_panel = hv.DynamicMap(self._plot)
-        self.start_server()
 
-    @pn.depends("ids_dict")
-    def _plot(self):
-        return self.plot_func(self.ids_dict)
+        ns = runpy.run_path(plot_file_path)
+        funcs = [v for v in ns.values() if isinstance(v, types.FunctionType)]
+
+        dmaps = []
+        for f in funcs:
+            bound = pn.bind(f, ids_dict=self.param.ids_dict)
+            dmaps.append(hv.DynamicMap(bound))
+
+        self.dynamic_panel = pn.Column(*dmaps)
+        self.start_server()
 
     def start_server(self):
         self.server = pn.serve(
