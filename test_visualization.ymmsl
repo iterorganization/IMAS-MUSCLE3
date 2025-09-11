@@ -14,7 +14,7 @@ model:
     source_component.equilibrium_out: visualization_component.equilibrium_in
     source_component.pf_active_out: visualization_component.pf_active_in
 settings:
-  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/nice-input-dd4
+  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/striped_eq
   visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/states.py
   visualization_component.port: 5007
 implementations:

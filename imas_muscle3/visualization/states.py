@@ -9,17 +9,22 @@ from imas_muscle3.visualization.base_state import BaseState
 
 
 class EquilibriumState(BaseState):
-    """Manages and processes data from the 'equilibrium' IDS."""
-
     def _initialize_data(self):
         self.data = xr.Dataset(
             data_vars={
                 "ip": ("time", np.array([], dtype=float)),
                 "f_df_dpsi": ("time", np.array([], dtype=float)),
                 "psi": ("time", np.array([], dtype=float)),
+                "profiles_2d": (
+                    ("time", "profile_dim1", "profile_dim2"),
+                    np.empty((0, 0, 0), dtype=float),
+                ),
             },
             coords={
                 "time": np.array([], dtype=float),
+                "profile": np.array([], dtype=int),
+                "profile_dim1": np.array([], dtype=int),
+                "profile_dim2": np.array([], dtype=int),
             },
         )
 
@@ -34,10 +39,16 @@ class EquilibriumState(BaseState):
                 "ip": ("time", [ts.global_quantities.ip]),
                 "f_df_dpsi": (("time", "profile"), [ts.profiles_1d.f_df_dpsi]),
                 "psi": (("time", "profile"), [ts.profiles_1d.psi]),
+                "profiles_2d": (
+                    ("time", "profile_dim1", "profile_dim2"),
+                    [ts.profiles_2d[0].psi],
+                ),
             },
             coords={
                 "time": [equilibrium_ids.time[0]],
                 "profile": np.arange(len(ts.profiles_1d.f_df_dpsi)),
+                "profile_dim1": np.arange(ts.profiles_2d[0].psi.shape[0]),
+                "profile_dim2": np.arange(ts.profiles_2d[0].psi.shape[1]),
             },
         )
 
@@ -88,7 +99,7 @@ class Plots(param.Parameterized):
             framewise=True,
             responsive=True,
             height=300,
-            title=f"Profile at t={latest_data.time.item():.6f}",
+            title=f"ff' profile at t={latest_data.time.item():.6f}",
         )
 
     @param.depends("state.data")
@@ -99,8 +110,8 @@ class Plots(param.Parameterized):
                 colorbar=True,
                 framewise=True,
                 responsive=True,
-                height=400,
-                title="Waterfall of ff' over Time and Psi Index",
+                height=300,
+                title="ff' over time",
             )
 
         times = self.state.data.time.values
@@ -120,8 +131,32 @@ class Plots(param.Parameterized):
             colorbar=True,
             framewise=True,
             responsive=True,
-            height=400,
-            title="Waterfall of ff' over Time and Psi Index",
+            height=300,
+            title="ff' over time",
+        )
+
+    @param.depends("state.data")
+    def plot_2d_profile(self):
+        if not self.state or self.state.data.time.size == 0:
+            return hv.Image([]).opts(
+                cmap="viridis",
+                colorbar=True,
+                framewise=True,
+                responsive=True,
+                height=300,
+                title="Waiting for data...",
+            )
+
+        latest_data = self.state.data.isel(time=-1)
+
+        f_2d = latest_data.profiles_2d.values
+        return hv.Image(f_2d).opts(
+            cmap="viridis",
+            colorbar=True,
+            framewise=True,
+            responsive=True,
+            height=300,
+            title=f"Poloidal flux at t={latest_data.time.item():.6f}",
         )
 
 
@@ -143,5 +178,10 @@ DASHBOARD_LAYOUT = [
         "plot_class": Plots,
         "state_name": "equilibrium",
         "plot_method": "plot_profile_waterfall",
+    },
+    {
+        "plot_class": Plots,
+        "state_name": "equilibrium",
+        "plot_method": "plot_2d_profile",
     },
 ]
