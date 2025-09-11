@@ -1,5 +1,6 @@
 import holoviews as hv
 import numpy as np
+import pandas as pd
 import param
 import xarray as xr
 
@@ -90,6 +91,39 @@ class Plots(param.Parameterized):
             title=f"Profile at t={latest_data.time.item():.6f}",
         )
 
+    @param.depends("state.data")
+    def plot_profile_waterfall(self):
+        if not self.state or self.state.data.time.size == 0:
+            return hv.HeatMap(pd.DataFrame(columns=["Time", "Psi Index", "ff'"])).opts(
+                cmap="viridis",
+                colorbar=True,
+                framewise=True,
+                responsive=True,
+                height=400,
+                title="Waterfall of ff' over Time and Psi Index",
+            )
+
+        times = self.state.data.time.values
+        profiles = self.state.data.profile.values
+        f_values_2d = self.state.data.f_df_dpsi.values
+
+        df = pd.DataFrame(
+            {
+                "Time": np.repeat(times, len(profiles)),
+                "Psi Index": np.tile(profiles, len(times)),
+                "ff'": f_values_2d.flatten(),
+            }
+        )
+
+        return hv.HeatMap(df, kdims=["Psi Index", "Time"], vdims=["ff'"]).opts(
+            cmap="viridis",
+            colorbar=True,
+            framewise=True,
+            responsive=True,
+            height=400,
+            title="Waterfall of ff' over Time and Psi Index",
+        )
+
 
 STATE_DEFINITIONS = {
     "equilibrium": EquilibriumState,
@@ -104,5 +138,10 @@ DASHBOARD_LAYOUT = [
         "plot_class": Plots,
         "state_name": "equilibrium",
         "plot_method": "plot_profile",
+    },
+    {
+        "plot_class": Plots,
+        "state_name": "equilibrium",
+        "plot_method": "plot_profile_waterfall",
     },
 ]
