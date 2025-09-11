@@ -29,7 +29,7 @@ class EquilibriumState(BaseState):
         )
 
     def update(self, equilibrium_ids):
-        if not equilibrium_ids.time_slice:
+        if not equilibrium_ids:
             return
 
         ts = equilibrium_ids.time_slice[0]
@@ -49,6 +49,36 @@ class EquilibriumState(BaseState):
                 "profile": np.arange(len(ts.profiles_1d.f_df_dpsi)),
                 "profile_dim1": np.arange(ts.profiles_2d[0].psi.shape[0]),
                 "profile_dim2": np.arange(ts.profiles_2d[0].psi.shape[1]),
+            },
+        )
+
+        if self.data.sizes["time"] == 0:
+            self.data = new_point
+        else:
+            self.data = xr.concat([self.data, new_point], dim="time", join="outer")
+
+
+class PfActiveState(BaseState):
+    def _initialize_data(self):
+        self.data = xr.Dataset(
+            data_vars={
+                "currents": ("time", np.array([], dtype=float)),
+            },
+            coords={
+                "time": np.array([], dtype=float),
+            },
+        )
+
+    def update(self, pf_active_ids):
+        if not pf_active_ids:
+            return
+
+        new_point = xr.Dataset(
+            {
+                "currents": ("time", pf_active_ids.coil[0].current.data),
+            },
+            coords={
+                "time": [pf_active_ids.time[0]],
             },
         )
 
@@ -159,9 +189,29 @@ class Plots(param.Parameterized):
             title=f"Poloidal flux at t={latest_data.time.item():.6f}",
         )
 
+    @param.depends("state.data")
+    def plot_coil_currents(self):
+        xlabel = "Time (s)"
+        ylabel = "Coil currents (A)"
+
+        if not self.state or self.state.data.time.size == 0:
+            return hv.Curve(([], []), xlabel, ylabel).opts(
+                framewise=True, responsive=True, height=300, title="Waiting for data..."
+            )
+
+        return hv.Curve(
+            (self.state.data.time, self.state.data.currents), xlabel, ylabel
+        ).opts(
+            framewise=True,
+            responsive=True,
+            height=300,
+            title=f"coil currents over time, current t={self.state.data.time[-1].item()}, len={len(self.state.data.time)}",
+        )
+
 
 STATE_DEFINITIONS = {
     "equilibrium": EquilibriumState,
+    "pf_active": PfActiveState,
 }
 DASHBOARD_LAYOUT = [
     {
@@ -183,5 +233,10 @@ DASHBOARD_LAYOUT = [
         "plot_class": Plots,
         "state_name": "equilibrium",
         "plot_method": "plot_2d_profile",
+    },
+    {
+        "plot_class": Plots,
+        "state_name": "pf_active",
+        "plot_method": "plot_coil_currents",
     },
 ]
