@@ -28,11 +28,11 @@ class EquilibriumState(BaseState):
             },
         )
 
-    def update(self, equilibrium_ids):
-        if not equilibrium_ids:
+    def update(self, ids):
+        if not ids:
             return
 
-        ts = equilibrium_ids.time_slice[0]
+        ts = ids.time_slice[0]
 
         new_point = xr.Dataset(
             {
@@ -45,7 +45,7 @@ class EquilibriumState(BaseState):
                 ),
             },
             coords={
-                "time": [equilibrium_ids.time[0]],
+                "time": [ids.time[0]],
                 "profile": np.arange(len(ts.profiles_1d.f_df_dpsi)),
                 "profile_dim1": np.arange(ts.profiles_2d[0].psi.shape[0]),
                 "profile_dim2": np.arange(ts.profiles_2d[0].psi.shape[1]),
@@ -62,27 +62,33 @@ class PfActiveState(BaseState):
     def _initialize_data(self):
         self.data = xr.Dataset(
             data_vars={
-                "currents": ("time", np.array([], dtype=float)),
+                "currents": (("time", "coil"), np.empty((0, 0), dtype=float)),
             },
             coords={
                 "time": np.array([], dtype=float),
+                "coil": np.array([], dtype=str),
             },
         )
 
-    def update(self, pf_active_ids):
-        if not pf_active_ids:
+    def update(self, ids):
+        if not ids:
             return
+
+        currents = np.array([c.current.data for c in ids.coil])
+        coil_names = np.array([c.name.value for c in ids.coil])
+        ncoils = len(ids.coil)
 
         new_point = xr.Dataset(
             {
-                "currents": ("time", pf_active_ids.coil[0].current.data),
+                "currents": (("time", "coil"), currents.reshape(1, ncoils)),
             },
             coords={
-                "time": [pf_active_ids.time[0]],
+                "time": [ids.time[0]],
+                "coil": coil_names,
             },
         )
 
-        if self.data.sizes["time"] == 0:
+        if self.data.sizes.get("time", 0) == 0:
             self.data = new_point
         else:
             self.data = xr.concat([self.data, new_point], dim="time", join="outer")
@@ -103,16 +109,19 @@ class Plots(param.Parameterized):
 
         if not self.state or self.state.data.time.size == 0:
             return hv.Curve(([], []), xlabel, ylabel).opts(
-                framewise=True, responsive=True, height=300, title="Waiting for data..."
+                framewise=True,
+                height=300,
+                width=960,
+                title="Waiting for data...",
             )
 
         return hv.Curve(
             (self.state.data.time, self.state.data.ip), xlabel, ylabel
         ).opts(
             framewise=True,
-            responsive=True,
             height=300,
-            title=f"Ip over time, current t={self.state.data.time[-1].item()}, len={len(self.state.data.time)}",
+            width=960,
+            title=f"Ip over time, current t={self.state.data.time[-1].item():.3f}, len={len(self.state.data.time)}",
         )
 
     @param.depends("state.data")
@@ -122,16 +131,20 @@ class Plots(param.Parameterized):
 
         if not self.state or self.state.data.time.size == 0:
             return hv.Curve(([], []), xlabel, ylabel).opts(
-                framewise=True, responsive=True, height=300, title="Waiting for data..."
+                framewise=True,
+                height=300,
+                width=960,
+                title="Waiting for data...",
             )
         latest_data = self.state.data.isel(time=-1)
         return hv.Curve((latest_data.psi, latest_data.f_df_dpsi), xlabel, ylabel).opts(
             framewise=True,
-            responsive=True,
             height=300,
-            title=f"ff' profile at t={latest_data.time.item():.6f}",
+            width=960,
+            title=f"ff' profile at t={latest_data.time.item():.3f}",
         )
 
+    # TODO: this plot sometimes doesn't update properly
     @param.depends("state.data")
     def plot_profile_waterfall(self):
         if not self.state or self.state.data.time.size == 0:
@@ -139,8 +152,8 @@ class Plots(param.Parameterized):
                 cmap="viridis",
                 colorbar=True,
                 framewise=True,
-                responsive=True,
                 height=300,
+                width=960,
                 title="ff' over time",
             )
 
@@ -160,8 +173,8 @@ class Plots(param.Parameterized):
             cmap="viridis",
             colorbar=True,
             framewise=True,
-            responsive=True,
             height=300,
+            width=960,
             title="ff' over time",
         )
 
@@ -172,8 +185,8 @@ class Plots(param.Parameterized):
                 cmap="viridis",
                 colorbar=True,
                 framewise=True,
-                responsive=True,
                 height=300,
+                width=960,
                 title="Waiting for data...",
             )
 
@@ -184,9 +197,9 @@ class Plots(param.Parameterized):
             cmap="viridis",
             colorbar=True,
             framewise=True,
-            responsive=True,
             height=300,
-            title=f"Poloidal flux at t={latest_data.time.item():.6f}",
+            width=960,
+            title=f"Poloidal flux at t={latest_data.time.item():.3f}",
         )
 
     @param.depends("state.data")
@@ -196,17 +209,26 @@ class Plots(param.Parameterized):
 
         if not self.state or self.state.data.time.size == 0:
             return hv.Curve(([], []), xlabel, ylabel).opts(
-                framewise=True, responsive=True, height=300, title="Waiting for data..."
+                framewise=True,
+                title="Waiting for data...",
             )
 
-        return hv.Curve(
-            (self.state.data.time, self.state.data.currents), xlabel, ylabel
-        ).opts(
-            framewise=True,
-            responsive=True,
-            height=300,
-            title=f"coil currents over time, current t={self.state.data.time[-1].item()}, len={len(self.state.data.time)}",
-        )
+        curves = [
+            hv.Curve(
+                (self.state.data.time, self.state.data.currents.sel(coil=coil)),
+                xlabel,
+                ylabel,
+                label=str(coil),
+            ).opts(
+                framewise=True,
+                height=500,
+                width=960,
+                title=f"coil currents over time, current t={self.state.data.time[-1].item():.3f}",
+            )
+            for coil in self.state.data.coil.values
+        ]
+
+        return hv.Overlay(curves)
 
 
 STATE_DEFINITIONS = {
@@ -217,12 +239,12 @@ DASHBOARD_LAYOUT = [
     {
         "plot_class": Plots,
         "state_name": "equilibrium",
-        "plot_method": "plot_ip_vs_time",
+        "plot_method": "plot_profile",
     },
     {
         "plot_class": Plots,
         "state_name": "equilibrium",
-        "plot_method": "plot_profile",
+        "plot_method": "plot_ip_vs_time",
     },
     {
         "plot_class": Plots,

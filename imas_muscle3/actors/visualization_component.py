@@ -60,7 +60,7 @@ class VisualizationActor(param.Parameterized):
             plot_callable = getattr(plotter_instance, plot_method_name)
             dmaps.append(hv.DynamicMap(plot_callable))
 
-        self.dynamic_panel = pn.Column(*dmaps)
+        self.dynamic_panel = pn.Column(pn.GridBox(*dmaps, ncols=2))
         self.start_server()
 
     def start_server(self):

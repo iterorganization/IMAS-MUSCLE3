@@ -16,5 +16,5 @@ class BaseState(param.Parameterized):
         pass
 
     @abc.abstractmethod
-    def update(self, ids_object):
+    def update(self, ids):
         pass
