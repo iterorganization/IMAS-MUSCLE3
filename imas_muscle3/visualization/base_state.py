@@ -5,7 +5,7 @@ import xarray as xr
 
 
 class BaseState(param.Parameterized):
-    data = param.ClassSelector(class_=xr.Dataset)
+    data = param.Dict(default={})
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

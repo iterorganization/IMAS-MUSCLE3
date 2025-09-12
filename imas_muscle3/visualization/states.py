@@ -7,13 +7,18 @@ import xarray as xr
 from imas_muscle3.visualization.base_state import BasePlotter, BaseState
 
 
-class EquilibriumState(BaseState):
+class State(BaseState):
     def update(self, ids):
         if not ids:
             return
+        if ids.metadata.name == "equilibrium":
+            self._update_equilibrium(ids)
+        elif ids.metadata.name == "pf_active":
+            self._update_pf_active(ids)
+        self.param.trigger("data")
 
+    def _update_equilibrium(self, ids):
         ts = ids.time_slice[0]
-
         new_point = xr.Dataset(
             {
                 "ip": ("time", [ts.global_quantities.ip]),
@@ -32,49 +37,47 @@ class EquilibriumState(BaseState):
             },
         )
 
-        if not self.data:
-            self.data = new_point
+        current_data = self.data.get("equilibrium")
+        if current_data is None:
+            self.data["equilibrium"] = new_point
         else:
-            self.data = xr.concat([self.data, new_point], dim="time", join="outer")
+            self.data["equilibrium"] = xr.concat(
+                [current_data, new_point], dim="time", join="outer"
+            )
 
-
-class PfActiveState(BaseState):
-    def update(self, ids):
-        if not ids:
-            return
-
+    def _update_pf_active(self, ids):
         currents = np.array([c.current.data for c in ids.coil])
         coil_names = np.array([c.name.value for c in ids.coil])
         ncoils = len(ids.coil)
-
         new_point = xr.Dataset(
             {
                 "currents": (("time", "coil"), currents.reshape(1, ncoils)),
             },
-            coords={
-                "time": [ids.time[0]],
-                "coil": coil_names,
-            },
+            coords={"time": [ids.time[0]], "coil": coil_names},
         )
 
-        if not self.data:
-            self.data = new_point
+        current_data = self.data.get("pf_active")
+        if current_data is None:
+            self.data["pf_active"] = new_point
         else:
-            self.data = xr.concat([self.data, new_point], dim="time", join="outer")
+            self.data["pf_active"] = xr.concat(
+                [current_data, new_point], dim="time", join="outer"
+            )
 
 
-class Plots(BasePlotter):
+class Plotter(BasePlotter):
     @param.depends("state.data")
     def plot_ip_vs_time(self):
         xlabel = "Time [s]"
         ylabel = "Ip [A]"
+        state = self.state.data.get("equilibrium")
 
-        if self.state.data:
-            time = self.state.data.time
-            ip = self.state.data.ip
+        if state:
+            time = state.time
+            ip = state.ip
             title = (
-                f"Ip over time, current t={self.state.data.time[-1].item():.3f} "
-                f"len={len(self.state.data.time)}"
+                f"Ip over time, current t={state.time[-1].item():.3f} "
+                f"len={len(state.time)}"
             )
         else:
             time = []
@@ -89,9 +92,10 @@ class Plots(BasePlotter):
     def plot_f_df_dpsi_profile(self):
         xlabel = "Psi"
         ylabel = "ff'"
+        state = self.state.data.get("equilibrium")
 
-        if self.state.data:
-            latest_data = self.state.data.isel(time=-1)
+        if state:
+            latest_data = state.isel(time=-1)
             psi = latest_data.psi
             f_df_dpsi = latest_data.f_df_dpsi
             title = f"ff' profile at t={latest_data.time.item():.3f}"
@@ -103,39 +107,41 @@ class Plots(BasePlotter):
             framewise=True, height=300, width=960, title=title
         )
 
-    # TODO: this plot sometimes doesn't update properly
-    @param.depends("state.data")
-    def plot_profile_waterfall(self):
-        if self.state.data:
-            times = self.state.data.time.values
-            profiles = self.state.data.profile.values
-            f_values_2d = self.state.data.f_df_dpsi.values
-        else:
-            times = []
-            profiles = []
-            f_values_2d = []
-
-        df = pd.DataFrame(
-            {
-                "Time": np.repeat(times, len(profiles)),
-                "Psi Index": np.tile(profiles, len(times)),
-                "ff'": f_values_2d.flatten(),
-            }
-        )
-
-        return hv.HeatMap(df, kdims=["Psi Index", "Time"], vdims=["ff'"]).opts(
-            cmap="viridis",
-            colorbar=True,
-            framewise=True,
-            height=300,
-            width=960,
-            title="ff' over time",
-        )
+    # # TODO: this plot sometimes doesn't update properly
+    # @param.depends("state.data")
+    # def plot_profile_waterfall(self):
+    #     state = self.state.data.get("equilibrium")
+    #     if state:
+    #         times = state.time.values
+    #         profiles = state.profile.values
+    #         f_values_2d = state.f_df_dpsi.values
+    #     else:
+    #         times = []
+    #         profiles = []
+    #         f_values_2d = []
+    #
+    #     df = pd.DataFrame(
+    #         {
+    #             "Time": np.repeat(times, len(profiles)),
+    #             "Psi Index": np.tile(profiles, len(times)),
+    #             "ff'": f_values_2d.flatten(),
+    #         }
+    #     )
+    #
+    #     return hv.HeatMap(df, kdims=["Psi Index", "Time"], vdims=["ff'"]).opts(
+    #         cmap="viridis",
+    #         colorbar=True,
+    #         framewise=True,
+    #         height=300,
+    #         width=960,
+    #         title="ff' over time",
+    #     )
 
     @param.depends("state.data")
     def plot_2d_profile(self):
-        if self.state.data:
-            latest_data = self.state.data.isel(time=-1)
+        state = self.state.data.get("equilibrium")
+        if state:
+            latest_data = state.isel(time=-1)
             f_2d = latest_data.profiles_2d.values
             title = f"Poloidal flux at t={latest_data.time.item():.3f}"
         else:
@@ -151,60 +157,35 @@ class Plots(BasePlotter):
             title=title,
         )
 
-    @param.depends("state.data")
-    def plot_coil_currents(self):
-        xlabel = "Time [s]"
-        ylabel = "Coil currents [A]"
+    # @param.depends("state.data")
+    # def plot_coil_currents(self):
+    #     state = self.state.data.get("pf_active")
+    #     xlabel = "Time [s]"
+    #     ylabel = "Coil currents [A]"
+    #
+    #     if state:
+    #         curves = [
+    #             hv.Curve(
+    #                 (state.time, state.currents.sel(coil=coil)),
+    #                 xlabel,
+    #                 ylabel,
+    #                 label=str(coil),
+    #             ).opts(
+    #                 framewise=True,
+    #                 height=500,
+    #                 width=960,
+    #                 title=f"coil currents over time, current t={state.time[-1].item():.3f}",
+    #             )
+    #             for coil in state.coil.values
+    #         ]
+    #     else:
+    #         curves = [hv.Curve(([0, 1, 2], [0, 1, 2]), xlabel, ylabel)]
+    #
+    #     return hv.Overlay(curves)
 
-        if self.state.data:
-            curves = [
-                hv.Curve(
-                    (self.state.data.time, self.state.data.currents.sel(coil=coil)),
-                    xlabel,
-                    ylabel,
-                    label=str(coil),
-                ).opts(
-                    framewise=True,
-                    height=500,
-                    width=960,
-                    title=f"coil currents over time, current t={self.state.data.time[-1].item():.3f}",
-                )
-                for coil in self.state.data.coil.values
-            ]
-        else:
-            curves = [hv.Curve(([0, 1, 2], [0, 1, 2]), xlabel, ylabel)]
 
-        return hv.Overlay(curves)
-
-
-STATE_DEFINITIONS = {
-    "equilibrium": EquilibriumState,
-    "pf_active": PfActiveState,
-}
 DASHBOARD_LAYOUT = [
-    {
-        "plot_class": Plots,
-        "state_name": "equilibrium",
-        "plot_method": "plot_f_df_dpsi_profile",
-    },
-    {
-        "plot_class": Plots,
-        "state_name": "equilibrium",
-        "plot_method": "plot_ip_vs_time",
-    },
-    # {
-    #     "plot_class": Plots,
-    #     "state_name": "equilibrium",
-    #     "plot_method": "plot_profile_waterfall",
-    # },
-    {
-        "plot_class": Plots,
-        "state_name": "equilibrium",
-        "plot_method": "plot_2d_profile",
-    },
-    # {
-    #     "plot_class": Plots,
-    #     "state_name": "pf_active",
-    #     "plot_method": "plot_coil_currents",
-    # },
+    "plot_f_df_dpsi_profile",
+    "plot_ip_vs_time",
+    "plot_2d_profile",
 ]

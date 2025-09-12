@@ -25,7 +25,7 @@ hv.extension("bokeh")
 class VisualizationActor(param.Parameterized):
     """A generic Panel visualization actor for MUSCLE3."""
 
-    states = param.Dict(default={})
+    state = param.Parameter()
 
     def __init__(self, plot_file_path: str, port: int):
         super().__init__()
@@ -33,30 +33,21 @@ class VisualizationActor(param.Parameterized):
         self.server = None
 
         ns = runpy.run_path(plot_file_path)
-        state_definitions = ns.get("STATE_DEFINITIONS")
+
+        StateClass = ns.get("State")
+        PlotterClass = ns.get("Plotter")
         dashboard_layout = ns.get("DASHBOARD_LAYOUT")
 
-        if not state_definitions or not dashboard_layout:
-            raise ValueError(
-                f"{plot_file_path} must define 'STATE_DEFINITIONS' and 'DASHBOARD_LAYOUT'"
+        if not all((StateClass, PlotterClass)):
+            raise NameError(
+                f"{plot_file_path} must define a 'State' class, a 'Plotter' class."
             )
 
-        self.states = {
-            name: state_class() for name, state_class in state_definitions.items()
-        }
+        self.state = StateClass()
+        plotter_instance = PlotterClass(state=self.state)
 
         dmaps = []
-        for item in dashboard_layout:
-            PlotClass = item["plot_class"]
-            state_name = item["state_name"]
-            plot_method_name = item["plot_method"]
-
-            if state_name not in self.states:
-                raise ValueError(f"State '{state_name}' not in STATE_DEFINITIONS")
-
-            target_state = self.states[state_name]
-
-            plotter_instance = PlotClass(state=target_state)
+        for plot_method_name in dashboard_layout:
             plot_callable = getattr(plotter_instance, plot_method_name)
             dmaps.append(hv.DynamicMap(plot_callable))
 
@@ -114,12 +105,9 @@ def main() -> None:
                 msg = instance.receive(port_name)
                 ids_name = port_name.replace("_in", "")
 
-                if ids_name in visualization_actor.states:
-                    temp_ids = IDSFactory().new(ids_name)
-                    temp_ids.deserialize(msg.data)
-
-                    state_obj = visualization_actor.states[ids_name]
-                    state_obj.update(temp_ids)
+                temp_ids = IDSFactory().new(ids_name)
+                temp_ids.deserialize(msg.data)
+                visualization_actor.state.update(temp_ids)
 
                 if msg.next_timestamp is None:
                     is_running = False
