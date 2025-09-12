@@ -1,6 +1,7 @@
 import holoviews as hv
 import numpy as np
 import pandas as pd
+import panel as pn
 import param
 import xarray as xr
 
@@ -183,9 +184,9 @@ class Plotter(BasePlotter):
     #
     #     return hv.Overlay(curves)
 
+    def get_dashboard(self):
+        ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
+        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
+        profile_2d = hv.DynamicMap(self.plot_2d_profile)
 
-DASHBOARD_LAYOUT = [
-    "plot_f_df_dpsi_profile",
-    "plot_ip_vs_time",
-    "plot_2d_profile",
-]
+        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)

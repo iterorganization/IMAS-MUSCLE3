@@ -1,7 +1,4 @@
-import abc
-
 import param
-import xarray as xr
 
 
 class BaseState(param.Parameterized):
@@ -10,9 +7,8 @@ class BaseState(param.Parameterized):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @abc.abstractmethod
     def update(self, ids):
-        pass
+        raise NotImplementedError("a state class needs to implement an `update` method")
 
 
 class BasePlotter(param.Parameterized):
@@ -20,3 +16,8 @@ class BasePlotter(param.Parameterized):
 
     def __init__(self, state, **params):
         super().__init__(state=state, **params)
+
+    def get_dashboard(self):
+        raise NotImplementedError(
+            "a state class needs to implement a `get_dashboard` method"
+        )

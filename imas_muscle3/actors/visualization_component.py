@@ -36,7 +36,6 @@ class VisualizationActor(param.Parameterized):
 
         StateClass = ns.get("State")
         PlotterClass = ns.get("Plotter")
-        dashboard_layout = ns.get("DASHBOARD_LAYOUT")
 
         if not all((StateClass, PlotterClass)):
             raise NameError(
@@ -45,13 +44,7 @@ class VisualizationActor(param.Parameterized):
 
         self.state = StateClass()
         plotter_instance = PlotterClass(state=self.state)
-
-        dmaps = []
-        for plot_method_name in dashboard_layout:
-            plot_callable = getattr(plotter_instance, plot_method_name)
-            dmaps.append(hv.DynamicMap(plot_callable))
-
-        self.dynamic_panel = pn.Column(pn.GridBox(*dmaps, ncols=2))
+        self.dynamic_panel = plotter_instance.get_dashboard()
         self.start_server()
 
     def start_server(self):
