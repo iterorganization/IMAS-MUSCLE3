@@ -10,13 +10,10 @@ from imas_muscle3.visualization.base_state import BasePlotter, BaseState
 
 class State(BaseState):
     def extract(self, ids):
-        if not ids:
-            return
         if ids.metadata.name == "equilibrium":
             self._extract_equilibrium(ids)
         elif ids.metadata.name == "pf_active":
             self._extract_pf_active(ids)
-        self.param.trigger("data")
 
     def _extract_equilibrium(self, ids):
         ts = ids.time_slice[0]
@@ -108,6 +105,33 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=960, title=title
         )
 
+    @param.depends("state.data")
+    def plot_2d_profile(self):
+        state = self.state.data.get("equilibrium")
+        if state:
+            latest_data = state.isel(time=-1)
+            f_2d = latest_data.profiles_2d.values
+            title = f"Poloidal flux at t={latest_data.time.item():.3f}"
+        else:
+            f_2d = []
+            title = "Waiting for data..."
+
+        return hv.Image(f_2d).opts(
+            cmap="viridis",
+            colorbar=True,
+            framewise=True,
+            height=300,
+            width=960,
+            title=title,
+        )
+
+    def get_dashboard(self):
+        ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
+        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
+        profile_2d = hv.DynamicMap(self.plot_2d_profile)
+
+        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)
+
     # # TODO: this plot sometimes doesn't update properly
     # @param.depends("state.data")
     # def plot_profile_waterfall(self):
@@ -138,26 +162,6 @@ class Plotter(BasePlotter):
     #         title="ff' over time",
     #     )
 
-    @param.depends("state.data")
-    def plot_2d_profile(self):
-        state = self.state.data.get("equilibrium")
-        if state:
-            latest_data = state.isel(time=-1)
-            f_2d = latest_data.profiles_2d.values
-            title = f"Poloidal flux at t={latest_data.time.item():.3f}"
-        else:
-            f_2d = []
-            title = "Waiting for data..."
-
-        return hv.Image(f_2d).opts(
-            cmap="viridis",
-            colorbar=True,
-            framewise=True,
-            height=300,
-            width=960,
-            title=title,
-        )
-
     # @param.depends("state.data")
     # def plot_coil_currents(self):
     #     state = self.state.data.get("pf_active")
@@ -183,10 +187,3 @@ class Plotter(BasePlotter):
     #         curves = [hv.Curve(([0, 1, 2], [0, 1, 2]), xlabel, ylabel)]
     #
     #     return hv.Overlay(curves)
-
-    def get_dashboard(self):
-        ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
-        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
-        profile_2d = hv.DynamicMap(self.plot_2d_profile)
-
-        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)

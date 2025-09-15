@@ -7,6 +7,10 @@ class BaseState(param.Parameterized):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    def extract_and_trigger(self, ids):
+        self.extract(ids)
+        self.param.trigger("data")
+
     def extract(self, ids):
         raise NotImplementedError(
             "a state class needs to implement an `extract` method"
