@@ -9,16 +9,16 @@ from imas_muscle3.visualization.base_state import BasePlotter, BaseState
 
 
 class State(BaseState):
-    def update(self, ids):
+    def extract(self, ids):
         if not ids:
             return
         if ids.metadata.name == "equilibrium":
-            self._update_equilibrium(ids)
+            self._extract_equilibrium(ids)
         elif ids.metadata.name == "pf_active":
-            self._update_pf_active(ids)
+            self._extract_pf_active(ids)
         self.param.trigger("data")
 
-    def _update_equilibrium(self, ids):
+    def _extract_equilibrium(self, ids):
         ts = ids.time_slice[0]
         new_point = xr.Dataset(
             {
@@ -46,7 +46,7 @@ class State(BaseState):
                 [current_data, new_point], dim="time", join="outer"
             )
 
-    def _update_pf_active(self, ids):
+    def _extract_pf_active(self, ids):
         currents = np.array([c.current.data for c in ids.coil])
         coil_names = np.array([c.name.value for c in ids.coil])
         ncoils = len(ids.coil)

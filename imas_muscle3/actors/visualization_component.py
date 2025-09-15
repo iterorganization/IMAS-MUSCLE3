@@ -100,7 +100,7 @@ def main() -> None:
 
                 temp_ids = IDSFactory().new(ids_name)
                 temp_ids.deserialize(msg.data)
-                visualization_actor.state.update(temp_ids)
+                visualization_actor.state.extract(temp_ids)
 
                 if msg.next_timestamp is None:
                     is_running = False

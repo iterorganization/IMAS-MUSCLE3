@@ -7,8 +7,10 @@ class BaseState(param.Parameterized):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def update(self, ids):
-        raise NotImplementedError("a state class needs to implement an `update` method")
+    def extract(self, ids):
+        raise NotImplementedError(
+            "a state class needs to implement an `extract` method"
+        )
 
 
 class BasePlotter(param.Parameterized):
