@@ -89,7 +89,6 @@ class Plotter(BasePlotter):
 
     @param.depends("time_slider", "live_view")
     def plot_f_df_dpsi_profile(self):
-        """Plots the ff' profile."""
         xlabel = "Psi"
         ylabel = "ff'"
         state_data = self.active_state.data.get("equilibrium")
@@ -108,18 +107,23 @@ class Plotter(BasePlotter):
 
     @param.depends("time_slider", "live_view")
     def plot_2d_profile(self):
-        """Plots the 2D poloidal flux."""
+        xlabel = "r"
+        ylabel = "z"
         state_data = self.active_state.data.get("equilibrium")
 
         if state_data:
             selected_data = state_data.isel(time=self.time_idx)
             f_2d = selected_data.profiles_2d.values
+            r = selected_data.coords[xlabel]
+            z = selected_data.coords[ylabel]
             title = f"Poloidal flux at t={selected_data.time.item():.3f}"
         else:
-            f_2d, title = [], "Waiting for data..."
+            r, z, f_2d, title = [], [], [], "Waiting for data..."
 
-        return hv.Image(f_2d).opts(
+        return hv.QuadMesh((r, z, f_2d.T)).opts(
             cmap="viridis",
+            xlabel=xlabel,
+            ylabel=ylabel,
             colorbar=True,
             framewise=True,
             height=300,
