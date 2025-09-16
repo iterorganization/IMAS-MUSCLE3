@@ -105,8 +105,9 @@ def main() -> None:
                 if msg.next_timestamp is None:
                     is_running = False
 
-    if visualization_actor:
-        visualization_actor.stop_server()
+    # Maybe keep server running so you can see earlier results?
+    # if visualization_actor:
+    #     visualization_actor.stop_server()
 
 
 if __name__ == "__main__":

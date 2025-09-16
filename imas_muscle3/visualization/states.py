@@ -1,6 +1,5 @@
 import holoviews as hv
 import numpy as np
-import pandas as pd
 import panel as pn
 import param
 import xarray as xr
@@ -23,15 +22,15 @@ class State(BaseState):
                 "f_df_dpsi": (("time", "profile"), [ts.profiles_1d.f_df_dpsi]),
                 "psi": (("time", "profile"), [ts.profiles_1d.psi]),
                 "profiles_2d": (
-                    ("time", "profile_dim1", "profile_dim2"),
+                    ("time", "r", "z"),
                     [ts.profiles_2d[0].psi],
                 ),
             },
             coords={
                 "time": [ids.time[0]],
                 "profile": np.arange(len(ts.profiles_1d.f_df_dpsi)),
-                "profile_dim1": np.arange(ts.profiles_2d[0].psi.shape[0]),
-                "profile_dim2": np.arange(ts.profiles_2d[0].psi.shape[1]),
+                "r": ts.profiles_2d[0].grid.dim1,
+                "z": ts.profiles_2d[0].grid.dim2,
             },
         )
 
@@ -64,57 +63,60 @@ class State(BaseState):
 
 
 class Plotter(BasePlotter):
-    @param.depends("state.data")
+    def get_plots(self):
+        ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
+        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
+        profile_2d = hv.DynamicMap(self.plot_2d_profile)
+        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)
+
+    @param.depends("time_slider", "live_view")
     def plot_ip_vs_time(self):
         xlabel = "Time [s]"
         ylabel = "Ip [A]"
-        state = self.state.data.get("equilibrium")
+        state_data = self.active_state.data.get("equilibrium")
 
-        if state:
-            time = state.time
-            ip = state.ip
-            title = (
-                f"Ip over time, current t={state.time[-1].item():.3f} "
-                f"len={len(state.time)}"
-            )
+        if state_data:
+            time = state_data.time[0 : self.time_idx]
+            ip = state_data.ip[0 : self.time_idx]
+            current_time = state_data.time[self.time_idx].item()
+            title = f"Ip over time, showing t={current_time:.3f} ({len(time)} points)"
         else:
-            time = []
-            ip = []
-            title = "Waiting for data..."
+            time, ip, title = [], [], "Waiting for data..."
 
         return hv.Curve((time, ip), xlabel, ylabel).opts(
             framewise=True, height=300, width=960, title=title
         )
 
-    @param.depends("state.data")
+    @param.depends("time_slider", "live_view")
     def plot_f_df_dpsi_profile(self):
+        """Plots the ff' profile."""
         xlabel = "Psi"
         ylabel = "ff'"
-        state = self.state.data.get("equilibrium")
+        state_data = self.active_state.data.get("equilibrium")
 
-        if state:
-            latest_data = state.isel(time=-1)
-            psi = latest_data.psi
-            f_df_dpsi = latest_data.f_df_dpsi
-            title = f"ff' profile at t={latest_data.time.item():.3f}"
+        if state_data:
+            selected_data = state_data.isel(time=self.time_idx)
+            psi = selected_data.psi
+            f_df_dpsi = selected_data.f_df_dpsi
+            title = f"ff' profile at t={selected_data.time.item():.3f}"
         else:
-            psi = []
-            f_df_dpsi = []
-            title = "Waiting for data..."
+            psi, f_df_dpsi, title = [], [], "Waiting for data..."
+
         return hv.Curve((psi, f_df_dpsi), xlabel, ylabel).opts(
             framewise=True, height=300, width=960, title=title
         )
 
-    @param.depends("state.data")
+    @param.depends("time_slider", "live_view")
     def plot_2d_profile(self):
-        state = self.state.data.get("equilibrium")
-        if state:
-            latest_data = state.isel(time=-1)
-            f_2d = latest_data.profiles_2d.values
-            title = f"Poloidal flux at t={latest_data.time.item():.3f}"
+        """Plots the 2D poloidal flux."""
+        state_data = self.active_state.data.get("equilibrium")
+
+        if state_data:
+            selected_data = state_data.isel(time=self.time_idx)
+            f_2d = selected_data.profiles_2d.values
+            title = f"Poloidal flux at t={selected_data.time.item():.3f}"
         else:
-            f_2d = []
-            title = "Waiting for data..."
+            f_2d, title = [], "Waiting for data..."
 
         return hv.Image(f_2d).opts(
             cmap="viridis",
@@ -124,13 +126,6 @@ class Plotter(BasePlotter):
             width=960,
             title=title,
         )
-
-    def get_dashboard(self):
-        ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
-        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
-        profile_2d = hv.DynamicMap(self.plot_2d_profile)
-
-        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)
 
     # # TODO: this plot sometimes doesn't update properly
     # @param.depends("state.data")
