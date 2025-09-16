@@ -65,20 +65,25 @@ class State(BaseState):
 class Plotter(BasePlotter):
     def get_plots(self):
         ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
-        f_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
+        ff_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
         profile_2d = hv.DynamicMap(self.plot_2d_profile)
-        return pn.GridBox(ip_vs_time, f_profile, profile_2d, ncols=2)
+        ff_profile_2d = hv.DynamicMap(self.plot_ffprime_profile_2d)
+        coil_currents = hv.DynamicMap(self.plot_coil_currents)
+        return pn.Column(
+            pn.GridBox(ip_vs_time, ff_profile, profile_2d, ff_profile_2d, ncols=2),
+            coil_currents,
+        )
 
-    @param.depends("time_slider", "live_view")
+    @param.depends("time_idx")
     def plot_ip_vs_time(self):
         xlabel = "Time [s]"
         ylabel = "Ip [A]"
-        state_data = self.active_state.data.get("equilibrium")
+        state = self.active_state.data.get("equilibrium")
 
-        if state_data:
-            time = state_data.time[0 : self.time_idx]
-            ip = state_data.ip[0 : self.time_idx]
-            current_time = state_data.time[self.time_idx].item()
+        if state:
+            time = state.time[: self.time_idx + 1]
+            ip = state.ip[: self.time_idx + 1]
+            current_time = state.time[self.time_idx].item()
             title = f"Ip over time, showing t={current_time:.3f} ({len(time)} points)"
         else:
             time, ip, title = [], [], "Waiting for data..."
@@ -87,14 +92,14 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=960, title=title
         )
 
-    @param.depends("time_slider", "live_view")
+    @param.depends("time_idx")
     def plot_f_df_dpsi_profile(self):
         xlabel = "Psi"
         ylabel = "ff'"
-        state_data = self.active_state.data.get("equilibrium")
+        state = self.active_state.data.get("equilibrium")
 
-        if state_data:
-            selected_data = state_data.isel(time=self.time_idx)
+        if state:
+            selected_data = state.isel(time=self.time_idx)
             psi = selected_data.psi
             f_df_dpsi = selected_data.f_df_dpsi
             title = f"ff' profile at t={selected_data.time.item():.3f}"
@@ -105,22 +110,27 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=960, title=title
         )
 
-    @param.depends("time_slider", "live_view")
+    @param.depends("time_idx")
     def plot_2d_profile(self):
         xlabel = "r"
         ylabel = "z"
-        state_data = self.active_state.data.get("equilibrium")
+        state = self.active_state.data.get("equilibrium")
 
-        if state_data:
-            selected_data = state_data.isel(time=self.time_idx)
-            f_2d = selected_data.profiles_2d.values
+        if state:
+            selected_data = state.isel(time=self.time_idx)
+            f_2d = selected_data.profiles_2d.values.T
             r = selected_data.coords[xlabel]
             z = selected_data.coords[ylabel]
             title = f"Poloidal flux at t={selected_data.time.item():.3f}"
         else:
-            r, z, f_2d, title = [], [], [], "Waiting for data..."
+            r = np.array([0, 1])
+            z = np.array([0, 1])
+            f_2d = np.full((2, 2), 0)
+            title = "Waiting for data..."
 
-        return hv.QuadMesh((r, z, f_2d.T)).opts(
+        return hv.QuadMesh(
+            (r, z, f_2d), kdims=["r_profile", "z_profile"], vdims=["flux"]
+        ).opts(
             cmap="viridis",
             xlabel=xlabel,
             ylabel=ylabel,
@@ -131,58 +141,57 @@ class Plotter(BasePlotter):
             title=title,
         )
 
-    # # TODO: this plot sometimes doesn't update properly
-    # @param.depends("state.data")
-    # def plot_profile_waterfall(self):
-    #     state = self.state.data.get("equilibrium")
-    #     if state:
-    #         times = state.time.values
-    #         profiles = state.profile.values
-    #         f_values_2d = state.f_df_dpsi.values
-    #     else:
-    #         times = []
-    #         profiles = []
-    #         f_values_2d = []
-    #
-    #     df = pd.DataFrame(
-    #         {
-    #             "Time": np.repeat(times, len(profiles)),
-    #             "Psi Index": np.tile(profiles, len(times)),
-    #             "ff'": f_values_2d.flatten(),
-    #         }
-    #     )
-    #
-    #     return hv.HeatMap(df, kdims=["Psi Index", "Time"], vdims=["ff'"]).opts(
-    #         cmap="viridis",
-    #         colorbar=True,
-    #         framewise=True,
-    #         height=300,
-    #         width=960,
-    #         title="ff' over time",
-    #     )
+    @param.depends("time_idx")
+    def plot_ffprime_profile_2d(self):
+        state = self.active_state.data.get("equilibrium")
+        ylabel = "Time [s]"
+        xlabel = "psi"
 
-    # @param.depends("state.data")
-    # def plot_coil_currents(self):
-    #     state = self.state.data.get("pf_active")
-    #     xlabel = "Time [s]"
-    #     ylabel = "Coil currents [A]"
-    #
-    #     if state:
-    #         curves = [
-    #             hv.Curve(
-    #                 (state.time, state.currents.sel(coil=coil)),
-    #                 xlabel,
-    #                 ylabel,
-    #                 label=str(coil),
-    #             ).opts(
-    #                 framewise=True,
-    #                 height=500,
-    #                 width=960,
-    #                 title=f"coil currents over time, current t={state.time[-1].item():.3f}",
-    #             )
-    #             for coil in state.coil.values
-    #         ]
-    #     else:
-    #         curves = [hv.Curve(([0, 1, 2], [0, 1, 2]), xlabel, ylabel)]
-    #
-    #     return hv.Overlay(curves)
+        if state:
+            times = state.time.values[: self.time_idx + 1]
+            psi = state.psi.values[self.time_idx]
+            f_values_2d = state.f_df_dpsi.values[: self.time_idx + 1, :]
+            current_time = state.time[self.time_idx].item()
+            title = f"ff' over time, showing t={current_time:.3f}"
+        else:
+            times = np.array([0, 1])
+            psi = np.array([0, 1])
+            f_values_2d = np.full((2, 2), 0)
+            title = "Waiting for data..."
+
+        return hv.QuadMesh(
+            (psi, times, f_values_2d),
+            kdims=["profile_dim", "time_dim"],
+            vdims=["ffprime"],
+        ).opts(
+            cmap="viridis",
+            xlabel=xlabel,
+            ylabel=ylabel,
+            colorbar=True,
+            framewise=True,
+            height=300,
+            width=960,
+            title=title,
+        )
+
+    @param.depends("time_idx")
+    def plot_coil_currents(self):
+        state = self.active_state.data.get("pf_active")
+        xlabel = "Time [s]"
+        ylabel = "Coil currents [A]"
+
+        if state:
+            time = state.time[: self.time_idx]
+            current_time = state.time[self.time_idx].item()
+            curves = []
+            for coil in state.coil.values:
+                current = state.currents.sel(coil=coil)[: self.time_idx].values
+                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
+                    framewise=True,
+                    title=f"coil currents over time, showing t={current_time:.3f}",
+                )
+                curves.append(curve)
+        else:
+            curves = [hv.Curve(([0, 1, 2], [0, 1, 2]), xlabel, ylabel)]
+
+        return hv.Overlay(curves).opts(height=600, width=2 * 960)

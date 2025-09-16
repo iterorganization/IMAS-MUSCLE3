@@ -43,8 +43,8 @@ class VisualizationActor(param.Parameterized):
             )
 
         self.state = StateClass()
-        plotter_instance = PlotterClass(state=self.state)
-        self.dynamic_panel = plotter_instance.get_dashboard()
+        self.plotter = PlotterClass(state=self.state)
+        self.dynamic_panel = self.plotter.get_dashboard()
         self.start_server()
 
     def start_server(self):
@@ -89,7 +89,6 @@ def main() -> None:
             visualization_actor = VisualizationActor(plot_file_path, port)
             first_run = False
 
-        # In this simplified model, we receive from all ports until one signals an end
         is_running = True
         ports_in = get_port_list(instance, Operator.S)
 
@@ -100,14 +99,14 @@ def main() -> None:
 
                 temp_ids = IDSFactory().new(ids_name)
                 temp_ids.deserialize(msg.data)
-                visualization_actor.state.extract_and_trigger(temp_ids)
+                visualization_actor.state.extract(temp_ids)
 
                 if msg.next_timestamp is None:
                     is_running = False
+            visualization_actor.state.param.trigger("data")
 
-    # Maybe keep server running so you can see earlier results?
-    # if visualization_actor:
-    #     visualization_actor.stop_server()
+    if visualization_actor:
+        visualization_actor.stop_server()
 
 
 if __name__ == "__main__":
