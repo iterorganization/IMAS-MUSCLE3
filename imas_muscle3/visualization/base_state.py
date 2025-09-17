@@ -16,7 +16,7 @@ class BaseState(param.Parameterized):
 
 class BasePlotter(param.Parameterized):
     state = param.Parameter(doc="The live state object from the simulation.")
-    time_idx = param.Integer(default=0, bounds=(0, 0), label="Time Step")
+    time_idx = param.Integer(default=0, label="Time Step")
     live_view = param.Boolean(default=True, label="Live View")
 
     def __init__(self, state, **params):
@@ -25,7 +25,10 @@ class BasePlotter(param.Parameterized):
         self.active_state = self.state
 
     def get_dashboard(self):
-        time_slider_widget = pn.widgets.IntSlider.from_param(self.param.time_idx)
+        time_slider_widget = pn.widgets.EditableIntSlider.from_param(
+            self.param.time_idx
+        )
+        time_slider_widget.disabled = self.param.live_view.rx.pipe(bool)
         controls = pn.Row(
             self.param.live_view, time_slider_widget, sizing_mode="stretch_width"
         )

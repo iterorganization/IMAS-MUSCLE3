@@ -4,6 +4,7 @@ MUSCLE3 actor for visualization
 
 import logging
 import runpy
+import time
 import webbrowser
 
 import holoviews as hv
@@ -82,10 +83,12 @@ def main() -> None:
 
     visualization_actor = None
     first_run = True
+    last_trigger_time = 0
     while instance.reuse_instance():
         if first_run:
             plot_file_path = instance.get_setting("plot_file_path", "str")
             port = get_setting_optional(instance, "port", 5006)
+            throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
             visualization_actor = VisualizationActor(plot_file_path, port)
             first_run = False
 
@@ -100,11 +103,14 @@ def main() -> None:
                 temp_ids = IDSFactory().new(ids_name)
                 temp_ids.deserialize(msg.data)
                 visualization_actor.state.extract(temp_ids)
-
                 if msg.next_timestamp is None:
                     is_running = False
-            visualization_actor.state.param.trigger("data")
-
+            current_time = time.time()
+            if current_time - last_trigger_time >= throttle_interval:
+                visualization_actor.state.param.trigger("data")
+                if last_trigger_time == 0:
+                    time.sleep(1)
+                last_trigger_time = current_time
     if visualization_actor:
         visualization_actor.stop_server()
 
