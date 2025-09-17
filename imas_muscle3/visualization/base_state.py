@@ -25,15 +25,14 @@ class BasePlotter(param.Parameterized):
         self.active_state = self.state
 
     def get_dashboard(self):
-        self.time_slider_widget = pn.widgets.EditableIntSlider.from_param(
-            self.param.time_idx
+        self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
+            self.param.time_idx, margin=40, interval=10, options=[0], value=0
         )
         self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param.live_view)
         self.time_slider_widget.disabled = self.param.live_view.rx.pipe(bool)
         controls = pn.Row(
             self.time_slider_widget,
             self.live_view_checkbox,
-            sizing_mode="stretch_width",
         )
         plots = self.get_plots()
         return pn.Column(controls, plots)
@@ -59,10 +58,9 @@ class BasePlotter(param.Parameterized):
         if not state_data:
             return
         num_steps = len(state_data.time)
-        bounds = (0, max(0, num_steps - 1))
-        self.param.time_idx.bounds = bounds
+        self.time_slider_widget.options = list(range(num_steps))
         if self.live_view:
             self.active_state = self.state
-            self.time_idx = bounds[1]
+            self.time_idx = num_steps - 1
         else:
             self.active_state = self._frozen_state

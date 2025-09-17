@@ -50,7 +50,9 @@ class VisualizationActor(param.Parameterized):
             button_type="danger",
             on_click=lambda event: self.stop_server(),
         )
-        self.message_pane = pn.pane.Markdown("", sizing_mode="stretch_width")
+        self.message_pane = pn.pane.Markdown(
+            "### Waiting for data", sizing_mode="stretch_width"
+        )
         self.dynamic_panel = pn.Column(
             pn.Row(stop_button, self.message_pane), self.plotter.get_dashboard()
         )
@@ -71,6 +73,9 @@ class VisualizationActor(param.Parameterized):
         if self.server:
             self.server.stop()
             logger.info("Panel server stopped.")
+
+    def update_time(self, time):
+        self.message_pane.object = f"### Received t = {time:.3f}"
 
     def notify_done(self):
         self.message_pane.object = "### All data received."
@@ -101,6 +106,9 @@ def main() -> None:
         if first_run:
             plot_file_path = instance.get_setting("plot_file_path", "str")
             port = get_setting_optional(instance, "port", 5006)
+            # FIXME: there is an issue when the plotting takes much longer than it
+            # takes for data to arrive from the MUSCLE actor. As a remedy, set a
+            # plotting throttle interval.
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             visualization_actor = VisualizationActor(plot_file_path, port)
@@ -122,9 +130,8 @@ def main() -> None:
             current_time = time.time()
             if current_time - last_trigger_time >= throttle_interval:
                 visualization_actor.state.param.trigger("data")
-                if last_trigger_time == 0:
-                    time.sleep(1)
                 last_trigger_time = current_time
+            visualization_actor.update_time(temp_ids.time[-1])
 
         if keep_alive:
             visualization_actor.notify_done()

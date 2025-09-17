@@ -88,8 +88,13 @@ class Plotter(BasePlotter):
         else:
             time, ip, title = [], [], "Waiting for data..."
 
-        return hv.Curve((time, ip), xlabel, ylabel).opts(
-            framewise=True, height=300, width=960, title=title
+        return hv.Curve((time, ip), kdims=["time_ip"], vdims=["ip"]).opts(
+            framewise=True,
+            height=300,
+            width=960,
+            title=title,
+            xlabel=xlabel,
+            ylabel=ylabel,
         )
 
     @param.depends("time_idx")
