@@ -25,12 +25,15 @@ class BasePlotter(param.Parameterized):
         self.active_state = self.state
 
     def get_dashboard(self):
-        time_slider_widget = pn.widgets.EditableIntSlider.from_param(
+        self.time_slider_widget = pn.widgets.EditableIntSlider.from_param(
             self.param.time_idx
         )
-        time_slider_widget.disabled = self.param.live_view.rx.pipe(bool)
+        self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param.live_view)
+        self.time_slider_widget.disabled = self.param.live_view.rx.pipe(bool)
         controls = pn.Row(
-            self.param.live_view, time_slider_widget, sizing_mode="stretch_width"
+            self.time_slider_widget,
+            self.live_view_checkbox,
+            sizing_mode="stretch_width",
         )
         plots = self.get_plots()
         return pn.Column(controls, plots)

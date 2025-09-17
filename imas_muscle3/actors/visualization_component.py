@@ -50,7 +50,10 @@ class VisualizationActor(param.Parameterized):
             button_type="danger",
             on_click=lambda event: self.stop_server(),
         )
-        self.dynamic_panel = pn.Column(stop_button, self.plotter.get_dashboard())
+        self.message_pane = pn.pane.Markdown("", sizing_mode="stretch_width")
+        self.dynamic_panel = pn.Column(
+            pn.Row(stop_button, self.message_pane), self.plotter.get_dashboard()
+        )
         self.start_server()
 
     def start_server(self):
@@ -68,6 +71,11 @@ class VisualizationActor(param.Parameterized):
         if self.server:
             self.server.stop()
             logger.info("Panel server stopped.")
+
+    def notify_done(self):
+        self.message_pane.object = "### All data received."
+        self.plotter.live_view_checkbox.visible = False
+        self.plotter.time_slider_widget.disabled = False
 
     def _open_browser(self):
         url = f"http://localhost:{self.port}"
@@ -94,6 +102,7 @@ def main() -> None:
             plot_file_path = instance.get_setting("plot_file_path", "str")
             port = get_setting_optional(instance, "port", 5006)
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
+            keep_alive = get_setting_optional(instance, "keep_alive", False)
             visualization_actor = VisualizationActor(plot_file_path, port)
             first_run = False
 
@@ -116,6 +125,11 @@ def main() -> None:
                 if last_trigger_time == 0:
                     time.sleep(1)
                 last_trigger_time = current_time
+
+        if keep_alive:
+            visualization_actor.notify_done()
+        else:
+            visualization_actor.stop_server()
 
 
 if __name__ == "__main__":
