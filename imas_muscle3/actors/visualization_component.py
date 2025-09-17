@@ -45,7 +45,12 @@ class VisualizationActor(param.Parameterized):
 
         self.state = StateClass()
         self.plotter = PlotterClass(state=self.state)
-        self.dynamic_panel = self.plotter.get_dashboard()
+        stop_button = pn.widgets.Button(
+            name="Stop Server",
+            button_type="danger",
+            on_click=lambda event: self.stop_server(),
+        )
+        self.dynamic_panel = pn.Column(stop_button, self.plotter.get_dashboard())
         self.start_server()
 
     def start_server(self):
@@ -111,8 +116,6 @@ def main() -> None:
                 if last_trigger_time == 0:
                     time.sleep(1)
                 last_trigger_time = current_time
-    if visualization_actor:
-        visualization_actor.stop_server()
 
 
 if __name__ == "__main__":
