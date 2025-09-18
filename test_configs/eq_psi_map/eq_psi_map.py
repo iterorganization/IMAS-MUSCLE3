@@ -2,6 +2,7 @@ import logging
 
 import holoviews as hv
 import imas
+import matplotlib.pyplot as plt
 import numpy as np
 import panel as pn
 import param
@@ -24,7 +25,9 @@ class State(BaseState):
 
     def _extract_equilibrium(self, ids):
         ts = ids.time_slice[0]
-        new_point = xr.Dataset(
+
+        # Extract separatrix data
+        separatrix_data = xr.Dataset(
             {
                 "r": (("time", "point"), [ts.boundary.outline.r]),
                 "z": (("time", "point"), [ts.boundary.outline.z]),
@@ -35,12 +38,62 @@ class State(BaseState):
             },
         )
 
+        # Extract grid data for contours
+        eqggd = ts.ggd[0]
+        r_vals = eqggd.r[0].values
+        z_vals = eqggd.z[0].values
+        psi_vals = eqggd.psi[0].values
+
+        grid_data = xr.Dataset(
+            {
+                "grid_r": (("time", "grid_point"), [r_vals]),
+                "grid_z": (("time", "grid_point"), [z_vals]),
+                "psi": (("time", "grid_point"), [psi_vals]),
+                "boundary_psi": (("time",), [ts.boundary.psi]),
+            },
+            coords={
+                "time": [ids.time[0]],
+                "grid_point": range(len(r_vals)),
+            },
+        )
+
+        # Extract X-point and O-point data
+        x_points_r = []
+        x_points_z = []
+        o_points_r = []
+        o_points_z = []
+
+        for node in ts.contour_tree.node:
+            if node.critical_type == 1:  # X-point
+                x_points_r.append(node.r)
+                x_points_z.append(node.z)
+            elif node.critical_type == 0 or node.critical_type == 2:  # O-point
+                o_points_r.append(node.r)
+                o_points_z.append(node.z)
+
+        critical_points_data = xr.Dataset(
+            {
+                "x_points_r": (("time", "x_point"), [x_points_r]),
+                "x_points_z": (("time", "x_point"), [x_points_z]),
+                "o_points_r": (("time", "o_point"), [o_points_r]),
+                "o_points_z": (("time", "o_point"), [o_points_z]),
+            },
+            coords={
+                "time": [ids.time[0]],
+                "x_point": range(len(x_points_r)),
+                "o_point": range(len(o_points_r)),
+            },
+        )
+
+        # Combine all datasets
+        new_data = xr.merge([separatrix_data, grid_data, critical_points_data])
+
         current_data = self.data.get("equilibrium")
         if current_data is None:
-            self.data["equilibrium"] = new_point
+            self.data["equilibrium"] = new_data
         else:
             self.data["equilibrium"] = xr.concat(
-                [current_data, new_point], dim="time", join="outer"
+                [current_data, new_data], dim="time", join="outer"
             )
 
 
@@ -66,21 +119,28 @@ class Plotter(BasePlotter):
     )
     DESIRED_SHAPE_OPTS = hv.opts.Curve(color="blue")
 
-    def get_plots(self):
+    levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
+
+    def get_dashboard(self):
         flux_map_elements = [
-            # hv.DynamicMap(self._plot_contours),
+            hv.DynamicMap(self._plot_contours),
             hv.DynamicMap(self._plot_separatrix),
-            # hv.DynamicMap(self._plot_xo_points),
+            hv.DynamicMap(self._plot_xo_points),
             hv.DynamicMap(self._plot_coil_rectangles),
             hv.DynamicMap(self._plot_wall),
             hv.DynamicMap(self._plot_vacuum_vessel),
         ]
-
+        contour_slider = pn.widgets.IntSlider.from_param(
+            self.param.levels, name="Contour levels"
+        )
         flux_map_overlay = (
             hv.Overlay(flux_map_elements).collate().opts(self.DEFAULT_OPTS)
         )
 
-        return pn.pane.HoloViews(flux_map_overlay, width=self.WIDTH, height=self.HEIGHT)
+        return pn.Column(
+            contour_slider,
+            pn.pane.HoloViews(flux_map_overlay, width=self.WIDTH, height=self.HEIGHT),
+        )
 
     def _plot_coil_rectangles(self):
         """Creates rectangular and path overlays for PF coils.
@@ -107,7 +167,6 @@ class Plotter(BasePlotter):
                     elif outline.has_value:
                         paths.append((outline.r, outline.z, name))
                     elif annulus.r.has_value:
-                        # Just plot outer radius for now
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
@@ -137,62 +196,55 @@ class Plotter(BasePlotter):
         )
         return rects * paths
 
-    # def _plot_contours(self):
-    #     """Generates contour plot for poloidal flux.
-    #
-    #     Returns:
-    #         Contour plot of psi.
-    #     """
-    #     equilibrium = self.communicator.equilibrium
-    #     if not self.show_contour or equilibrium is None:
-    #         contours = hv.Contours(([0], [0], 0), vdims="psi")
-    #     else:
-    #         contours = self._calc_contours(equilibrium, self.levels)
-    #
-    #     return contours.opts(self.CONTOUR_OPTS)
-    #
-    # def _calc_contours(self, equilibrium, levels):
-    #     """Calculates the contours of the psi grid of an equilibrium IDS.
-    #
-    #     Args:
-    #         equilibrium: The equilibrium IDS to load psi grid from.
-    #         levels: Determines the number of contour lines. Either an integer for total
-    #             number of contour lines, or a list of specified levels.
-    #
-    #     Returns:
-    #         Holoviews contours object
-    #     """
-    #
-    #     eqggd = equilibrium.time_slice[0].ggd[0]
-    #     r = eqggd.r[0].values
-    #     z = eqggd.z[0].values
-    #     psi = eqggd.psi[0].values
-    #
-    #     if not r or not z or not psi:
-    #         pn.state.notifications.error(
-    #             "NICE did not produce a valid poloidal flux field"
-    #         )
-    #         return hv.Contours(([0], [0], 0), vdims="psi")
-    #
-    #     trics = plt.tricontour(r, z, psi, levels=levels)
-    #     return hv.Contours(self._extract_contour_segments(trics), vdims="psi")
-    #
-    # def _extract_contour_segments(self, tricontour):
-    #     """Extracts contour segments from matplotlib tricontour.
-    #
-    #     Args:
-    #         tricontour: Output from plt.tricontour.
-    #
-    #     Returns:
-    #         Segment dictionaries with 'x', 'y', and 'psi'.
-    #     """
-    #     segments = []
-    #     for i, level in enumerate(tricontour.levels):
-    #         for seg in tricontour.allsegs[i]:
-    #             if len(seg) > 1:
-    #                 segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
-    #     return segments
-    #
+    @pn.depends("time_idx", "levels")
+    def _plot_contours(self):
+        """Generates contour plot for poloidal flux.
+
+        Returns:
+            Contour plot of psi.
+        """
+        state = self.active_state.data.get("equilibrium")
+        if state is None:
+            contours = hv.Contours(([0], [0], 0), vdims="psi")
+        else:
+            selected_data = state.isel(time=self.time_idx)
+            contours = self._calc_contours(selected_data, self.levels)
+        return contours.opts(self.CONTOUR_OPTS)
+
+    def _calc_contours(self, equilibrium_data, levels):
+        """Calculates the contours of the psi grid of an equilibrium dataset.
+
+        Args:
+            equilibrium_data: The equilibrium dataset to load psi grid from.
+            levels: Determines the number of contour lines. Either an integer for total
+                number of contour lines, or a list of specified levels.
+
+        Returns:
+            Holoviews contours object
+        """
+        r = equilibrium_data.grid_r.values
+        z = equilibrium_data.grid_z.values
+        psi = equilibrium_data.psi.values
+
+        trics = plt.tricontour(r, z, psi, levels=levels)
+        return hv.Contours(self._extract_contour_segments(trics), vdims="psi")
+
+    def _extract_contour_segments(self, tricontour):
+        """Extracts contour segments from matplotlib tricontour.
+
+        Args:
+            tricontour: Output from plt.tricontour.
+
+        Returns:
+            Segment dictionaries with 'x', 'y', and 'psi'.
+        """
+        segments = []
+        for i, level in enumerate(tricontour.levels):
+            for seg in tricontour.allsegs[i]:
+                if len(seg) > 1:
+                    segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
+        return segments
+
     @pn.depends("time_idx")
     def _plot_separatrix(self):
         """Plots the separatrix from the equilibrium boundary.
@@ -204,21 +256,21 @@ class Plotter(BasePlotter):
         state = self.active_state.data.get("equilibrium")
         if state is None:
             r = z = []
-            # contour = hv.Contours(([0], [0], 0), vdims="psi")
+            contour = hv.Contours(([0], [0], 0), vdims="psi")
         else:
             selected_data = state.isel(time=self.time_idx)
             r = selected_data.r
             z = selected_data.z
 
-            # boundary_psi = equilibrium.time_slice[0].boundary.psi
-            # contour = self._calc_contours(equilibrium, [boundary_psi])
+            # Get boundary psi and create contour at that level
+            boundary_psi = selected_data.boundary_psi.values
+            contour = self._calc_contours(selected_data, [boundary_psi])
         return hv.Curve((r, z)).opts(
             color="red",
             line_width=4,
             show_legend=False,
             hover_tooltips=[("", "Separatrix")],
-        )
-        # * contour.opts(self.CONTOUR_OPTS)
+        ) * contour.opts(self.CONTOUR_OPTS)
 
     def _plot_vacuum_vessel(self):
         """Generates path for inner and outer vacuum vessel.
@@ -260,35 +312,42 @@ class Plotter(BasePlotter):
             hover_tooltips=[("", "@name")],
         )
 
-    # def _plot_xo_points(self):
-    #     """Plots X-points and O-points from the equilibrium.
-    #
-    #     Returns:
-    #         Scatter plots of X and O points.
-    #     """
-    #     o_points = []
-    #     x_points = []
-    #     equilibrium = self.communicator.equilibrium
-    #     if self.show_xo and equilibrium is not None:
-    #         for node in equilibrium.time_slice[0].contour_tree.node:
-    #             point = (node.r, node.z)
-    #             if node.critical_type == 1:
-    #                 x_points.append(point)
-    #             elif node.critical_type == 0 or node.critical_type == 2:
-    #                 o_points.append(point)
-    #
-    #     o_scatter = hv.Scatter(o_points).opts(
-    #         marker="o",
-    #         size=10,
-    #         color="black",
-    #         show_legend=False,
-    #         hover_tooltips=[("", "O-point")],
-    #     )
-    #     x_scatter = hv.Scatter(x_points).opts(
-    #         marker="x",
-    #         size=10,
-    #         color="black",
-    #         show_legend=False,
-    #         hover_tooltips=[("", "X-point")],
-    #     )
-    #     return o_scatter * x_scatter
+    @pn.depends("time_idx")
+    def _plot_xo_points(self):
+        """Plots X-points and O-points from the equilibrium.
+
+        Returns:
+            Scatter plots of X and O points.
+        """
+        o_points = []
+        x_points = []
+
+        equilibrium = self.active_state.data.get("equilibrium")
+        if equilibrium is not None:
+            selected_data = equilibrium.isel(time=self.time_idx)
+
+            # Extract X-points
+            x_r = selected_data.x_points_r.values
+            x_z = selected_data.x_points_z.values
+            x_points = list(zip(x_r, x_z))
+
+            # Extract O-points
+            o_r = selected_data.o_points_r.values
+            o_z = selected_data.o_points_z.values
+            o_points = list(zip(o_r, o_z))
+
+        o_scatter = hv.Scatter(o_points).opts(
+            marker="o",
+            size=10,
+            color="black",
+            show_legend=False,
+            hover_tooltips=[("", "O-point")],
+        )
+        x_scatter = hv.Scatter(x_points).opts(
+            marker="x",
+            size=10,
+            color="black",
+            show_legend=False,
+            hover_tooltips=[("", "X-point")],
+        )
+        return o_scatter * x_scatter

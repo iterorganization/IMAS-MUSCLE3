@@ -54,7 +54,7 @@ class VisualizationActor(param.Parameterized):
             "### Waiting for data", sizing_mode="stretch_width"
         )
         self.dynamic_panel = pn.Column(
-            pn.Row(stop_button, self.message_pane), self.plotter.get_dashboard()
+            pn.Row(stop_button, self.message_pane), self.plotter
         )
         self.start_server()
 

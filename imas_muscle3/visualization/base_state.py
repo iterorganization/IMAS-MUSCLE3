@@ -1,5 +1,6 @@
 import panel as pn
 import param
+from panel.viewable import Viewer
 
 
 class BaseState(param.Parameterized):
@@ -19,7 +20,7 @@ class BaseState(param.Parameterized):
         )
 
 
-class BasePlotter(param.Parameterized):
+class BasePlotter(Viewer):
     state = param.Parameter(doc="The live state object from the simulation.")
     time_idx = param.Integer(default=0, label="Time Step")
     live_view = param.Boolean(default=True, label="Live View")
@@ -29,7 +30,7 @@ class BasePlotter(param.Parameterized):
         self._frozen_state = None
         self.active_state = self.state
 
-    def get_dashboard(self):
+    def __panel__(self):
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
             self.param.time_idx, margin=40, interval=10, options=[0], value=0
         )
@@ -39,12 +40,12 @@ class BasePlotter(param.Parameterized):
             self.time_slider_widget,
             self.live_view_checkbox,
         )
-        plots = self.get_plots()
+        plots = self.get_dashboard()
         return pn.Column(controls, plots)
 
-    def get_plots(self):
+    def get_dashboard(self):
         raise NotImplementedError(
-            "a plotter class needs to implement a `get_plots` method"
+            "a plotter class needs to implement a `get_dashboard` method"
         )
 
     @param.depends("live_view", watch=True)

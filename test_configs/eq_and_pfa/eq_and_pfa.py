@@ -63,7 +63,7 @@ class State(BaseState):
 
 
 class Plotter(BasePlotter):
-    def get_plots(self):
+    def get_dashboard(self):
         ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
         ff_profile = hv.DynamicMap(self.plot_f_df_dpsi_profile)
         profile_2d = hv.DynamicMap(self.plot_2d_profile)
