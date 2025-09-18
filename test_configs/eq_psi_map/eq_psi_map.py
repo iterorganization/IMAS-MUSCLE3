@@ -14,11 +14,6 @@ logger = logging.getLogger()
 
 
 class State(BaseState):
-    def initialize(self, md_uri):
-        with imas.DBEntry(md_uri, "r") as dbentry:
-            self.md["pf_active"] = dbentry.get("pf_active")
-            self.md["wall"] = dbentry.get("wall")
-
     def extract(self, ids):
         if ids.metadata.name == "equilibrium":
             self._extract_equilibrium(ids)

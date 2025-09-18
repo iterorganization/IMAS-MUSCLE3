@@ -7,12 +7,9 @@ class BaseState(param.Parameterized):
     data = param.Dict(default={})
     md = param.Dict(default={})
 
-    def __init__(self, md_uri, **kwargs):
+    def __init__(self, md_dict, **kwargs):
         super().__init__(**kwargs)
-        self.initialize(md_uri)
-
-    def initialize(self, md_uri):
-        pass
+        self.md = md_dict
 
     def extract(self, ids):
         raise NotImplementedError(

@@ -6,19 +6,26 @@ model:
       implementation: source_component
       ports:
         o_i: [equilibrium_out]
+    source_component_md:
+      implementation: source_component
+      ports:
+        o_i: [wall_out, pf_active_out]
     visualization_component:
       implementation: visualization_component
       ports:
+        f_init: [pf_active_md_in, wall_md_in]
         s: [equilibrium_in]
   conduits:
     source_component.equilibrium_out: visualization_component.equilibrium_in
+    source_component_md.wall_out: visualization_component.wall_md_in
+    source_component_md.pf_active_out: visualization_component.pf_active_md_in
 settings:
   source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/equilibrium_flux_map
+  source_component_md.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/Waveform-Editor/data/nice-input-dd4
   visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/test_configs/eq_psi_map/eq_psi_map.py
   visualization_component.port: 5007
   visualization_component.throttle_interval: 0.5
   visualization_component.keep_alive: true
-  visualization_component.machine_description: imas:hdf5?path=/home/sebbe/projects/iter_python/Waveform-Editor/data/nice-input-dd4
 implementations:
   visualization_component:
     executable: python
@@ -28,6 +35,8 @@ implementations:
     args: -u -m imas_muscle3.actors.source_component
 resources:
   source_component:
+    threads: 1
+  source_component_md:
     threads: 1
   visualization_component:
     threads: 1

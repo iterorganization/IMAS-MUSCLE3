@@ -28,7 +28,7 @@ class VisualizationActor(param.Parameterized):
 
     state = param.Parameter()
 
-    def __init__(self, plot_file_path, port, md_uri):
+    def __init__(self, plot_file_path, port, md_dict):
         super().__init__()
         self.port = port
         self.server = None
@@ -43,7 +43,7 @@ class VisualizationActor(param.Parameterized):
                 f"{plot_file_path} must define a 'State' class, a 'Plotter' class."
             )
 
-        self.state = StateClass(md_uri)
+        self.state = StateClass(md_dict)
         self.plotter = PlotterClass(state=self.state)
         stop_button = pn.widgets.Button(
             name="Stop Server",
@@ -91,11 +91,27 @@ class VisualizationActor(param.Parameterized):
         logger.info(f"Dashboard is available at {url}")
 
 
+def handle_machine_description(instance):
+    ports_in = get_port_list(instance, Operator.F_INIT)
+    md_dict = {}
+    for port_name in ports_in:
+        msg = instance.receive(port_name)
+        ids_name = port_name.replace("_md_in", "")
+
+        ids = IDSFactory().new(ids_name)
+        ids.deserialize(msg.data)
+        md_dict[ids_name] = ids
+    return md_dict
+
+
 def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
             Operator.S: [f"{ids_name}_in" for ids_name in IDSFactory().ids_names()],
+            Operator.F_INIT: [
+                f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()
+            ],
         }
     )
 
@@ -111,10 +127,8 @@ def main() -> None:
             # plotting throttle interval.
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
-            # TODO: allow for separate URIs per md IDS?
-            md_uri = get_setting_optional(instance, "machine_description", None)
-
-            visualization_actor = VisualizationActor(plot_file_path, port, md_uri)
+            md_dict = handle_machine_description(instance)
+            visualization_actor = VisualizationActor(plot_file_path, port, md_dict)
             first_run = False
 
         is_running = True
