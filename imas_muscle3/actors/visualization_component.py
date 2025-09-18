@@ -28,7 +28,7 @@ class VisualizationActor(param.Parameterized):
 
     state = param.Parameter()
 
-    def __init__(self, plot_file_path: str, port: int):
+    def __init__(self, plot_file_path, port, md_uri):
         super().__init__()
         self.port = port
         self.server = None
@@ -43,7 +43,7 @@ class VisualizationActor(param.Parameterized):
                 f"{plot_file_path} must define a 'State' class, a 'Plotter' class."
             )
 
-        self.state = StateClass()
+        self.state = StateClass(md_uri)
         self.plotter = PlotterClass(state=self.state)
         stop_button = pn.widgets.Button(
             name="Stop Server",
@@ -111,7 +111,10 @@ def main() -> None:
             # plotting throttle interval.
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
-            visualization_actor = VisualizationActor(plot_file_path, port)
+            # TODO: allow for separate URIs per md IDS?
+            md_uri = get_setting_optional(instance, "machine_description", None)
+
+            visualization_actor = VisualizationActor(plot_file_path, port, md_uri)
             first_run = False
 
         is_running = True

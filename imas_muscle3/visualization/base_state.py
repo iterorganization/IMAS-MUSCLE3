@@ -4,9 +4,14 @@ import param
 
 class BaseState(param.Parameterized):
     data = param.Dict(default={})
+    md = param.Dict(default={})
 
-    def __init__(self, **kwargs):
+    def __init__(self, md_uri, **kwargs):
         super().__init__(**kwargs)
+        self.initialize(md_uri)
+
+    def initialize(self, md_uri):
+        pass
 
     def extract(self, ids):
         raise NotImplementedError(
