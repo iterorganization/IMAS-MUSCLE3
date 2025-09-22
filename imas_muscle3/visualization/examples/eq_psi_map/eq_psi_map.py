@@ -1,14 +1,13 @@
 import logging
 
 import holoviews as hv
-import imas
 import matplotlib.pyplot as plt
 import numpy as np
 import panel as pn
 import param
 import xarray as xr
 
-from imas_muscle3.visualization.base_state import BasePlotter, BaseState
+from imas_muscle3.visualization.base import BasePlotter, BaseState
 
 logger = logging.getLogger()
 
@@ -191,7 +190,7 @@ class Plotter(BasePlotter):
         )
         return rects * paths
 
-    @pn.depends("time_idx", "levels")
+    @pn.depends("time_index", "levels")
     def _plot_contours(self):
         """Generates contour plot for poloidal flux.
 
@@ -202,7 +201,7 @@ class Plotter(BasePlotter):
         if state is None:
             contours = hv.Contours(([0], [0], 0), vdims="psi")
         else:
-            selected_data = state.isel(time=self.time_idx)
+            selected_data = state.isel(time=self.time_index)
             contours = self._calc_contours(selected_data, self.levels)
         return contours.opts(self.CONTOUR_OPTS)
 
@@ -240,7 +239,7 @@ class Plotter(BasePlotter):
                     segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
         return segments
 
-    @pn.depends("time_idx")
+    @pn.depends("time_index")
     def _plot_separatrix(self):
         """Plots the separatrix from the equilibrium boundary.
 
@@ -253,7 +252,7 @@ class Plotter(BasePlotter):
             r = z = []
             contour = hv.Contours(([0], [0], 0), vdims="psi")
         else:
-            selected_data = state.isel(time=self.time_idx)
+            selected_data = state.isel(time=self.time_index)
             r = selected_data.r
             z = selected_data.z
 
@@ -307,7 +306,7 @@ class Plotter(BasePlotter):
             hover_tooltips=[("", "@name")],
         )
 
-    @pn.depends("time_idx")
+    @pn.depends("time_index")
     def _plot_xo_points(self):
         """Plots X-points and O-points from the equilibrium.
 
@@ -319,7 +318,7 @@ class Plotter(BasePlotter):
 
         equilibrium = self.active_state.data.get("equilibrium")
         if equilibrium is not None:
-            selected_data = equilibrium.isel(time=self.time_idx)
+            selected_data = equilibrium.isel(time=self.time_index)
 
             # Extract X-points
             x_r = selected_data.x_points_r.values

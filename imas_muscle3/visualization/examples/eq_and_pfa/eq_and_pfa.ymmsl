@@ -15,7 +15,7 @@ model:
     source_component.pf_active_out: visualization_component.pf_active_in
 settings:
   source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/striped_eq
-  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/test_configs/eq_and_pfa/eq_and_pfa.py
+  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/examples/eq_and_pfa/eq_and_pfa.py
   visualization_component.port: 5007
   visualization_component.throttle_interval: 0.5
   visualization_component.keep_alive: true

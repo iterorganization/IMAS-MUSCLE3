@@ -4,7 +4,7 @@ import panel as pn
 import param
 import xarray as xr
 
-from imas_muscle3.visualization.base_state import BasePlotter, BaseState
+from imas_muscle3.visualization.base import BasePlotter, BaseState
 
 
 class State(BaseState):
@@ -74,16 +74,16 @@ class Plotter(BasePlotter):
             coil_currents,
         )
 
-    @param.depends("time_idx")
+    @param.depends("time_index")
     def plot_ip_vs_time(self):
         xlabel = "Time [s]"
         ylabel = "Ip [A]"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            time = state.time[: self.time_idx + 1]
-            ip = state.ip[: self.time_idx + 1]
-            current_time = state.time[self.time_idx].item()
+            time = state.time[: self.time_index + 1]
+            ip = state.ip[: self.time_index + 1]
+            current_time = state.time[self.time_index].item()
             title = f"Ip over time, showing t={current_time:.3f} ({len(time)} points)"
         else:
             time, ip, title = [], [], "Waiting for data..."
@@ -97,14 +97,14 @@ class Plotter(BasePlotter):
             ylabel=ylabel,
         )
 
-    @param.depends("time_idx")
+    @param.depends("time_index")
     def plot_f_df_dpsi_profile(self):
         xlabel = "Psi"
         ylabel = "ff'"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            selected_data = state.isel(time=self.time_idx)
+            selected_data = state.isel(time=self.time_index)
             psi = selected_data.psi
             f_df_dpsi = selected_data.f_df_dpsi
             title = f"ff' profile at t={selected_data.time.item():.3f}"
@@ -115,14 +115,14 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=960, title=title
         )
 
-    @param.depends("time_idx")
+    @param.depends("time_index")
     def plot_2d_profile(self):
         xlabel = "r"
         ylabel = "z"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            selected_data = state.isel(time=self.time_idx)
+            selected_data = state.isel(time=self.time_index)
             f_2d = selected_data.profiles_2d.values.T
             r = selected_data.coords[xlabel]
             z = selected_data.coords[ylabel]
@@ -146,17 +146,17 @@ class Plotter(BasePlotter):
             title=title,
         )
 
-    @param.depends("time_idx")
+    @param.depends("time_index")
     def plot_ffprime_profile_2d(self):
         state = self.active_state.data.get("equilibrium")
         ylabel = "Time [s]"
         xlabel = "psi"
 
         if state:
-            times = state.time.values[: self.time_idx + 1]
-            psi = state.psi.values[self.time_idx]
-            f_values_2d = state.f_df_dpsi.values[: self.time_idx + 1, :]
-            current_time = state.time[self.time_idx].item()
+            times = state.time.values[: self.time_index + 1]
+            psi = state.psi.values[self.time_index]
+            f_values_2d = state.f_df_dpsi.values[: self.time_index + 1, :]
+            current_time = state.time[self.time_index].item()
             title = f"ff' over time, showing t={current_time:.3f}"
         else:
             times = np.array([0, 1])
@@ -179,18 +179,18 @@ class Plotter(BasePlotter):
             title=title,
         )
 
-    @param.depends("time_idx")
+    @param.depends("time_index")
     def plot_coil_currents(self):
         state = self.active_state.data.get("pf_active")
         xlabel = "Time [s]"
         ylabel = "Coil currents [A]"
 
         if state:
-            time = state.time[: self.time_idx]
-            current_time = state.time[self.time_idx].item()
+            time = state.time[: self.time_index]
+            current_time = state.time[self.time_index].item()
             curves = []
             for coil in state.coil.values:
-                current = state.currents.sel(coil=coil)[: self.time_idx].values
+                current = state.currents.sel(coil=coil)[: self.time_index].values
                 curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
                     framewise=True,
                     title=f"coil currents over time, showing t={current_time:.3f}",

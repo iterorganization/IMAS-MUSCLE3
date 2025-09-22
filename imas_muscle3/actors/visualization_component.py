@@ -3,92 +3,22 @@ MUSCLE3 actor for visualization
 """
 
 import logging
-import runpy
 import time
-import webbrowser
 
 import holoviews as hv
 import panel as pn
-import param
 from imas import IDSFactory
 from libmuscle import Instance
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 logger = logging.getLogger()
 
 
 pn.extension()
 hv.extension("bokeh")
-
-
-class VisualizationActor(param.Parameterized):
-    """A generic Panel visualization actor for MUSCLE3."""
-
-    state = param.Parameter()
-
-    def __init__(self, plot_file_path, port, md_dict):
-        super().__init__()
-        self.port = port
-        self.server = None
-
-        ns = runpy.run_path(plot_file_path)
-
-        StateClass = ns.get("State")
-        PlotterClass = ns.get("Plotter")
-
-        if not all((StateClass, PlotterClass)):
-            raise NameError(
-                f"{plot_file_path} must define a 'State' class, a 'Plotter' class."
-            )
-
-        self.state = StateClass(md_dict)
-        self.plotter = PlotterClass(state=self.state)
-        stop_button = pn.widgets.Button(
-            name="Stop Server",
-            button_type="danger",
-            on_click=lambda event: self.stop_server(),
-        )
-        self.message_pane = pn.pane.Markdown(
-            "### Waiting for data", sizing_mode="stretch_width"
-        )
-        self.dynamic_panel = pn.Column(
-            pn.Row(stop_button, self.message_pane), self.plotter
-        )
-        self.start_server()
-
-    def start_server(self):
-        self.server = pn.serve(
-            self.dynamic_panel,
-            port=self.port,
-            address="0.0.0.0",
-            show=False,
-            threaded=True,
-            start=True,
-        )
-        self._open_browser()
-
-    def stop_server(self):
-        if self.server:
-            self.server.stop()
-            logger.info("Panel server stopped.")
-
-    def update_time(self, time):
-        self.message_pane.object = f"### Received t = {time:.3f}"
-
-    def notify_done(self):
-        self.message_pane.object = "### All data received."
-        self.plotter.live_view_checkbox.visible = False
-        self.plotter.time_slider_widget.disabled = False
-
-    def _open_browser(self):
-        url = f"http://localhost:{self.port}"
-        try:
-            webbrowser.open(url)
-        except Exception as e:
-            logger.warning(f"Could not open browser automatically: {e}")
-        logger.info(f"Dashboard is available at {url}")
 
 
 def handle_machine_description(instance):
