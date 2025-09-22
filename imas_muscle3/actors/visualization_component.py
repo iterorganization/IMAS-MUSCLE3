@@ -65,12 +65,21 @@ def main() -> None:
         ports_in = get_port_list(instance, Operator.S)
 
         while is_running:
+            common_time = None
             for port_name in ports_in:
                 msg = instance.receive(port_name)
                 ids_name = port_name.replace("_in", "")
 
                 temp_ids = IDSFactory().new(ids_name)
                 temp_ids.deserialize(msg.data)
+
+                # Ensure the IDSs have the same time basis
+                if common_time is None:
+                    common_time = temp_ids.time
+                else:
+                    if not (temp_ids.time == common_time).all():
+                        raise ValueError(f"Time mismatch detected in IDS {ids_name}")
+
                 visualization_actor.state.extract(temp_ids)
                 if msg.next_timestamp is None:
                     is_running = False

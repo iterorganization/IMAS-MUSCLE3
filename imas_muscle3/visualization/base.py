@@ -67,7 +67,6 @@ class BasePlotter(Viewer):
     @param.depends("_state.data", watch=True)
     def _update_player_on_new_data(self):
         """Update time slider options when new data arrives."""
-        # FIXME: what if two IDSs have different times?
         state_data = next(iter(self._state.data.values()), None)
         if not state_data:
             return
