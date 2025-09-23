@@ -422,7 +422,7 @@ class Plotter(BasePlotter):
             selected_data = state.isel(time=self.time_index)
             psi = selected_data.psi_profile
             f_df_dpsi = selected_data.f_df_dpsi
-            title = f"ff' profile at t={selected_data.time.item():.3f}"
+            title = "ff' profile"
         else:
             psi, f_df_dpsi, title = [], [], "Waiting for data..."
 
@@ -440,7 +440,7 @@ class Plotter(BasePlotter):
             selected_data = state.isel(time=self.time_index)
             psi = selected_data.psi_profile
             dpressure_dpsi = selected_data.dpressure_dpsi
-            title = f"p' profile at t={selected_data.time.item():.3f}"
+            title = "p' profile"
         else:
             psi, dpressure_dpsi, title = [], [], "Waiting for data..."
 
@@ -456,13 +456,12 @@ class Plotter(BasePlotter):
 
         if state:
             time = state.time[: self.time_index + 1]
-            current_time = state.time[self.time_index].item()
             curves = []
             for coil in state.coil.values:
                 current = state.currents.sel(coil=coil)[: self.time_index + 1].values
                 curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
                     framewise=True,
-                    title=f"coil currents over time, showing t={current_time:.3f}",
+                    title="coil currents over time",
                 )
                 curves.append(curve)
         else:
@@ -480,8 +479,7 @@ class Plotter(BasePlotter):
             times = state.time.values[: self.time_index + 1]
             psi = state.psi_profile.values[self.time_index]
             f_df_dpsi = state.f_df_dpsi.values[: self.time_index + 1, :]
-            current_time = state.time[self.time_index].item()
-            title = f"ff' over time, showing t={current_time:.3f}"
+            title = "ff' over time"
         else:
             times = np.array([0, 1])
             psi = np.array([0, 1])
@@ -513,8 +511,7 @@ class Plotter(BasePlotter):
             times = state.time.values[: self.time_index + 1]
             psi = state.psi_profile.values[self.time_index]
             dpressure_dpsi = state.dpressure_dpsi.values[: self.time_index + 1, :]
-            current_time = state.time[self.time_index].item()
-            title = f"p' over time, showing t={current_time:.3f}"
+            title = "p' over time"
         else:
             times = np.array([0, 1])
             psi = np.array([0, 1])

@@ -66,7 +66,7 @@ class VisualizationActor(param.Parameterized):
             logger.info("Panel server stopped.")
 
     def update_time(self, time):
-        self.message_pane.object = f"### Received t = {time:.3f}"
+        self.message_pane.object = f"### Received t = {time:.5e}"
 
     def notify_done(self):
         self.message_pane.object = "### All data received."

@@ -48,8 +48,7 @@ class Plotter(BasePlotter):
         if state:
             time = state.time[: self.time_index + 1]
             ip = state.ip[: self.time_index + 1]
-            current_time = state.time[self.time_index].item()
-            title = f"Ip over time, showing t={current_time:.3f} ({len(time)} points)"
+            title = "Ip over time"
         else:
             time, ip, title = [], [], "Waiting for data..."
 

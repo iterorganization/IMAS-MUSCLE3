@@ -50,6 +50,22 @@ class BasePlotter(Viewer):
         self._frozen_state = None
         self.active_state = self._state
 
+        self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
+        self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
+            self.param.time_index,
+            margin=15,
+            interval=10,
+            options=[0],
+            value=0,
+            visible=self.param._live_view.rx.not_(),
+        )
+        self.time_label = pn.pane.Markdown("")
+        controls = pn.Row(
+            self.live_view_checkbox, self.time_slider_widget, self.time_label
+        )
+        plots = self.get_dashboard()
+        self._panel = pn.Column(controls, plots)
+
     def get_dashboard(self):
         """Return Panel layout for the visualization."""
         raise NotImplementedError(
@@ -64,15 +80,25 @@ class BasePlotter(Viewer):
         else:
             self._frozen_state = self._state
 
+    @param.depends("time_index", watch=True)
+    def update_time_label(self):
+        t = (
+            self.active_state.data[next(iter(self.active_state.data))]
+            .time[self.time_index]
+            .item()
+        )
+        self.time_label.object = f"# showing t = {t:.5e} s"
+
     @param.depends("_state.data", watch=True)
-    def _update_player_on_new_data(self):
-        """Update time slider options when new data arrives."""
+    def _update_on_new_data(self):
+        """Update time slider and time index when new data arrives."""
         state_data = next(iter(self._state.data.values()), None)
         if not state_data:
             return
         if not hasattr(state_data, "time"):
             raise KeyError("The state must contain a time coordinate")
         num_steps = len(state_data.time)
+
         self.time_slider_widget.options = list(range(num_steps))
         if self._live_view:
             self.active_state = self._state
@@ -84,19 +110,4 @@ class BasePlotter(Viewer):
             self.active_state = self._frozen_state
 
     def __panel__(self):
-        """Return panel layout with controls and dashboard content."""
-        self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
-        self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
-            self.param.time_index,
-            margin=15,
-            interval=10,
-            options=[0],
-            value=0,
-            visible=self.param._live_view.rx.not_(),
-        )
-        controls = pn.Row(
-            self.live_view_checkbox,
-            self.time_slider_widget,
-        )
-        plots = self.get_dashboard()
-        return pn.Column(controls, plots)
+        return self._panel
