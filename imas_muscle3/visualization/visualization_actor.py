@@ -71,7 +71,7 @@ class VisualizationActor(param.Parameterized):
     def notify_done(self):
         self.message_pane.object = "### All data received."
         self.plotter.live_view_checkbox.visible = False
-        self.plotter.time_slider_widget.disabled = False
+        self.plotter.time_slider_widget.visible = True
 
     def _open_browser(self):
         url = f"http://localhost:{self.port}"

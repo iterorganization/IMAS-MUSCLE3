@@ -89,11 +89,11 @@ class BasePlotter(Viewer):
             interval=10,
             options=[0],
             value=0,
-            disabled=self.param._live_view.rx.pipe(bool),
+            visible=self.param._live_view.rx.pipe(bool),
         )
         controls = pn.Row(
-            self.time_slider_widget,
             self.live_view_checkbox,
+            self.time_slider_widget,
         )
         plots = self.get_dashboard()
         return pn.Column(controls, plots)
