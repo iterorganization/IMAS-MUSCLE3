@@ -55,7 +55,7 @@ def main() -> None:
             # FIXME: there is an issue when the plotting takes much longer than it
             # takes for data to arrive from the MUSCLE actor. As a remedy, set a
             # plotting throttle interval.
-            throttle_interval = get_setting_optional(instance, "throttle_interval", 0)
+            throttle_interval = get_setting_optional(instance, "throttle_interval", 0.1)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             md_dict = handle_machine_description(instance)
             visualization_actor = VisualizationActor(plot_file_path, port, md_dict)

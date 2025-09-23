@@ -5,7 +5,7 @@ model:
     source_component:
       implementation: source_component
       ports:
-        o_i: [equilibrium_out]
+        o_i: [equilibrium_out, pf_active_out]
     source_component_md:
       implementation: source_component
       ports:
@@ -14,15 +14,16 @@ model:
       implementation: visualization_component
       ports:
         f_init: [pf_active_md_in, wall_md_in]
-        s: [equilibrium_in]
+        s: [equilibrium_in, pf_active_in]
   conduits:
     source_component.equilibrium_out: visualization_component.equilibrium_in
+    source_component.pf_active_out: visualization_component.pf_active_in
     source_component_md.wall_out: visualization_component.wall_md_in
     source_component_md.pf_active_out: visualization_component.pf_active_md_in
 settings:
-  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/equilibrium_flux_map
+  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/pds_example
   source_component_md.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/Waveform-Editor/data/nice-input-dd4
-  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/examples/eq_psi_map/eq_psi_map.py
+  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/examples/pds/pds.py
   visualization_component.port: 5007
   visualization_component.keep_alive: true
 implementations:

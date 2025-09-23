@@ -1,3 +1,11 @@
+"""
+Example that plots the following:
+- a contour plot of the poloidal flux, along with the separatrix,
+  and X/O-points from an equilibrium IDS.
+- The inner wall / vacuum vessel from a wall machine description IDS.
+- The outline of the coils from a pf_active machine description IDS.
+"""
+
 import logging
 
 import holoviews as hv
@@ -16,6 +24,27 @@ class State(BaseState):
     def extract(self, ids):
         if ids.metadata.name == "equilibrium":
             self._extract_equilibrium(ids)
+        elif ids.metadata.name == "pf_active":
+            self._extract_pf_active(ids)
+
+    def _extract_pf_active(self, ids):
+        currents = np.array([c.current.data for c in ids.coil])
+        coil_names = np.array([c.name.value for c in ids.coil])
+        ncoils = len(ids.coil)
+        new_point = xr.Dataset(
+            {
+                "currents": (("time", "coil"), currents.reshape(1, ncoils)),
+            },
+            coords={"time": [ids.time[0]], "coil": coil_names},
+        )
+
+        current_data = self.data.get("pf_active")
+        if current_data is None:
+            self.data["pf_active"] = new_point
+        else:
+            self.data["pf_active"] = xr.concat(
+                [current_data, new_point], dim="time", join="outer"
+            )
 
     def _extract_equilibrium(self, ids):
         ts = ids.time_slice[0]
@@ -79,8 +108,26 @@ class State(BaseState):
             },
         )
 
+        # Extract profiles
+        profiles_data = xr.Dataset(
+            {
+                "f_df_dpsi": (("time", "profile"), [ts.profiles_1d.f_df_dpsi]),
+                "dpressure_dpsi": (
+                    ("time", "profile"),
+                    [ts.profiles_1d.dpressure_dpsi],
+                ),
+                "psi_profile": (("time", "profile"), [ts.profiles_1d.psi]),
+            },
+            coords={
+                "time": [ids.time[0]],
+                "profile": np.arange(len(ts.profiles_1d.f_df_dpsi)),
+            },
+        )
+
         # Combine all datasets
-        new_data = xr.merge([separatrix_data, grid_data, critical_points_data])
+        new_data = xr.merge(
+            [separatrix_data, grid_data, critical_points_data, profiles_data]
+        )
 
         current_data = self.data.get("equilibrium")
         if current_data is None:
@@ -116,6 +163,7 @@ class Plotter(BasePlotter):
     levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
 
     def get_dashboard(self):
+        # Create poloidal flux plot
         flux_map_elements = [
             hv.DynamicMap(self._plot_contours),
             hv.DynamicMap(self._plot_separatrix),
@@ -131,9 +179,24 @@ class Plotter(BasePlotter):
             hv.Overlay(flux_map_elements).collate().opts(self.DEFAULT_OPTS)
         )
 
-        return pn.Column(
-            contour_slider,
-            pn.pane.HoloViews(flux_map_overlay, width=self.WIDTH, height=self.HEIGHT),
+        coil_currents = hv.DynamicMap(self.plot_coil_currents)
+        f_df_dpsi = hv.DynamicMap(self.plot_f_df_dpsi_profile)
+        f_df_dpsi_2d = hv.DynamicMap(self.plot_f_df_dpsi_2d)
+        dpressure_dpsi = hv.DynamicMap(self.plot_dpressure_dpsi)
+        dpressure_dpsi_2d = hv.DynamicMap(self.plot_dpressure_dpsi_2d)
+
+        return pn.Row(
+            pn.Column(
+                contour_slider,
+                pn.pane.HoloViews(
+                    flux_map_overlay, width=self.WIDTH, height=self.HEIGHT
+                ),
+            ),
+            pn.Column(
+                pn.Row(f_df_dpsi, f_df_dpsi_2d),
+                pn.Row(dpressure_dpsi, dpressure_dpsi_2d),
+                coil_currents,
+            ),
         )
 
     def _plot_coil_rectangles(self):
@@ -345,3 +408,127 @@ class Plotter(BasePlotter):
             hover_tooltips=[("", "X-point")],
         )
         return o_scatter * x_scatter
+
+    @param.depends("time_index")
+    def plot_f_df_dpsi_profile(self):
+        xlabel = "Psi"
+        ylabel = "ff'"
+        state = self.active_state.data.get("equilibrium")
+
+        if state:
+            selected_data = state.isel(time=self.time_index)
+            psi = selected_data.psi_profile
+            f_df_dpsi = selected_data.f_df_dpsi
+            title = f"ff' profile at t={selected_data.time.item():.3f}"
+        else:
+            psi, f_df_dpsi, title = [], [], "Waiting for data..."
+
+        return hv.Curve((psi, f_df_dpsi), xlabel, ylabel).opts(
+            framewise=True, height=300, width=960, title=title
+        )
+
+    @param.depends("time_index")
+    def plot_dpressure_dpsi(self):
+        xlabel = "Psi"
+        ylabel = "p'"
+        state = self.active_state.data.get("equilibrium")
+
+        if state:
+            selected_data = state.isel(time=self.time_index)
+            psi = selected_data.psi_profile
+            dpressure_dpsi = selected_data.dpressure_dpsi
+            title = f"p' profile at t={selected_data.time.item():.3f}"
+        else:
+            psi, dpressure_dpsi, title = [], [], "Waiting for data..."
+
+        return hv.Curve((psi, dpressure_dpsi), xlabel, ylabel).opts(
+            framewise=True, height=300, width=960, title=title
+        )
+
+    @param.depends("time_index")
+    def plot_coil_currents(self):
+        state = self.active_state.data.get("pf_active")
+        xlabel = "Time [s]"
+        ylabel = "Coil currents [A]"
+
+        if state:
+            time = state.time[: self.time_index + 1]
+            current_time = state.time[self.time_index].item()
+            curves = []
+            for coil in state.coil.values:
+                current = state.currents.sel(coil=coil)[: self.time_index + 1].values
+                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
+                    framewise=True,
+                    title=f"coil currents over time, showing t={current_time:.3f}",
+                )
+                curves.append(curve)
+        else:
+            curves = [hv.Curve(([0], [0]), xlabel, ylabel)]
+
+        return hv.Overlay(curves).opts(height=450, width=1920)
+
+    @param.depends("time_index")
+    def plot_f_df_dpsi_2d(self):
+        state = self.active_state.data.get("equilibrium")
+        ylabel = "Time [s]"
+        xlabel = "psi"
+
+        if state:
+            times = state.time.values[: self.time_index + 1]
+            psi = state.psi_profile.values[self.time_index]
+            f_df_dpsi = state.f_df_dpsi.values[: self.time_index + 1, :]
+            current_time = state.time[self.time_index].item()
+            title = f"ff' over time, showing t={current_time:.3f}"
+        else:
+            times = np.array([0, 1])
+            psi = np.array([0, 1])
+            f_df_dpsi = np.full((2, 2), 0)
+            title = "Waiting for data..."
+
+        return hv.QuadMesh(
+            (psi, times, f_df_dpsi),
+            kdims=["profile_dim", "time_dim"],
+            vdims=["ffprime"],
+        ).opts(
+            cmap="viridis",
+            xlabel=xlabel,
+            ylabel=ylabel,
+            colorbar=True,
+            framewise=True,
+            height=300,
+            width=960,
+            title=title,
+        )
+
+    @param.depends("time_index")
+    def plot_dpressure_dpsi_2d(self):
+        state = self.active_state.data.get("equilibrium")
+        ylabel = "Time [s]"
+        xlabel = "psi"
+
+        if state:
+            times = state.time.values[: self.time_index + 1]
+            psi = state.psi_profile.values[self.time_index]
+            dpressure_dpsi = state.dpressure_dpsi.values[: self.time_index + 1, :]
+            current_time = state.time[self.time_index].item()
+            title = f"p' over time, showing t={current_time:.3f}"
+        else:
+            times = np.array([0, 1])
+            psi = np.array([0, 1])
+            dpressure_dpsi = np.full((2, 2), 0)
+            title = "Waiting for data..."
+
+        return hv.QuadMesh(
+            (psi, times, dpressure_dpsi),
+            kdims=["profile_dim", "time_dim"],
+            vdims=["ffprime"],
+        ).opts(
+            cmap="viridis",
+            xlabel=xlabel,
+            ylabel=ylabel,
+            colorbar=True,
+            framewise=True,
+            height=300,
+            width=960,
+            title=title,
+        )

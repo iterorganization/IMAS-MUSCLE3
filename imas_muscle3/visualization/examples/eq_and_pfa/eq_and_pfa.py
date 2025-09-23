@@ -186,11 +186,11 @@ class Plotter(BasePlotter):
         ylabel = "Coil currents [A]"
 
         if state:
-            time = state.time[: self.time_index]
+            time = state.time[: self.time_index + 1]
             current_time = state.time[self.time_index].item()
             curves = []
             for coil in state.coil.values:
-                current = state.currents.sel(coil=coil)[: self.time_index].values
+                current = state.currents.sel(coil=coil)[: self.time_index + 1].values
                 curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
                     framewise=True,
                     title=f"coil currents over time, showing t={current_time:.3f}",
