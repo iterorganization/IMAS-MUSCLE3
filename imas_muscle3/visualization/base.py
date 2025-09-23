@@ -92,7 +92,7 @@ class BasePlotter(Viewer):
             interval=10,
             options=[0],
             value=0,
-            visible=self.param._live_view.rx.pipe(bool),
+            visible=self.param._live_view.rx.not_(),
         )
         controls = pn.Row(
             self.live_view_checkbox,

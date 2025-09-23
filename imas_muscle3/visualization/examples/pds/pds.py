@@ -4,6 +4,9 @@ Example that plots the following:
   and X/O-points from an equilibrium IDS.
 - The inner wall / vacuum vessel from a wall machine description IDS.
 - The outline of the coils from a pf_active machine description IDS.
+- 1D profile and waterfall plot of ff' profile.
+- 1D profile and waterfall plot of p' profile.
+- Coil currents over time.
 """
 
 import logging
@@ -424,7 +427,7 @@ class Plotter(BasePlotter):
             psi, f_df_dpsi, title = [], [], "Waiting for data..."
 
         return hv.Curve((psi, f_df_dpsi), xlabel, ylabel).opts(
-            framewise=True, height=300, width=960, title=title
+            framewise=True, height=300, width=600, title=title
         )
 
     @param.depends("time_index")
@@ -442,7 +445,7 @@ class Plotter(BasePlotter):
             psi, dpressure_dpsi, title = [], [], "Waiting for data..."
 
         return hv.Curve((psi, dpressure_dpsi), xlabel, ylabel).opts(
-            framewise=True, height=300, width=960, title=title
+            framewise=True, height=300, width=600, title=title
         )
 
     @param.depends("time_index")
@@ -465,7 +468,7 @@ class Plotter(BasePlotter):
         else:
             curves = [hv.Curve(([0], [0]), xlabel, ylabel)]
 
-        return hv.Overlay(curves).opts(height=450, width=1920)
+        return hv.Overlay(curves).opts(height=450, width=1200)
 
     @param.depends("time_index")
     def plot_f_df_dpsi_2d(self):
@@ -496,7 +499,7 @@ class Plotter(BasePlotter):
             colorbar=True,
             framewise=True,
             height=300,
-            width=960,
+            width=600,
             title=title,
         )
 
@@ -529,6 +532,6 @@ class Plotter(BasePlotter):
             colorbar=True,
             framewise=True,
             height=300,
-            width=960,
+            width=600,
             title=title,
         )
