@@ -40,7 +40,7 @@ class BasePlotter(Viewer):
         doc="Flag for setting UI to live view mode",
     )
     time_index = param.Integer(
-        default=None,
+        default=0,
         label="Time Step",
         doc="Currently selected time index in the DiscretePlayer",
     )
@@ -77,6 +77,9 @@ class BasePlotter(Viewer):
         if self._live_view:
             self.active_state = self._state
             self.time_index = num_steps - 1
+            # Ensure it triggers on first time step
+            if self.time_index == 0:
+                self.param.trigger("time_index")
         else:
             self.active_state = self._frozen_state
 
@@ -85,7 +88,7 @@ class BasePlotter(Viewer):
         self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
             self.param.time_index,
-            margin=40,
+            margin=15,
             interval=10,
             options=[0],
             value=0,
