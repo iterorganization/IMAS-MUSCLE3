@@ -87,7 +87,7 @@ class BasePlotter(Viewer):
             .time[self.time_index]
             .item()
         )
-        self.time_label.object = f"# showing t = {t:.5e} s"
+        self.time_label.object = f"## showing t = {t:.5e} s"
 
     @param.depends("_state.data", watch=True)
     def _update_on_new_data(self):

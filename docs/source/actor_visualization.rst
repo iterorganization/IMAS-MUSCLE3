@@ -5,7 +5,7 @@ Visualization actor
 
 Actor for live, web-based visualization of IMAS data in a simulation using the 
 `Panel <https://panel.holoviz.org/>`_ library.
-It launches a local web server and opens a browser tab to display the visualization. 
+It launches a local web server to display the visualization.
 The plotting logic is user-defined in a specified Python script, allowing for customizable visualizations.
 
 To use the visualization actor, include it in the ymmsl file:
@@ -22,32 +22,44 @@ Available Settings
 
 * Mandatory
 
-  - ***plot_file_path***: (string) The absolute path to the Python script that defines the plotting logic. This script must contain a `State` class and a `Plotter` class, as described below.
+  - ***plot_file_path***: (string) The path to the Python script that defines the plotting logic. This script must contain a `State` class and a `Plotter` class, as described below.
 
 * Optional
 
   - ***port***: (int) The port on which the visualization server will run. Defaults to `5006`.
-  - ***throttle_interval***: (float) The minimum time in seconds between plot updates. This can be used to prevent the visualization from slowing down the simulation if data arrives very quickly. Defaults to `0.1`.
-  - ***keep_alive***: (bool) If `True`, the visualization server will remain active after the last MUSCLE message was received, allowing for inspection of the received data. If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
+  - ***throttle_interval***: (float) The minimum time in seconds between plot updates. 
+    This can be used to prevent the visualization from slowing down if data arrives very quickly. Defaults to `0.1`.
+  - ***keep_alive***: (bool) If `True`, the visualization server will remain active after 
+    the last MUSCLE message was received, allowing for inspection of the received data. 
+    If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
 
 Available Ports
 ---------------
 
-All IDS's are available for the visualization actor. They will be active if connected in the ymmsl file and will be skipped otherwise.
+All IDS's are available for the visualization actor. They will be active if connected 
+in the ymmsl file and will be skipped otherwise.
 
 * Optional
 
-  - ***<ids_name>_in (S)***: Any incoming IDS timeslices on the `S` port. Replace `<ids_name>` with the required IDS name (e.g., `equilibrium_in`).
-  - ***<ids_name>_md_in (F_INIT)***: Any incoming machine description IDSs on the `F_INIT` port. These are typically static data like the machine wall or coil geometry. Replace `<ids_name>` with the required IDS name (e.g., `wall_md_in`).
+  - ***<ids_name>_in (S)***: Any incoming IDS timeslices on the `S` port. 
+    Replace `<ids_name>` with the required IDS name (e.g., ``equilibrium_in``).
+  - ***<ids_name>_md_in (F_INIT)***: Any incoming machine description IDS's on the `F_INIT` port. 
+    These are typically static data like the machine wall or coil geometry. 
+    Replace `<ids_name>` with the required IDS name (e.g., ``wall_md_in``).
 
 User-defined Plotting Script
 ----------------------------
 
-The Python script specified by `plot_file_path` is the core of the visualization. It must define two classes that inherit from the provided base classes:
+The Python script specified by `plot_file_path` is the core of the visualization. 
+It must define two classes that inherit from the provided base classes:
 
-1.  **`State(BaseState)`**: This class is responsible for receiving IMAS data (`IDS` objects) and extracting the necessary information into an internal data structure, typically an `xarray.Dataset`. It must implement an `extract(self, ids)` method which will be called for each incoming IDS.
+1.  **State(BaseState)**: This class is responsible for extracting the necessary information 
+    from an IDS into an internal data structure, typically an `xarray.Dataset`. 
+    It must implement an ``extract(self, ids)`` method which will be called for each incoming IDS.
 
-2.  **`Plotter(BasePlotter)`**: This class uses the data managed by the `State` object to define and arrange the plots in a Panel dashboard. It must implement a `get_dashboard(self)` method that returns a Panel layout object (e.g., `pn.Row` or `pn.Column`).
+2.  **Plotter(BasePlotter)**: This class uses the data managed by the `State` object to 
+    define and arrange the plots in a Panel dashboard. It must implement a 
+    ``get_dashboard(self)`` method that returns a Panel object.
 
 Example
 --------
