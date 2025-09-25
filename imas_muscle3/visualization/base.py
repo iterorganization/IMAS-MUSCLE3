@@ -4,13 +4,16 @@ from panel.viewable import Viewer
 
 
 class BaseState(param.Parameterized):
-    """Abstract container for simulation state. Holds live simulation data as well as
-    data from a machine description.
+    """Abstract container for simulation state. Holds live simulation data
+    as well as data from a machine description.
     """
 
-    data = param.Dict(default={}, doc="Dictionary of IDS name → live IDS data objects.")
+    data = param.Dict(
+        default={}, doc="Dictionary of IDS name → live IDS data objects."
+    )
     md = param.Dict(
-        default={}, doc="Dictionary of IDS name → machine description data objects."
+        default={},
+        doc="Dictionary of IDS name → machine description data objects.",
     )
 
     def __init__(self, md_dict, **kwargs):
@@ -50,7 +53,9 @@ class BasePlotter(Viewer):
         self._frozen_state = None
         self.active_state = self._state
 
-        self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
+        self.live_view_checkbox = pn.widgets.Checkbox.from_param(
+            self.param._live_view
+        )
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
             self.param.time_index,
             margin=15,

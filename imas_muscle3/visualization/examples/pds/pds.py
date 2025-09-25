@@ -163,7 +163,9 @@ class Plotter(BasePlotter):
     )
     DESIRED_SHAPE_OPTS = hv.opts.Curve(color="blue")
 
-    levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
+    levels = param.Integer(
+        default=20, bounds=(1, 100), doc="Number of contour levels"
+    )
 
     def get_dashboard(self):
         # Create poloidal flux plot
@@ -230,15 +232,21 @@ class Plotter(BasePlotter):
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
-                                (annulus.r + annulus.radius_outer * np.cos(phi)),
-                                (annulus.z + annulus.radius_outer * np.sin(phi)),
+                                (
+                                    annulus.r
+                                    + annulus.radius_outer * np.cos(phi)
+                                ),
+                                (
+                                    annulus.z
+                                    + annulus.radius_outer * np.sin(phi)
+                                ),
                                 name,
                             )
                         )
                     else:
                         logger.warning(
-                            f"Coil {name} was skipped, as it does not have a filled "
-                            "'rect' or 'outline' node"
+                            f"Coil {name} was skipped, as it does not have a "
+                            "filled 'rect' or 'outline' node"
                         )
                         continue
         rects = hv.Rectangles(rectangles, vdims=["name"]).opts(
@@ -276,8 +284,8 @@ class Plotter(BasePlotter):
 
         Args:
             equilibrium_data: The equilibrium dataset to load psi grid from.
-            levels: Determines the number of contour lines. Either an integer for total
-                number of contour lines, or a list of specified levels.
+            levels: Sets the number of contour lines. Either an integer for
+                total number of contour lines, or a list of specified levels.
 
         Returns:
             Holoviews contours object
@@ -302,7 +310,9 @@ class Plotter(BasePlotter):
         for i, level in enumerate(tricontour.levels):
             for seg in tricontour.allsegs[i]:
                 if len(seg) > 1:
-                    segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
+                    segments.append(
+                        {"x": seg[:, 0], "y": seg[:, 1], "psi": level}
+                    )
         return segments
 
     @pn.depends("time_index")
@@ -458,8 +468,12 @@ class Plotter(BasePlotter):
             time = state.time[: self.time_index + 1]
             curves = []
             for coil in state.coil.values:
-                current = state.currents.sel(coil=coil)[: self.time_index + 1].values
-                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
+                current = state.currents.sel(coil=coil)[
+                    : self.time_index + 1
+                ].values
+                curve = hv.Curve(
+                    (time, current), xlabel, ylabel, label=str(coil)
+                ).opts(
                     framewise=True,
                     title="coil currents over time",
                 )
@@ -510,7 +524,9 @@ class Plotter(BasePlotter):
         if state:
             times = state.time.values[: self.time_index + 1]
             psi = state.psi_profile.values[self.time_index]
-            dpressure_dpsi = state.dpressure_dpsi.values[: self.time_index + 1, :]
+            dpressure_dpsi = state.dpressure_dpsi.values[
+                : self.time_index + 1, :
+            ]
             title = "p' over time"
         else:
             times = np.array([0, 1])

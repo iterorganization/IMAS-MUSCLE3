@@ -43,7 +43,9 @@ def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
-            Operator.S: [f"{ids_name}_in" for ids_name in IDSFactory().ids_names()],
+            Operator.S: [
+                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
+            ],
             Operator.F_INIT: [
                 f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()
             ],
@@ -57,10 +59,12 @@ def main() -> None:
         if first_run:
             plot_file_path = instance.get_setting("plot_file_path", "str")
             port = get_setting_optional(instance, "port", 5006)
-            # FIXME: there is an issue when the plotting takes much longer than it
-            # takes for data to arrive from the MUSCLE actor. As a remedy, set a
-            # plotting throttle interval.
-            throttle_interval = get_setting_optional(instance, "throttle_interval", 0.1)
+            # FIXME: there is an issue when the plotting takes much longer
+            # than it takes for data to arrive from the MUSCLE actor. As a
+            # remedy, set a plotting throttle interval.
+            throttle_interval = get_setting_optional(
+                instance, "throttle_interval", 0.1
+            )
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             open_browser = get_setting_optional(instance, "open_browser", True)
             md_dict = handle_machine_description(instance)
@@ -86,7 +90,9 @@ def main() -> None:
                     common_time = temp_ids.time
                 else:
                     if not (temp_ids.time == common_time).all():
-                        raise ValueError(f"Time mismatch detected in IDS {ids_name}")
+                        raise ValueError(
+                            f"Time mismatch detected in IDS {ids_name}"
+                        )
 
                 visualization_actor.state.extract(temp_ids)
                 if msg.next_timestamp is None:
