@@ -22,6 +22,11 @@ hv.extension("bokeh")
 
 
 def handle_machine_description(instance):
+    """Receive and deserialize all machine description IDSs.
+
+    Returns:
+        Mapping of IDS names to machine description IDSs.
+    """
     ports_in = get_port_list(instance, Operator.F_INIT)
     md_dict = {}
     for port_name in ports_in:

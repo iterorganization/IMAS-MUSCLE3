@@ -16,6 +16,11 @@ class VisualizationActor(param.Parameterized):
     state = param.Parameter()
 
     def __init__(self, plot_file_path, port, md_dict, open_browser_on_start):
+        """Initialize the visualization actor.
+
+        Loads a State and Plotter class from the given file path, sets up the
+        Panel layout, and starts the server.
+        """
         super().__init__()
         self.port = port
         self.server = None
@@ -49,9 +54,26 @@ class VisualizationActor(param.Parameterized):
         self.dynamic_panel = pn.Column(
             pn.Row(stop_button, self.message_pane), self.plotter
         )
-        self.start_server()
+        self._start_server()
 
-    def start_server(self):
+    def stop_server(self):
+        """Stop the Panel server if running."""
+        if self.server:
+            self.server.stop()
+            logger.info("Panel server stopped.")
+
+    def update_time(self, time):
+        """Update the display with the latest received simulation time."""
+        self.message_pane.object = f"### Received t = {time:.5e}"
+
+    def notify_done(self):
+        """Update the display to indicate all data has been received."""
+        self.message_pane.object = "### All data received."
+        self.plotter.live_view_checkbox.visible = False
+        self.plotter.time_slider_widget.visible = True
+
+    def _start_server(self):
+        """Start the Panel server for visualization."""
         self.server = pn.serve(
             self.dynamic_panel,
             port=self.port,
@@ -62,20 +84,8 @@ class VisualizationActor(param.Parameterized):
         if self.open_browser_on_start:
             self._open_browser()
 
-    def stop_server(self):
-        if self.server:
-            self.server.stop()
-            logger.info("Panel server stopped.")
-
-    def update_time(self, time):
-        self.message_pane.object = f"### Received t = {time:.5e}"
-
-    def notify_done(self):
-        self.message_pane.object = "### All data received."
-        self.plotter.live_view_checkbox.visible = False
-        self.plotter.time_slider_widget.visible = True
-
     def _open_browser(self):
+        """Open the dashboard in the system web browser."""
         url = f"http://localhost:{self.port}"
         try:
             webbrowser.open(url)
