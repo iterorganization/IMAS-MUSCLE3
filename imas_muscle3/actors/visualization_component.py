@@ -57,8 +57,11 @@ def main() -> None:
             # plotting throttle interval.
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0.1)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
+            open_browser = get_setting_optional(instance, "open_browser", True)
             md_dict = handle_machine_description(instance)
-            visualization_actor = VisualizationActor(plot_file_path, port, md_dict)
+            visualization_actor = VisualizationActor(
+                plot_file_path, port, md_dict, open_browser
+            )
             first_run = False
 
         is_running = True

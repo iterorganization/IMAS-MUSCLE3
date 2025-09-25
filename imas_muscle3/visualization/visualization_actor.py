@@ -15,10 +15,11 @@ class VisualizationActor(param.Parameterized):
 
     state = param.Parameter()
 
-    def __init__(self, plot_file_path, port, md_dict):
+    def __init__(self, plot_file_path, port, md_dict, open_browser_on_start):
         super().__init__()
         self.port = port
         self.server = None
+        self.open_browser_on_start = open_browser_on_start
 
         run_path = runpy.run_path(plot_file_path)
         StateClass = run_path.get("State")
@@ -58,7 +59,8 @@ class VisualizationActor(param.Parameterized):
             threaded=True,
             start=True,
         )
-        self._open_browser()
+        if self.open_browser_on_start:
+            self._open_browser()
 
     def stop_server(self):
         if self.server:
