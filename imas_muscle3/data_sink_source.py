@@ -72,13 +72,10 @@ from imas_muscle3.utils import get_port_list, get_setting_optional
 
 def muscled_sink() -> None:
     """Implementation of sink component"""
-    instance = Instance(
-        {
-            Operator.F_INIT: [
-                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
-            ],
-        }
-    )
+    # we can leave out port names on f_init since any connected port will
+    # automatically be put there, this minimizes logs getting clogged with
+    # prereceive messages
+    instance = Instance()
     first_run = True
     while instance.reuse_instance():
         if first_run:
