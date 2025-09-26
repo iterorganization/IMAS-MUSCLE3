@@ -33,7 +33,7 @@ Available Settings
     the last MUSCLE message was received, allowing for inspection of the received data. 
     If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
   - ***open_browser***: (bool) If `True`, automatically opens a new tab in your web 
-    browser to the visualization page upon starting. Defaults to True.
+    browser to the visualization page upon starting. Defaults to `True`.
 
 Available Ports
 ---------------
