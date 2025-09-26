@@ -34,3 +34,16 @@ def core_profiles():
         cp.profiles_1d[i].electrons.temperature_fit.local = temperature_fit_local
         cp.profiles_1d[i].electrons.density = numpy.ones(16)
     return cp
+
+
+@pytest.fixture
+def equilibrium():
+    eq = imas.IDSFactory("4.0.0").equilibrium()
+    # Fill some properties:
+    eq.ids_properties.homogeneous_time = 0  # INT_0D
+    eq.time = [0.0, 1.0, 2.0]
+    eq.time_slice.resize(len(eq.time))
+    for i, t in enumerate(eq.time):
+        eq.time_slice[i].time = t
+        eq.time_slice[i].global_quantities.ip = 1e6 + i * 1e5
+    return eq
