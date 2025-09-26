@@ -22,14 +22,14 @@ print("sys.path:", sys.path)
 
 # -- Project information -----------------------------------------------------
 # The documented project’s name
-project = src_project = PROJECT = "imas-muscle3"
+project = src_project = PROJECT = "IMAS-MUSCLE3"
 PACKAGE = "imas-muscle3"
 
 # A copyright statement in the style '2008, Author Name'.
 copyright = f"2025-{datetime.datetime.now().year}, ITER Organization"
 # The author name(s) of the document
 author = "ITER Organization"
-src_host = "github.com"
+src_host = "https://github.com/iterorganization/"
 
 # Configuration of sphinx.ext.extlinks
 # See https://www.sphinx-doc.org/en/master/usage/extensions/extlinks.html
