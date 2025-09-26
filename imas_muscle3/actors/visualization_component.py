@@ -4,6 +4,7 @@ MUSCLE3 actor for visualization
 
 import logging
 import time
+from typing import Dict
 
 import holoviews as hv
 import panel as pn
@@ -22,7 +23,7 @@ pn.extension()
 hv.extension("bokeh")
 
 
-def handle_machine_description(instance: Instance) -> dict[str, IDSTopLevel]:
+def handle_machine_description(instance: Instance) -> Dict[str, IDSTopLevel]:
     """Receive and deserialize all machine description IDSs.
 
     Returns:

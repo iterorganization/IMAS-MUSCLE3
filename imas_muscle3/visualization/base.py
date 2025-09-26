@@ -1,3 +1,5 @@
+from typing import Dict
+
 import panel as pn
 import param
 from imas.ids_toplevel import IDSTopLevel
@@ -17,7 +19,7 @@ class BaseState(param.Parameterized):
         doc="Dictionary of IDS name → machine description data objects.",
     )
 
-    def __init__(self, md_dict: dict[str, IDSTopLevel]) -> None:
+    def __init__(self, md_dict: Dict[str, IDSTopLevel]) -> None:
         super().__init__()
         self.md = md_dict
 

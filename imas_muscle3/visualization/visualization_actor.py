@@ -1,6 +1,7 @@
 import logging
 import runpy
 import webbrowser
+from typing import Dict
 
 import panel as pn
 import param
@@ -20,7 +21,7 @@ class VisualizationActor(param.Parameterized):
         self,
         plot_file_path: str,
         port: int,
-        md_dict: dict[str, IDSTopLevel],
+        md_dict: Dict[str, IDSTopLevel],
         open_browser_on_start: bool,
     ):
         """Initialize the visualization actor.
@@ -38,8 +39,8 @@ class VisualizationActor(param.Parameterized):
         PlotterClass = run_path.get("Plotter")
         if not StateClass or not PlotterClass:
             raise NameError(
-                f"{plot_file_path} must define a 'State' class "
-                "and a 'Plotter' class."
+                f"{plot_file_path} must define a 'State' class and "
+                "a 'Plotter' class."
             )
         if not issubclass(StateClass, BaseState):
             raise TypeError(
