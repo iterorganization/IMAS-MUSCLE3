@@ -1,6 +1,7 @@
 import panel as pn
 import param
-from panel.viewable import Viewer
+from imas.ids_toplevel import IDSTopLevel
+from panel.viewable import Viewable, Viewer
 
 
 class BaseState(param.Parameterized):
@@ -16,11 +17,11 @@ class BaseState(param.Parameterized):
         doc="Dictionary of IDS name → machine description data objects.",
     )
 
-    def __init__(self, md_dict, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, md_dict: dict[str, IDSTopLevel]) -> None:
+        super().__init__()
         self.md = md_dict
 
-    def extract(self, ids):
+    def extract(self, ids: IDSTopLevel) -> None:
         """Extract data from an IDS and store it into a state object. Must be
         implemented by subclasses.
 
@@ -48,8 +49,8 @@ class BasePlotter(Viewer):
         doc="Currently selected time index in the DiscretePlayer",
     )
 
-    def __init__(self, state, **params):
-        super().__init__(_state=state, **params)
+    def __init__(self, state: BaseState) -> None:
+        super().__init__(_state=state)
         self._frozen_state = None
         self.active_state = self._state
 
@@ -64,29 +65,29 @@ class BasePlotter(Viewer):
             value=0,
             visible=self.param._live_view.rx.not_(),
         )
-        self.time_label = pn.pane.Markdown("")
+        self.time_label = pn.pane.Markdown("")  # type: ignore[no-untyped-call]
         controls = pn.Row(
             self.live_view_checkbox, self.time_slider_widget, self.time_label
         )
         plots = self.get_dashboard()
         self._panel = pn.Column(controls, plots)
 
-    def get_dashboard(self):
+    def get_dashboard(self) -> Viewable:
         """Return Panel layout for the visualization."""
         raise NotImplementedError(
             "a plotter class needs to implement a `get_dashboard` method"
         )
 
-    @param.depends("_live_view", watch=True)
-    def _store_frozen_state(self):
+    @param.depends("_live_view", watch=True)  # type: ignore[misc]
+    def _store_frozen_state(self) -> None:
         """Store frozen state when live view is toggled."""
         if self._live_view:
             self._frozen_state = None
         else:
             self._frozen_state = self._state
 
-    @param.depends("time_index", watch=True)
-    def update_time_label(self):
+    @param.depends("time_index", watch=True)  # type: ignore[misc]
+    def update_time_label(self) -> None:
         t = (
             self.active_state.data[next(iter(self.active_state.data))]
             .time[self.time_index]
@@ -94,8 +95,8 @@ class BasePlotter(Viewer):
         )
         self.time_label.object = f"## showing t = {t:.5e} s"
 
-    @param.depends("_state.data", watch=True)
-    def _update_on_new_data(self):
+    @param.depends("_state.data", watch=True)  # type: ignore[misc]
+    def _update_on_new_data(self) -> None:
         """Update time slider and time index when new data arrives."""
         state_data = next(iter(self._state.data.values()), None)
         if not state_data:
@@ -114,5 +115,5 @@ class BasePlotter(Viewer):
         else:
             self.active_state = self._frozen_state
 
-    def __panel__(self):
+    def __panel__(self) -> Viewable:
         return self._panel

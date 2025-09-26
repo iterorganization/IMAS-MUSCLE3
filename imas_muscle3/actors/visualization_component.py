@@ -8,10 +8,11 @@ import time
 import holoviews as hv
 import panel as pn
 from imas import IDSFactory
+from imas.ids_toplevel import IDSTopLevel
 from libmuscle import Instance
 from ymmsl import Operator
 
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list, get_setting_default
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 logger = logging.getLogger()
@@ -21,7 +22,7 @@ pn.extension()
 hv.extension("bokeh")
 
 
-def handle_machine_description(instance):
+def handle_machine_description(instance: Instance) -> dict[str, IDSTopLevel]:
     """Receive and deserialize all machine description IDSs.
 
     Returns:
@@ -54,24 +55,25 @@ def main() -> None:
 
     visualization_actor = None
     first_run = True
-    last_trigger_time = 0
+    last_trigger_time = 0.0
     while instance.reuse_instance():
         if first_run:
             plot_file_path = instance.get_setting("plot_file_path", "str")
-            port = get_setting_optional(instance, "port", 5006)
+            port = get_setting_default(instance, "port", 5006)
             # FIXME: there is an issue when the plotting takes much longer
             # than it takes for data to arrive from the MUSCLE actor. As a
             # remedy, set a plotting throttle interval.
-            throttle_interval = get_setting_optional(
+            throttle_interval = get_setting_default(
                 instance, "throttle_interval", 0.1
             )
-            keep_alive = get_setting_optional(instance, "keep_alive", False)
-            open_browser = get_setting_optional(instance, "open_browser", True)
+            keep_alive = get_setting_default(instance, "keep_alive", False)
+            open_browser = get_setting_default(instance, "open_browser", True)
             md_dict = handle_machine_description(instance)
             visualization_actor = VisualizationActor(
                 plot_file_path, port, md_dict, open_browser
             )
             first_run = False
+        assert visualization_actor is not None
 
         is_running = True
         ports_in = get_port_list(instance, Operator.S)

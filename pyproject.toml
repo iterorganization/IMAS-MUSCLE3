@@ -113,6 +113,7 @@ disallow_untyped_decorators = true
 [[tool.mypy.overrides]]
 module = [
     "tests.*",
+    "imas_muscle3.visualization.examples.*"
 ]
 ignore_errors = true
 
@@ -125,6 +126,9 @@ module = [
     "libmuscle.*",
     "ymmsl.*",
     "imas_muscle3._version",
+    "panel.*",
+    "param.*",
+    "holoviews.*"
 ]
 ignore_missing_imports = true
 

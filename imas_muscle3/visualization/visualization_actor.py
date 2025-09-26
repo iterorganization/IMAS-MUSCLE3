@@ -4,6 +4,7 @@ import webbrowser
 
 import panel as pn
 import param
+from imas.ids_toplevel import IDSTopLevel
 
 from imas_muscle3.visualization.base import BasePlotter, BaseState
 
@@ -15,7 +16,13 @@ class VisualizationActor(param.Parameterized):
 
     state = param.Parameter()
 
-    def __init__(self, plot_file_path, port, md_dict, open_browser_on_start):
+    def __init__(
+        self,
+        plot_file_path: str,
+        port: int,
+        md_dict: dict[str, IDSTopLevel],
+        open_browser_on_start: bool,
+    ):
         """Initialize the visualization actor.
 
         Loads a State and Plotter class from the given file path, sets up the
@@ -31,8 +38,8 @@ class VisualizationActor(param.Parameterized):
         PlotterClass = run_path.get("Plotter")
         if not StateClass or not PlotterClass:
             raise NameError(
-                f"{plot_file_path} must define a 'State' class and a "
-                "'Plotter' class."
+                f"{plot_file_path} must define a 'State' class "
+                "and a 'Plotter' class."
             )
         if not issubclass(StateClass, BaseState):
             raise TypeError(
@@ -44,14 +51,14 @@ class VisualizationActor(param.Parameterized):
             )
 
         self.state = StateClass(md_dict)
-        self.plotter = PlotterClass(state=self.state)
+        self.plotter = PlotterClass(self.state)
 
-        stop_button = pn.widgets.Button(
+        stop_button = pn.widgets.Button(  # type: ignore[no-untyped-call]
             name="Stop Server",
             button_type="danger",
             on_click=lambda event: self.stop_server(),
         )
-        self.message_pane = pn.pane.Markdown(
+        self.message_pane = pn.pane.Markdown(  # type: ignore[no-untyped-call]
             "### Waiting for data", sizing_mode="stretch_width"
         )
         self.dynamic_panel = pn.Column(
@@ -59,25 +66,25 @@ class VisualizationActor(param.Parameterized):
         )
         self._start_server()
 
-    def stop_server(self):
+    def stop_server(self) -> None:
         """Stop the Panel server if running."""
         if self.server:
             self.server.stop()
             logger.info("Panel server stopped.")
 
-    def update_time(self, time):
+    def update_time(self, time: float) -> None:
         """Update the display with the latest received simulation time."""
         self.message_pane.object = f"### Received t = {time:.5e}"
 
-    def notify_done(self):
+    def notify_done(self) -> None:
         """Update the display to indicate all data has been received."""
         self.message_pane.object = "### All data received."
         self.plotter.live_view_checkbox.visible = False
         self.plotter.time_slider_widget.visible = True
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start the Panel server for visualization."""
-        self.server = pn.serve(
+        self.server = pn.serve(  # type: ignore[no-untyped-call]
             self.dynamic_panel,
             port=self.port,
             show=False,
@@ -87,7 +94,7 @@ class VisualizationActor(param.Parameterized):
         if self.open_browser_on_start:
             self._open_browser()
 
-    def _open_browser(self):
+    def _open_browser(self) -> None:
         """Open the dashboard in the system web browser."""
         url = f"http://localhost:{self.port}"
         try:

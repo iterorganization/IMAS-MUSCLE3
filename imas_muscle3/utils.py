@@ -1,7 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, TypeVar, cast
 
 from libmuscle import Instance
 from ymmsl import Operator, SettingValue
+
+TSetting = TypeVar("TSetting", bound=SettingValue)
 
 
 # it may be a nice proposal for the m3 api
@@ -17,6 +19,18 @@ def get_setting_optional(
     except KeyError:
         setting = default
     return setting
+
+
+def get_setting_default(
+    instance: "Instance",
+    setting_name: str,
+    default: TSetting,
+) -> TSetting:
+    """Helper function to get settings from instance"""
+    try:
+        return cast(TSetting, instance.get_setting(setting_name))
+    except KeyError:
+        return default
 
 
 def get_port_list(instance: Instance, operator: Operator) -> List[str]:
