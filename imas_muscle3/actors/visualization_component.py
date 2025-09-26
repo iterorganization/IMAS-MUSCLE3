@@ -9,7 +9,7 @@ from typing import Dict
 import holoviews as hv
 import panel as pn
 from imas import IDSFactory
-from imas.ids_toplevel import IDSTopLevel
+from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance
 from ymmsl import Operator
 
@@ -23,7 +23,7 @@ pn.extension()
 hv.extension("bokeh")
 
 
-def handle_machine_description(instance: Instance) -> Dict[str, IDSTopLevel]:
+def handle_machine_description(instance: Instance) -> Dict[str, IDSToplevel]:
     """Receive and deserialize all machine description IDSs.
 
     Returns:

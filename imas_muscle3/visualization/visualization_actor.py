@@ -5,7 +5,7 @@ from typing import Dict
 
 import panel as pn
 import param
-from imas.ids_toplevel import IDSTopLevel
+from imas.ids_toplevel import IDSToplevel
 
 from imas_muscle3.visualization.base import BasePlotter, BaseState
 
@@ -21,7 +21,7 @@ class VisualizationActor(param.Parameterized):
         self,
         plot_file_path: str,
         port: int,
-        md_dict: Dict[str, IDSTopLevel],
+        md_dict: Dict[str, IDSToplevel],
         open_browser_on_start: bool,
     ):
         """Initialize the visualization actor.

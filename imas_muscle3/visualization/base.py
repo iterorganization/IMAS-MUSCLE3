@@ -2,7 +2,7 @@ from typing import Dict
 
 import panel as pn
 import param
-from imas.ids_toplevel import IDSTopLevel
+from imas.ids_toplevel import IDSToplevel
 from panel.viewable import Viewable, Viewer
 
 
@@ -19,11 +19,11 @@ class BaseState(param.Parameterized):
         doc="Dictionary of IDS name → machine description data objects.",
     )
 
-    def __init__(self, md_dict: Dict[str, IDSTopLevel]) -> None:
+    def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
         super().__init__()
         self.md = md_dict
 
-    def extract(self, ids: IDSTopLevel) -> None:
+    def extract(self, ids: IDSToplevel) -> None:
         """Extract data from an IDS and store it into a state object. Must be
         implemented by subclasses.
 
