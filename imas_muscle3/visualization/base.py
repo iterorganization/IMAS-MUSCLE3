@@ -1,9 +1,8 @@
 import functools
 import logging
-from typing import Dict
+from typing import Dict, List
 
 import holoviews as hv
-import numpy as np
 import panel as pn
 import param
 from imas.ids_data_type import IDSDataType
@@ -18,7 +17,7 @@ class BaseState(param.Parameterized):
     """Abstract container for simulation state."""
 
     data = param.Dict(
-        default={}, doc="Dictionary to store time series of discovered variables."
+        default={}, doc="Dictionary to store time series of visualized variables."
     )
     md = param.Dict(
         default={},
@@ -26,6 +25,10 @@ class BaseState(param.Parameterized):
     )
     discovered_variables = param.Dict(
         default={}, doc="Mapping of string paths to IMAS path tuples."
+    )
+    # --- NEW: Tracks variables actively being visualized ---
+    visualized_variables = param.List(
+        default=[], doc="List of variable paths selected for visualization."
     )
 
     def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
@@ -39,13 +42,13 @@ class BaseState(param.Parameterized):
         for node in tree_iter(ids, leaf_only=True):
             metadata = node.metadata
             if metadata.data_type == IDSDataType.FLT and metadata.ndim == 0:
-                path_tuple = node._path
+                path = node._path
                 path_str = str(node._path)
-                paths[path_str] = path_tuple
+                paths[path_str] = path
         return paths
 
     def extract(self, ids: IDSToplevel) -> None:
-        """Discover 0D float variables on first run and extract data."""
+        """Discover 0D float variables and extract data only for visualized variables."""
         ids_name = ids.metadata.name
         current_time = ids.time[0]
 
@@ -54,19 +57,22 @@ class BaseState(param.Parameterized):
             relative_paths_dict = self._find_float0d_paths(ids)
 
             full_paths_dict = {
-                f"{ids_name}.{path_str}": path_tuple
-                for path_str, path_tuple in relative_paths_dict.items()
+                f"{ids_name}.{path_str}": path
+                for path_str, path in relative_paths_dict.items()
             }
 
             self.discovered_variables.update(full_paths_dict)
-            print(self.discovered_variables)
             self.param.trigger("discovered_variables")
             logger.info(f"Discovered {len(full_paths_dict)} variables.")
             if full_paths_dict:
                 self._discovery_done = True
 
-        for path_str, path_tuple in self.discovered_variables.items():
-            value_obj = ids[path_tuple]
+        if not self.visualized_variables:
+            return
+
+        for path_str in self.visualized_variables:
+            path = self.discovered_variables.get(path_str)
+            value_obj = ids[path]
 
             if path_str not in self.data:
                 self.data[path_str] = {"time": [], "value": []}
@@ -113,7 +119,7 @@ class BasePlotter(Viewer):
         self.time_label = pn.pane.Markdown("", align="center")
         self.variable_selector = pn.widgets.Select(
             name="Variable to Plot",
-            options=list(self._state.discovered_variables.keys()),
+            options=sorted(list(self._state.discovered_variables.keys())),
             width=400,
         )
         self.add_plot_button = pn.widgets.Button(name="Add Plot", button_type="primary")
@@ -142,12 +148,34 @@ class BasePlotter(Viewer):
     @param.depends("_state.discovered_variables", watch=True)
     def _update_variable_selector(self) -> None:
         """Update selector with the string keys from the discovery dictionary."""
-        self.variable_selector.options = list(self._state.discovered_variables)
+        self.variable_selector.options = sorted(list(self._state.discovered_variables))
+
+    def _remove_plot_callback(
+        self, card_to_remove: pn.Card, variable_path: str, event
+    ) -> None:
+        """Callback to remove a plot and stop tracking its data."""
+        self.plot_area.remove(card_to_remove)
+
+        # Stop collecting new data
+        if variable_path in self._state.visualized_variables:
+            new_list = self._state.visualized_variables
+            new_list.remove(variable_path)
+            self._state.visualized_variables = new_list
+
+        # Remove historical data
+        self._state.data.pop(variable_path, None)
+        self._state.param.trigger("data")  # Notify watchers data changed
 
     def _add_plot_callback(self, event) -> None:
+        """Adds a new plot and tells the state to start collecting data for it."""
         selected_var = self.variable_selector.value
-        if not selected_var or selected_var in [p.name for p in self.plot_area]:
+        if not selected_var or selected_var in self._state.visualized_variables:
             return
+
+        # --- MODIFIED: Tell state to start tracking this variable ---
+        self._state.visualized_variables = self._state.visualized_variables + [
+            selected_var
+        ]
 
         plot_func = functools.partial(
             self.plot_variable_vs_time, variable_path=selected_var
@@ -155,17 +183,37 @@ class BasePlotter(Viewer):
         dynamic_plot = hv.DynamicMap(
             param.bind(plot_func, time_index=self.param.time_index)
         )
-        self.plot_area.append(dynamic_plot)
+
+        remove_button = pn.widgets.Button(name="Remove", button_type="danger", width=80)
+
+        plot_card = pn.Card(
+            dynamic_plot,
+            header=selected_var,
+            collapsible=True,
+            sizing_mode="stretch_width",
+        )
+        remove_button.on_click(
+            functools.partial(self._remove_plot_callback, plot_card, selected_var)
+        )
+
+        plot_card.header = pn.Row(
+            pn.pane.Markdown(f"**{selected_var}**"),
+            remove_button,
+            align="center",
+            sizing_mode="stretch_width",
+        )
+
+        self.plot_area.append(plot_card)
 
     def plot_variable_vs_time(self, time_index: int, variable_path: str):
         xlabel = "Time [s]"
         ylabel = variable_path
         state_data = self.active_state.data.get(variable_path)
 
-        if state_data:
+        if state_data and state_data["time"]:
             time = state_data["time"][: time_index + 1]
             value = state_data["value"][: time_index + 1]
-            title = f"{variable_path} over time"
+            title = f"{variable_path} (t = {time[-1]:.3f}s)"
         else:
             time, value, title = [], [], "Waiting for data..."
 
@@ -195,23 +243,37 @@ class BasePlotter(Viewer):
     @param.depends("time_index", watch=True)
     def update_time_label(self) -> None:
         if not self.active_state.data:
+            self.time_label.object = "### t = N/A"
             return
 
-        first_var_path = next(iter(self.active_state.data))
-        time_data = self.active_state.data[first_var_path]["time"]
+        # Try to get time data from any of the visualized variables
+        time_data = []
+        for var in self._state.visualized_variables:
+            if var in self.active_state.data and self.active_state.data[var]["time"]:
+                time_data = self.active_state.data[var]["time"]
+                break
 
-        if self.time_index < len(time_data):
+        if time_data and self.time_index < len(time_data):
             t = time_data[self.time_index]
             self.time_label.object = f"### t = {t:.5e} s"
+        else:
+            self.time_label.object = "### t = N/A"
 
     @param.depends("_state.data", watch=True)
     def _update_on_new_data(self) -> None:
-        print(self._state.data)
         if not self._state.data:
             return
 
-        first_var_path = next(iter(self._state.data))
-        num_steps = len(self._state.data[first_var_path]["time"])
+        # Find the max number of steps among all visualized variables
+        num_steps = 0
+        if self._state.data:
+            num_steps = max(
+                (len(d["time"]) for d in self._state.data.values() if d["time"]),
+                default=0,
+            )
+
+        if num_steps == 0:
+            return
 
         self.time_slider_widget.options = list(range(num_steps))
 
