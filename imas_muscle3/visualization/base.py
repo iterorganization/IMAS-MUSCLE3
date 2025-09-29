@@ -26,7 +26,6 @@ class BaseState(param.Parameterized):
     discovered_variables = param.Dict(
         default={}, doc="Mapping of string paths to IMAS path tuples."
     )
-    # --- NEW: Tracks variables actively being visualized ---
     visualized_variables = param.List(
         default=[], doc="List of variable paths selected for visualization."
     )
@@ -36,31 +35,24 @@ class BaseState(param.Parameterized):
         self.md = md_dict
         self._discovery_done = False
 
-    def _find_float0d_paths(self, ids: IDSToplevel) -> dict:
-        """Find all 0D floats and return a dict mapping string paths to path tuples."""
-        paths = {}
-        for node in tree_iter(ids, leaf_only=True):
-            metadata = node.metadata
-            if metadata.data_type == IDSDataType.FLT and metadata.ndim == 0:
-                path = node._path
-                path_str = str(node._path)
-                paths[path_str] = path
-        return paths
-
     def extract(self, ids: IDSToplevel) -> None:
-        """Discover 0D float variables and extract data only for visualized variables."""
         ids_name = ids.metadata.name
         current_time = ids.time[0]
 
         if not self._discovery_done:
-            logger.info("First IDS received, discovering 0D float variables...")
-            relative_paths_dict = self._find_float0d_paths(ids)
+            logger.info("First IDS received, discovering float variables...")
+            relative_paths_dict = {}
+            for node in tree_iter(ids, leaf_only=True):
+                metadata = node.metadata
+                if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1):
+                    path = node._path
+                    path_str = str(path)
+                    relative_paths_dict[path_str] = path
 
             full_paths_dict = {
                 f"{ids_name}.{path_str}": path
                 for path_str, path in relative_paths_dict.items()
             }
-
             self.discovered_variables.update(full_paths_dict)
             self.param.trigger("discovered_variables")
             logger.info(f"Discovered {len(full_paths_dict)} variables.")
@@ -75,10 +67,18 @@ class BaseState(param.Parameterized):
             value_obj = ids[path]
 
             if path_str not in self.data:
-                self.data[path_str] = {"time": [], "value": []}
+                self.data[path_str] = {"time": [], "value": [], "coords": None}
 
-            self.data[path_str]["time"].append(current_time)
-            self.data[path_str]["value"].append(value_obj.value)
+            if value_obj.metadata.ndim == 0:
+                self.data[path_str]["time"].append(current_time)
+                self.data[path_str]["value"].append(value_obj.value)
+
+            elif value_obj.metadata.ndim == 1:
+                # Store profile values and coordinates
+                self.data[path_str]["time"].append(current_time)
+                self.data[path_str]["value"].append(value_obj[:])  # ndarray
+                if self.data[path_str]["coords"] is None:
+                    self.data[path_str]["coords"] = value_obj.coordinates[0][:]
 
         self.param.trigger("data")
 
@@ -182,7 +182,7 @@ class BasePlotter(Viewer):
         )
         dynamic_plot = hv.DynamicMap(
             param.bind(plot_func, time_index=self.param.time_index)
-        )
+        ).opts(framewise=True, axiswise=True)
 
         remove_button = pn.widgets.Button(name="Remove", button_type="danger", width=80)
 
@@ -206,25 +206,40 @@ class BasePlotter(Viewer):
         self.plot_area.append(plot_card)
 
     def plot_variable_vs_time(self, time_index: int, variable_path: str):
-        xlabel = "Time [s]"
-        ylabel = variable_path
         state_data = self.active_state.data.get(variable_path)
 
-        if state_data and state_data["time"]:
-            time = state_data["time"][: time_index + 1]
-            value = state_data["value"][: time_index + 1]
-            title = f"{variable_path} (t = {time[-1]:.3f}s)"
-        else:
-            time, value, title = [], [], "Waiting for data..."
+        if not state_data or not state_data["time"]:
+            return hv.Curve(([], []), kdims=["x"], vdims=["value"]).opts(
+                title="Waiting for data...", height=300, width=960
+            )
 
-        return hv.Curve((time, value), kdims=["time"], vdims=["value"]).opts(
-            framewise=True,
-            height=300,
-            width=960,
-            title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
-        )
+        times = state_data["time"]
+        values = state_data["value"]
+
+        if isinstance(values[0], (float, int)):  # 0D case
+            time = times[: time_index + 1]
+            value = values[: time_index + 1]
+            title = f"{variable_path} (t = {time[-1]:.3f}s)"
+            return hv.Curve((time, value), kdims=["time"], vdims=["value"]).opts(
+                height=300,
+                width=960,
+                title=title,
+                xlabel="Time [s]",
+                ylabel=variable_path,
+            )
+
+        else:  # 1D case
+            coords = state_data["coords"]
+            profile = values[time_index]
+            t = times[time_index]
+            title = f"{variable_path} profile (t = {t:.3f}s)"
+            return hv.Curve((coords, profile), kdims=["coord"], vdims=["value"]).opts(
+                height=300,
+                width=960,
+                title=title,
+                xlabel="Coordinate",
+                ylabel=variable_path,
+            )
 
     @param.depends("_live_view", watch=True)
     def _store_frozen_state(self) -> None:
