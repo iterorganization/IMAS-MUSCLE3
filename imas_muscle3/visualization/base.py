@@ -47,7 +47,7 @@ class BaseState(param.Parameterized):
             relative_paths_dict = []
             for node in tree_iter(ids, leaf_only=True):
                 metadata = node.metadata
-                if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1):
+                if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1, 2):
                     relative_paths_dict.append(str(node._path))
             self.discovered_variables[ids_name] = relative_paths_dict
             self._discovery_done.add(ids_name)
@@ -80,7 +80,7 @@ class BaseState(param.Parameterized):
                     self.data[path_str] = new_ds
 
             # 1D variable
-            else:
+            elif value_obj.metadata.ndim == 1:
                 arr = np.array(value_obj[:], dtype=float)[np.newaxis, :]
                 coords_obj = value_obj.coordinates[0]
                 if getattr(coords_obj, "is_time_coordinate", False):
@@ -114,6 +114,40 @@ class BaseState(param.Parameterized):
                                 "coord": existing_ds["coord"].values,
                             },
                         )
+                if path_str in self.data:
+                    self.data[path_str] = xr.concat(
+                        [self.data[path_str], new_ds], dim="time"
+                    )
+                else:
+                    self.data[path_str] = new_ds
+
+            # 2d variable
+            elif value_obj.metadata.ndim == 2:
+                arr = np.array(value_obj[:], dtype=float)[np.newaxis, :, :]
+                coords_obj0 = value_obj.coordinates[0]
+                coords_obj1 = value_obj.coordinates[1]
+
+                if path_str not in self.data:
+                    coords0 = np.array(coords_obj0, dtype=float)
+                    coords1 = np.array(coords_obj1, dtype=float)
+                    new_ds = xr.Dataset(
+                        {path_str: (("time", "dim0", "dim1"), arr)},
+                        coords={
+                            "time": [current_time],
+                            "dim0": coords0,
+                            "dim1": coords1,
+                        },
+                    )
+                else:
+                    existing_ds = self.data[path_str]
+                    new_ds = xr.Dataset(
+                        {path_str: (("time", "dim0", "dim1"), arr)},
+                        coords={
+                            "time": [current_time],
+                            "dim0": existing_ds["dim0"].values,
+                            "dim1": existing_ds["dim1"].values,
+                        },
+                    )
                 if path_str in self.data:
                     self.data[path_str] = xr.concat(
                         [self.data[path_str], new_ds], dim="time"
@@ -269,6 +303,7 @@ class BasePlotter(Viewer):
     def plot_variable_vs_time(self, variable_path: str, time_index: int):
         ds = self.active_state.data.get(variable_path)
         if ds is None or len(ds.time) == 0:
+            # FIXME: DynamicMap must only contain one type of object, not both QuadMesh and Curve.
             return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
                 title="Waiting for data...", height=300, width=960
             )
@@ -277,7 +312,7 @@ class BasePlotter(Viewer):
         time = ds.time[: idx + 1].values
 
         data_var = ds[variable_path]
-        # Determine if variable is effectively 0D over time (single coord or time-coordinate)
+        # 0D over time
         if len(data_var.dims) == 1 or (
             len(data_var.dims) == 2 and data_var.shape[1] == 1
         ):
@@ -291,7 +326,8 @@ class BasePlotter(Viewer):
                 xlabel="Time [s]",
                 ylabel=variable_path,
             )
-        else:
+        # 1d profile over time
+        elif len(data_var.dims) == 2:
             coords = ds["coord"].values
             profile = data_var[idx].values
             title = f"{variable_path} profile (t = {float(ds.time[idx]):.3f}s)"
@@ -301,6 +337,26 @@ class BasePlotter(Viewer):
                 title=title,
                 xlabel="Coordinate",
                 ylabel=variable_path,
+            )
+        # 2D profile over time
+        elif len(data_var.dims) == 3:
+            dim0 = ds["dim0"].values
+            dim1 = ds["dim1"].values
+            vals = data_var[idx].values.T
+            title = f"{variable_path} 2d profile (t = {float(ds.time[idx]):.3f}s)"
+            return hv.QuadMesh(
+                (dim0, dim1, vals),
+                kdims=["dim0", "dim1"],
+                vdims=[variable_path],
+            ).opts(
+                cmap="viridis",
+                xlabel="dim0",
+                ylabel="dim1",
+                colorbar=True,
+                framewise=True,
+                height=300,
+                width=600,
+                title=title,
             )
 
     def __panel__(self) -> Viewable:
