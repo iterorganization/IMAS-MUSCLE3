@@ -41,7 +41,6 @@ class BaseState(param.Parameterized):
         ids_name = ids.metadata.name
         current_time = ids.time[0]
 
-        # Discover variables per IDS
         if ids_name not in self._discovery_done:
             logger.info(f"Discovering float variables in IDS '{ids_name}'...")
             relative_paths_dict = []
@@ -56,7 +55,6 @@ class BaseState(param.Parameterized):
                 f"Discovered {len(relative_paths_dict)} variables in IDS '{ids_name}'."
             )
 
-        # No variables selected for visualization
         if (
             ids_name not in self.visualized_variables
             or not self.visualized_variables[ids_name]
@@ -66,7 +64,6 @@ class BaseState(param.Parameterized):
         for path_str in self.visualized_variables[ids_name]:
             value_obj = ids[path_str]
 
-            # 0D variable
             if value_obj.metadata.ndim == 0:
                 new_ds = xr.Dataset(
                     {path_str: ("time", [value_obj.value])},
@@ -79,12 +76,10 @@ class BaseState(param.Parameterized):
                 else:
                     self.data[path_str] = new_ds
 
-            # 1D variable
             elif value_obj.metadata.ndim == 1:
                 arr = np.array(value_obj[:], dtype=float)[np.newaxis, :]
                 coords_obj = value_obj.coordinates[0]
                 if getattr(coords_obj, "is_time_coordinate", False):
-                    # treat like 0D
                     new_ds = xr.Dataset(
                         {path_str: ("time", [arr[0, 0]])},
                         coords={"time": [current_time]},
@@ -121,7 +116,6 @@ class BaseState(param.Parameterized):
                 else:
                     self.data[path_str] = new_ds
 
-            # 2d variable
             elif value_obj.metadata.ndim == 2:
                 arr = np.array(value_obj[:], dtype=float)[np.newaxis, :, :]
                 coords_obj0 = value_obj.coordinates[0]
@@ -161,7 +155,7 @@ class BaseState(param.Parameterized):
 class BasePlotter(Viewer):
     _state = param.ClassSelector(class_=BaseState)
     _live_view = param.Boolean(default=True)
-    time_index = param.Integer(default=0)
+    time = param.Number(default=0.0)
 
     def __init__(self, state: BaseState) -> None:
         super().__init__(_state=state)
@@ -172,11 +166,11 @@ class BasePlotter(Viewer):
             self.param._live_view, align="center"
         )
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
-            self.param.time_index,
+            self.param.time,
             margin=15,
             interval=100,
-            options=[0],
-            value=0,
+            options=[0.0],
+            value=0.0,
             visible=self.param._live_view.rx.not_(),
         )
         self.time_label = pn.pane.Markdown("", align="center")
@@ -243,9 +237,9 @@ class BasePlotter(Viewer):
         plot_func = functools.partial(
             self.plot_variable_vs_time, variable_path=path_str
         )
-        dynamic_plot = hv.DynamicMap(
-            param.bind(plot_func, time_index=self.param.time_index)
-        ).opts(framewise=True, axiswise=True)
+        dynamic_plot = hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
+            framewise=True, axiswise=True
+        )
 
         remove_button = pn.widgets.Button(name="Remove", button_type="danger", width=80)
         plot_card = pn.Card(
@@ -267,7 +261,7 @@ class BasePlotter(Viewer):
 
         self.plot_area.append(plot_card)
 
-    @param.depends("time_index", watch=True)
+    @param.depends("time", watch=True)
     def update_time_label(self) -> None:
         if not self.active_state.data:
             self.time_label.object = "### t = N/A"
@@ -276,13 +270,12 @@ class BasePlotter(Viewer):
         for vars_list in self._state.visualized_variables.values():
             for path_str in vars_list:
                 if path_str in self.active_state.data:
-                    time_data = self.active_state.data[path_str].time
+                    time_data = self.active_state.data[path_str].time.values
                     break
             if time_data is not None:
                 break
-        if time_data is not None and self.time_index < len(time_data):
-            t = float(time_data[self.time_index])
-            self.time_label.object = f"### t = {t:.5e} s"
+        if time_data is not None and self.time in time_data:
+            self.time_label.object = f"### t = {self.time:.5e} s"
         else:
             self.time_label.object = "### t = N/A"
 
@@ -290,17 +283,17 @@ class BasePlotter(Viewer):
     def _update_on_new_data(self) -> None:
         if not self._state.data:
             return
-        num_steps = max(
-            len(d.time) for d in self._state.data.values() if len(d.time) > 0
+        all_times = sorted(
+            set(np.concatenate([d.time.values for d in self._state.data.values()]))
         )
-        if num_steps == 0:
+        if not all_times:
             return
-        self.time_slider_widget.options = list(range(num_steps))
+        self.time_slider_widget.options = list(all_times)
         if self._live_view:
             self.active_state = self._state
-            self.time_index = num_steps - 1
+            self.time = all_times[-1]
 
-    def plot_variable_vs_time(self, variable_path: str, time_index: int):
+    def plot_variable_vs_time(self, variable_path: str, time: float):
         ds = self.active_state.data.get(variable_path)
         if ds is None or len(ds.time) == 0:
             # FIXME: DynamicMap must only contain one type of object, not both QuadMesh and Curve.
@@ -308,16 +301,20 @@ class BasePlotter(Viewer):
                 title="Waiting for data...", height=300, width=960
             )
 
-        idx = min(time_index, len(ds.time) - 1)
-        time = ds.time[: idx + 1].values
+        time_array = ds.time.values
+        if time not in time_array:
+            return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
+                title="No data for selected time", height=300, width=960
+            )
+
+        idx = np.where(time_array == time)[0][0]
 
         data_var = ds[variable_path]
-        # 0D over time
         if len(data_var.dims) == 1 or (
             len(data_var.dims) == 2 and data_var.shape[1] == 1
         ):
-            # flatten values
             value = data_var[: idx + 1].values.flatten()
+            time = time_array[: idx + 1]
             title = f"{variable_path} (t = {time[-1]:.3f}s)"
             return hv.Curve((time, value), kdims=["time"], vdims=["value"]).opts(
                 height=300,
@@ -326,7 +323,6 @@ class BasePlotter(Viewer):
                 xlabel="Time [s]",
                 ylabel=variable_path,
             )
-        # 1d profile over time
         elif len(data_var.dims) == 2:
             coords = ds["coord"].values
             profile = data_var[idx].values
@@ -338,7 +334,6 @@ class BasePlotter(Viewer):
                 xlabel="Coordinate",
                 ylabel=variable_path,
             )
-        # 2D profile over time
         elif len(data_var.dims) == 3:
             dim0 = ds["dim0"].values
             dim1 = ds["dim1"].values
