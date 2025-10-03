@@ -94,6 +94,7 @@ class State(BaseState):
             return
 
         for name in self.visualized_variables[ids_name]:
+            # FIXME: use unqiue names instead of "coords"/"dim0"/etc
             if self.variable_dimensions[name] == Dim.ZERO_D:
                 self._extract_0d(ids, name)
             elif self.variable_dimensions[name] == Dim.ONE_D:
@@ -199,10 +200,7 @@ class Plotter(BasePlotter):
         self.ui = pn.Column()
         super().__init__(state)
         self.plot_area = pn.Column(sizing_mode="stretch_width")
-        self.variable_selector = pn.widgets.Select(
-            name="Variable to Plot",
-            width=400,
-        )
+        self.variable_selector = pn.widgets.Select(width=400)
         self.add_plot_button = pn.widgets.Button(name="Add Plot", button_type="primary")
         self.add_plot_button.on_click(self._add_plot_callback)
 
@@ -212,7 +210,23 @@ class Plotter(BasePlotter):
             sizing_mode="stretch_width",
             align="center",
         )
-        self.ui.extend([self.plotting_controls, self.plot_area])
+
+        self.filter_input = pn.widgets.TextInput(
+            placeholder="Filter...",
+            width=400,
+        )
+        self.filter_input.param.watch(self._update_filter_view, "value_input")
+        self.ui.extend([self.filter_input, self.plotting_controls, self.plot_area])
+
+    def _update_filter_view(self, event):
+        filter_text = self.filter_input.value_input.lower()
+        options = []
+        for ids_name, vars_list in self._state.discovered_variables.items():
+            for var in vars_list:
+                full_name = f"{ids_name}/{var}"
+                if not filter_text or filter_text in full_name.lower():
+                    options.append(full_name)
+        self.variable_selector.options = sorted(options)
 
     def get_dashboard(self):
         return self.ui
