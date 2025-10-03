@@ -12,6 +12,8 @@ from imas.ids_toplevel import IDSToplevel
 from imas.util import tree_iter
 from panel.viewable import Viewable, Viewer
 
+from imas_muscle3.visualization.resizable_float_panel import ResizableFloatPanel
+
 logger = logging.getLogger()
 
 
@@ -237,29 +239,31 @@ class BasePlotter(Viewer):
         plot_func = functools.partial(
             self.plot_variable_vs_time, variable_path=path_str
         )
-        dynamic_plot = hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
-            framewise=True, axiswise=True
+        dynamic_plot = pn.pane.HoloViews(
+            hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
+                framewise=True, axiswise=True
+            ),
+            sizing_mode="stretch_both",
         )
+        float_panel = ResizableFloatPanel(dynamic_plot, name=path_str, contained=False)
 
-        remove_button = pn.widgets.Button(name="Remove", button_type="danger", width=80)
-        plot_card = pn.Card(
-            dynamic_plot,
-            header=full_path,
-            collapsible=True,
-            sizing_mode="stretch_width",
-        )
-        remove_button.on_click(
-            functools.partial(self._remove_plot_callback, plot_card, full_path)
-        )
+        def on_status_change(event):
+            if event.new == "closed":
+                self._floatpanel_closed_callback(full_path)
 
-        plot_card.header = pn.Row(
-            pn.pane.Markdown(f"**{full_path}**"),
-            remove_button,
-            align="center",
-            sizing_mode="stretch_width",
-        )
+        float_panel.param.watch(on_status_change, "status")
 
-        self.plot_area.append(plot_card)
+        self.plot_area.append(float_panel)
+
+    def _floatpanel_closed_callback(self, variable_path: str, event=None) -> None:
+        ids_name, path_str = variable_path.split(".", 1)
+        if ids_name in self._state.visualized_variables:
+            new_list = self._state.visualized_variables[ids_name]
+            if path_str in new_list:
+                new_list.remove(path_str)
+                self._state.visualized_variables[ids_name] = new_list
+        self._state.data.pop(path_str, None)
+        self._state.param.trigger("data")
 
     @param.depends("time", watch=True)
     def update_time_label(self) -> None:
@@ -298,13 +302,15 @@ class BasePlotter(Viewer):
         if ds is None or len(ds.time) == 0:
             # FIXME: DynamicMap must only contain one type of object, not both QuadMesh and Curve.
             return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title="Waiting for data...", height=300, width=960
+                title="Waiting for data...",
+                responsive=True,
             )
 
         time_array = ds.time.values
         if time not in time_array:
             return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title="No data for selected time", height=300, width=960
+                title="No data for selected time",
+                responsive=True,
             )
 
         idx = np.where(time_array == time)[0][0]
@@ -317,22 +323,20 @@ class BasePlotter(Viewer):
             time = time_array[: idx + 1]
             title = f"{variable_path} (t = {time[-1]:.3f}s)"
             return hv.Curve((time, value), kdims=["time"], vdims=["value"]).opts(
-                height=300,
-                width=960,
                 title=title,
                 xlabel="Time [s]",
                 ylabel=variable_path,
+                responsive=True,
             )
         elif len(data_var.dims) == 2:
             coords = ds["coord"].values
             profile = data_var[idx].values
             title = f"{variable_path} profile (t = {float(ds.time[idx]):.3f}s)"
             return hv.Curve((coords, profile), kdims=["coord"], vdims=["value"]).opts(
-                height=300,
-                width=960,
                 title=title,
                 xlabel="Coordinate",
                 ylabel=variable_path,
+                responsive=True,
             )
         elif len(data_var.dims) == 3:
             dim0 = ds["dim0"].values
@@ -349,9 +353,8 @@ class BasePlotter(Viewer):
                 ylabel="dim1",
                 colorbar=True,
                 framewise=True,
-                height=300,
-                width=600,
                 title=title,
+                responsive=True,
             )
 
     def __panel__(self) -> Viewable:
