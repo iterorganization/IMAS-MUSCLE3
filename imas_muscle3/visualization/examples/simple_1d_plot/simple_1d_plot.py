@@ -39,15 +39,16 @@ class Plotter(BasePlotter):
         ip_vs_time = hv.DynamicMap(self.plot_ip_vs_time)
         return ip_vs_time
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_ip_vs_time(self):
         xlabel = "Time [s]"
         ylabel = "Ip [A]"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            time = state.time[: self.time_index + 1]
-            ip = state.ip[: self.time_index + 1]
+            mask = state.time <= self.time
+            time = state.time[mask]
+            ip = state.ip[mask]
             title = "Ip over time"
         else:
             time, ip, title = [], [], "Waiting for data..."

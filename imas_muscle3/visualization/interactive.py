@@ -138,6 +138,7 @@ class State(BaseState):
                 )
             else:
                 existing_ds = self.data[name]
+                # FIXME: issue with 2d quadmesh
                 if not np.allclose(
                     existing_ds["coord"].values,
                     coords_obj,
@@ -194,22 +195,10 @@ class State(BaseState):
 
 
 class Plotter(BasePlotter):
-    time = param.Number(default=0.0)
-
     def __init__(self, state: BaseState) -> None:
         self.ui = pn.Column()
         super().__init__(state)
         self.plot_area = pn.Column(sizing_mode="stretch_width")
-
-        # Overwrite time slider
-        self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
-            self.param.time,
-            margin=15,
-            interval=100,
-            options=[0.0],
-            value=0.0,
-            visible=self.param._live_view.rx.not_(),
-        )
         self.variable_selector = pn.widgets.Select(
             name="Variable to Plot",
             width=400,
@@ -258,7 +247,7 @@ class Plotter(BasePlotter):
             return
         self._state.visualized_variables[ids_name].append(name)
 
-        plot_func = functools.partial(self.plot_variable_vs_time, name=name)
+        plot_func = functools.partial(self._plot_variable_vs_time, name=name)
         dynamic_plot = pn.pane.HoloViews(
             hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
                 framewise=True, axiswise=True
@@ -285,38 +274,6 @@ class Plotter(BasePlotter):
         self._state.data.pop(name, None)
         self._state.param.trigger("data")
 
-    @param.depends("time", watch=True)
-    def update_time_label(self) -> None:
-        if not self.active_state.data:
-            self.time_label.object = "### t = N/A"
-            return
-        time_data = None
-        for vars_list in self._state.visualized_variables.values():
-            for name in vars_list:
-                if name in self.active_state.data:
-                    time_data = self.active_state.data[name].time.values
-                    break
-            if time_data is not None:
-                break
-        if time_data is not None and self.time in time_data:
-            self.time_label.object = f"### t = {self.time:.5e} s"
-        else:
-            self.time_label.object = "### t = N/A"
-
-    @param.depends("_state.data", watch=True)
-    def _update_on_new_data(self) -> None:
-        if not self._state.data:
-            return
-        all_times = sorted(
-            set(np.concatenate([d.time.values for d in self._state.data.values()]))
-        )
-        if not all_times:
-            return
-        self.time_slider_widget.options = list(all_times)
-        if self._live_view:
-            self.active_state = self._state
-            self.time = all_times[-1]
-
     def plot_empty(self, name, var_dim):
         if var_dim == Dim.TWO_D:
             empty_vals = np.zeros((1, 1))
@@ -324,10 +281,10 @@ class Plotter(BasePlotter):
                 (np.array([0]), np.array([0]), empty_vals),
                 kdims=["dim0", "dim1"],
                 vdims=[name],
-            ).opts(title="No data for selected time", responsive=True)
+            ).opts(title=f"No data for t = {self.time}", responsive=True)
         else:
             return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title="No data for selected time", responsive=True
+                title=f"No data for t = {self.time}", responsive=True
             )
 
     def plot_1d(self, data_var, name, time_array, time_index):
@@ -365,7 +322,7 @@ class Plotter(BasePlotter):
             responsive=True,
         )
 
-    def plot_variable_vs_time(self, name: str, time: float):
+    def _plot_variable_vs_time(self, name: str, time: float):
         ds = self.active_state.data.get(name)
         var_dim = self.active_state.variable_dimensions.get(name, Dim.ZERO_D)
 

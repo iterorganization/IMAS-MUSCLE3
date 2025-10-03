@@ -1,5 +1,6 @@
 from typing import Dict
 
+import numpy as np
 import panel as pn
 import param
 from imas.ids_toplevel import IDSToplevel
@@ -43,10 +44,10 @@ class BasePlotter(Viewer):
         label="Live View",
         doc="Flag for setting UI to live view mode",
     )
-    time_index = param.Integer(
-        default=0,
+    time = param.Number(
+        default=0.0,
         label="Time Step",
-        doc="Currently selected time index in the DiscretePlayer",
+        doc="Currently selected time step in the DiscretePlayer",
     )
 
     def __init__(self, state: BaseState) -> None:
@@ -56,11 +57,11 @@ class BasePlotter(Viewer):
 
         self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
-            self.param.time_index,
+            self.param.time,
             margin=15,
-            interval=10,
-            options=[0],
-            value=0,
+            interval=100,
+            options=[0.0],
+            value=0.0,
             visible=self.param._live_view.rx.not_(),
         )
         self.time_label = pn.pane.Markdown("")  # type: ignore[no-untyped-call]
@@ -84,34 +85,23 @@ class BasePlotter(Viewer):
         else:
             self._frozen_state = self._state
 
-    @param.depends("time_index", watch=True)  # type: ignore[misc]
+    @param.depends("time", watch=True)  # type: ignore[misc]
     def update_time_label(self) -> None:
-        t = (
-            self.active_state.data[next(iter(self.active_state.data))]
-            .time[self.time_index]
-            .item()
-        )
-        self.time_label.object = f"## showing t = {t:.5e} s"
+        self.time_label.object = f"## showing t = {self.time:.5e} s"
 
-    @param.depends("_state.data", watch=True)  # type: ignore[misc]
+    @param.depends("_state.data", watch=True)
     def _update_on_new_data(self) -> None:
-        """Update time slider and time index when new data arrives."""
-        state_data = next(iter(self._state.data.values()), None)
-        if not state_data:
+        if not self._state.data:
             return
-        if not hasattr(state_data, "time"):
-            raise KeyError("The state must contain a time coordinate")
-        num_steps = len(state_data.time)
-
-        self.time_slider_widget.options = list(range(num_steps))
+        all_times = sorted(
+            set(np.concatenate([d.time.values for d in self._state.data.values()]))
+        )
+        if not all_times:
+            return
+        self.time_slider_widget.options = list(all_times)
         if self._live_view:
             self.active_state = self._state
-            self.time_index = num_steps - 1
-            # Ensure it triggers on first time step
-            if self.time_index == 0:
-                self.param.trigger("time_index")
-        else:
-            self.active_state = self._frozen_state
+            self.time = all_times[-1]
 
     def __panel__(self) -> Viewable:
         return self._panel
