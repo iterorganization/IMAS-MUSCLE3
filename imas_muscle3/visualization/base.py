@@ -1,5 +1,6 @@
 import functools
 import logging
+from enum import Enum
 from typing import Dict, List
 
 import holoviews as hv
@@ -15,6 +16,14 @@ from panel.viewable import Viewable, Viewer
 from imas_muscle3.visualization.resizable_float_panel import ResizableFloatPanel
 
 logger = logging.getLogger()
+
+
+class VariableDimension(Enum):
+    """Enum for variable dimensionality."""
+
+    ZERO_D = "0D"
+    ONE_D = "1D"
+    TWO_D = "2D"
 
 
 class BaseState(param.Parameterized):
@@ -33,29 +42,48 @@ class BaseState(param.Parameterized):
         default={},
         doc="Mapping of IDS name → list of variable paths selected for visualization.",
     )
+    variable_dimensions = param.Dict(
+        default={},
+        doc="Mapping of variable_path → VariableDimension enum ('0D', '1D', or '2D')",
+    )
 
     def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
         super().__init__()
         self.md = md_dict
         self._discovery_done = set()
 
+    def _discover_variables(self, ids):
+        ids_name = ids.metadata.name
+        logger.info(f"Discovering float variables in IDS '{ids_name}'...")
+        relative_paths_dict = []
+        for node in tree_iter(ids, leaf_only=True):
+            metadata = node.metadata
+            if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1, 2):
+                path_str = str(node._path)
+                relative_paths_dict.append(path_str)
+
+                # Determine variable dimension during discovery
+                if metadata.ndim == 0:
+                    self.variable_dimensions[path_str] = VariableDimension.ZERO_D
+                elif metadata.ndim == 1:
+                    self.variable_dimensions[path_str] = VariableDimension.ONE_D
+                else:  # metadata.ndim == 2
+                    self.variable_dimensions[path_str] = VariableDimension.TWO_D
+
+        self.discovered_variables[ids_name] = relative_paths_dict
+        self._discovery_done.add(ids_name)
+        self.param.trigger("discovered_variables")
+        self.param.trigger("variable_dimensions")
+        logger.info(
+            f"Discovered {len(relative_paths_dict)} variables in IDS '{ids_name}'."
+        )
+
     def extract(self, ids: IDSToplevel) -> None:
         ids_name = ids.metadata.name
         current_time = ids.time[0]
 
         if ids_name not in self._discovery_done:
-            logger.info(f"Discovering float variables in IDS '{ids_name}'...")
-            relative_paths_dict = []
-            for node in tree_iter(ids, leaf_only=True):
-                metadata = node.metadata
-                if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1, 2):
-                    relative_paths_dict.append(str(node._path))
-            self.discovered_variables[ids_name] = relative_paths_dict
-            self._discovery_done.add(ids_name)
-            self.param.trigger("discovered_variables")
-            logger.info(
-                f"Discovered {len(relative_paths_dict)} variables in IDS '{ids_name}'."
-            )
+            self._discover_variables(ids)
 
         if (
             ids_name not in self.visualized_variables
@@ -207,7 +235,7 @@ class BasePlotter(Viewer):
     def _get_all_discovered_vars(self) -> List[str]:
         options = []
         for ids_name, vars_list in self._state.discovered_variables.items():
-            options.extend(f"{ids_name}.{v}" for v in vars_list)
+            options.extend(f"{ids_name}/{v}" for v in vars_list)
         return sorted(options)
 
     @param.depends("_state.discovered_variables", watch=True)
@@ -216,36 +244,35 @@ class BasePlotter(Viewer):
 
     def _remove_plot_callback(self, card_to_remove: pn.Card, variable_path: str, event):
         self.plot_area.remove(card_to_remove)
-        ids_name, path_str = variable_path.split(".", 1)
+        ids_name, name = variable_path.split("/", 1)
         if ids_name in self._state.visualized_variables:
             new_list = self._state.visualized_variables[ids_name]
-            if path_str in new_list:
-                new_list.remove(path_str)
+            if name in new_list:
+                new_list.remove(name)
                 self._state.visualized_variables[ids_name] = new_list
-        self._state.data.pop(path_str, None)
+        self._state.data.pop(name, None)
         self._state.param.trigger("data")
 
     def _add_plot_callback(self, event) -> None:
         full_path = self.variable_selector.value
         if not full_path:
             return
-        ids_name, path_str = full_path.split(".", 1)
+        ids_name, name = full_path.split("/", 1)
+
         if ids_name not in self._state.visualized_variables:
             self._state.visualized_variables[ids_name] = []
-        if path_str in self._state.visualized_variables[ids_name]:
+        if name in self._state.visualized_variables[ids_name]:
             return
-        self._state.visualized_variables[ids_name].append(path_str)
+        self._state.visualized_variables[ids_name].append(name)
 
-        plot_func = functools.partial(
-            self.plot_variable_vs_time, variable_path=path_str
-        )
+        plot_func = functools.partial(self.plot_variable_vs_time, variable_path=name)
         dynamic_plot = pn.pane.HoloViews(
             hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
                 framewise=True, axiswise=True
             ),
             sizing_mode="stretch_both",
         )
-        float_panel = ResizableFloatPanel(dynamic_plot, name=path_str, contained=False)
+        float_panel = ResizableFloatPanel(dynamic_plot, name=name, contained=False)
 
         def on_status_change(event):
             if event.new == "closed":
@@ -256,13 +283,13 @@ class BasePlotter(Viewer):
         self.plot_area.append(float_panel)
 
     def _floatpanel_closed_callback(self, variable_path: str, event=None) -> None:
-        ids_name, path_str = variable_path.split(".", 1)
+        ids_name, name = variable_path.split("/", 1)
         if ids_name in self._state.visualized_variables:
             new_list = self._state.visualized_variables[ids_name]
-            if path_str in new_list:
-                new_list.remove(path_str)
+            if name in new_list:
+                new_list.remove(name)
                 self._state.visualized_variables[ids_name] = new_list
-        self._state.data.pop(path_str, None)
+        self._state.data.pop(name, None)
         self._state.param.trigger("data")
 
     @param.depends("time", watch=True)
@@ -299,61 +326,74 @@ class BasePlotter(Viewer):
 
     def plot_variable_vs_time(self, variable_path: str, time: float):
         ds = self.active_state.data.get(variable_path)
+        var_dim = self.active_state.variable_dimensions.get(
+            variable_path, VariableDimension.ZERO_D
+        )
+
         if ds is None or len(ds.time) == 0:
-            # FIXME: DynamicMap must only contain one type of object, not both QuadMesh and Curve.
-            return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title="Waiting for data...",
-                responsive=True,
-            )
+            if var_dim == VariableDimension.TWO_D:
+                empty_vals = np.zeros((1, 1))
+                return hv.QuadMesh(
+                    (np.array([0]), np.array([0]), empty_vals),
+                    kdims=["dim0", "dim1"],
+                    vdims=[variable_path],
+                ).opts(title="Waiting for data...", responsive=True)
+            else:
+                return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
+                    title="Waiting for data...", responsive=True
+                )
 
         time_array = ds.time.values
         if time not in time_array:
-            return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title="No data for selected time",
-                responsive=True,
-            )
+            if var_dim == VariableDimension.TWO_D:
+                empty_vals = np.zeros((1, 1))
+                return hv.QuadMesh(
+                    (np.array([0]), np.array([0]), empty_vals),
+                    kdims=["dim0", "dim1"],
+                    vdims=[variable_path],
+                ).opts(title="No data for selected time", responsive=True)
+            else:
+                return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
+                    title="No data for selected time", responsive=True
+                )
 
         idx = np.where(time_array == time)[0][0]
-
         data_var = ds[variable_path]
-        if len(data_var.dims) == 1 or (
-            len(data_var.dims) == 2 and data_var.shape[1] == 1
-        ):
-            value = data_var[: idx + 1].values.flatten()
-            time = time_array[: idx + 1]
-            title = f"{variable_path} (t = {time[-1]:.3f}s)"
-            return hv.Curve((time, value), kdims=["time"], vdims=["value"]).opts(
-                title=title,
-                xlabel="Time [s]",
-                ylabel=variable_path,
-                responsive=True,
+
+        if var_dim == VariableDimension.ZERO_D or var_dim == VariableDimension.ONE_D:
+            if len(data_var.dims) == 1 or (
+                len(data_var.dims) == 2 and data_var.shape[1] == 1
+            ):
+                value = data_var[: idx + 1].values.flatten()
+                times = time_array[: idx + 1]
+            else:  # 2D profile flattened to 1D
+                value = data_var[idx].values.flatten()
+                times = np.arange(value.shape[0])
+            title = f"{variable_path} (t={time_array[idx]:.3f}s)"
+            return hv.Curve((times, value), kdims=["time"], vdims=["value"]).opts(
+                title=title, xlabel="Time [s]", ylabel=variable_path, responsive=True
             )
-        elif len(data_var.dims) == 2:
-            coords = ds["coord"].values
-            profile = data_var[idx].values
-            title = f"{variable_path} profile (t = {float(ds.time[idx]):.3f}s)"
-            return hv.Curve((coords, profile), kdims=["coord"], vdims=["value"]).opts(
-                title=title,
-                xlabel="Coordinate",
-                ylabel=variable_path,
-                responsive=True,
-            )
-        elif len(data_var.dims) == 3:
-            dim0 = ds["dim0"].values
-            dim1 = ds["dim1"].values
-            vals = data_var[idx].values.T
-            title = f"{variable_path} 2d profile (t = {float(ds.time[idx]):.3f}s)"
+
+        else:  # TWO_D
+            if len(data_var.dims) == 1:
+                vals = data_var[: idx + 1].values[np.newaxis, :]
+                x = np.arange(vals.shape[1])
+                y = np.zeros(1)
+            elif len(data_var.dims) == 2:
+                vals = data_var[idx].values
+                x = ds["dim0"].values
+                y = ds["dim1"].values
+            elif len(data_var.dims) == 3:
+                vals = data_var[idx].values.T
+                x = ds["dim0"].values
+                y = ds["dim1"].values
             return hv.QuadMesh(
-                (dim0, dim1, vals),
-                kdims=["dim0", "dim1"],
-                vdims=[variable_path],
+                (x, y, vals), kdims=["dim0", "dim1"], vdims=[variable_path]
             ).opts(
                 cmap="viridis",
-                xlabel="dim0",
-                ylabel="dim1",
                 colorbar=True,
                 framewise=True,
-                title=title,
+                title=f"{variable_path} 2D (t={time_array[idx]:.3f}s)",
                 responsive=True,
             )
 
