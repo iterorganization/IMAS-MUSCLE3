@@ -10,6 +10,7 @@ import panel as pn
 import param
 import xarray as xr
 from imas.ids_data_type import IDSDataType
+from imas.ids_primitive import IDSNumericArray
 from imas.ids_toplevel import IDSToplevel
 from imas.util import tree_iter
 from panel.viewable import Viewable
@@ -42,75 +43,88 @@ class State(BaseState):
         default={},
         doc="Mapping of variable_path → VariableDimension enum ('0D', '1D', or '2D')",
     )
+    variable_coord_names = param.Dict(
+        default={},
+        doc="Mapping of variable_path → coordinates",
+    )
 
     def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
         super().__init__(md_dict)
         self._discovery_done = set()
 
+    def _get_coord_name(self, path: str, i: int, coord_obj) -> str:
+        if isinstance(coord_obj, IDSNumericArray):
+            return coord_obj.metadata.name
+        return f"{path}_coord{i}"
+
     def _discover_variables(self, ids):
         ids_name = ids.metadata.name
         logger.info(f"Discovering float variables in IDS '{ids_name}'...")
-        relative_paths_dict = []
+        relative_paths = []
         for node in tree_iter(ids, leaf_only=True):
             metadata = node.metadata
-            if metadata.data_type == IDSDataType.FLT and metadata.ndim in (0, 1, 2):
-                path = str(imas.util.get_full_path(node))
-                if path == "time":
-                    continue
-                relative_paths_dict.append(path)
-
-                if metadata.ndim == 0:
+            if metadata.data_type != IDSDataType.FLT:
+                continue
+            if metadata.ndim not in (0, 1, 2):
+                continue
+            path = str(imas.util.get_full_path(node))
+            if path == "time":
+                continue
+            relative_paths.append(path)
+            if metadata.ndim == 0:
+                self.variable_dimensions[path] = Dim.ZERO_D
+                self.variable_coord_names[path] = []
+            elif metadata.ndim == 1:
+                if (
+                    hasattr(node.coordinates[0], "metadata")
+                    and node.coordinates[0].metadata.name == "time"
+                ):
                     self.variable_dimensions[path] = Dim.ZERO_D
-                elif metadata.ndim == 1:
-                    # If the coordinate is time, treat it as a 0D variable
-                    if (
-                        hasattr(node.coordinates[0], "metadata")
-                        and node.coordinates[0].metadata.name == "time"
-                    ):
-                        self.variable_dimensions[path] = Dim.ZERO_D
-                    else:
-                        self.variable_dimensions[path] = Dim.ONE_D
+                    self.variable_coord_names[path] = []
                 else:
-                    self.variable_dimensions[path] = Dim.TWO_D
-
-        self.discovered_variables[ids_name] = relative_paths_dict
+                    self.variable_dimensions[path] = Dim.ONE_D
+                    self.variable_coord_names[path] = [
+                        self._get_coord_name(path, 0, node.coordinates[0])
+                    ]
+            else:
+                self.variable_dimensions[path] = Dim.TWO_D
+                self.variable_coord_names[path] = [
+                    self._get_coord_name(path, 0, node.coordinates[0]),
+                    self._get_coord_name(path, 1, node.coordinates[1]),
+                ]
+        self.discovered_variables[ids_name] = relative_paths
         self._discovery_done.add(ids_name)
         self.param.trigger("discovered_variables")
         self.param.trigger("variable_dimensions")
-        logger.info(
-            f"Discovered {len(relative_paths_dict)} variables in IDS '{ids_name}'."
-        )
+        self.param.trigger("variable_coord_names")
+        logger.info(f"Discovered {len(relative_paths)} variables in IDS '{ids_name}'.")
 
     def extract(self, ids: IDSToplevel) -> None:
         ids_name = ids.metadata.name
-
         if ids_name not in self._discovery_done:
             self._discover_variables(ids)
-
         if (
             ids_name not in self.visualized_variables
             or not self.visualized_variables[ids_name]
         ):
             return
-
         for name in self.visualized_variables[ids_name]:
-            # FIXME: use unqiue names instead of "coords"/"dim0"/etc
-            if self.variable_dimensions[name] == Dim.ZERO_D:
+            dim = self.variable_dimensions[name]
+            if dim == Dim.ZERO_D:
                 self._extract_0d(ids, name)
-            elif self.variable_dimensions[name] == Dim.ONE_D:
+            elif dim == Dim.ONE_D:
                 self._extract_1d(ids, name)
-            elif self.variable_dimensions[name] == Dim.TWO_D:
+            elif dim == Dim.TWO_D:
                 self._extract_2d(ids, name)
-
         self.param.trigger("data")
 
     def _extract_0d(self, ids, name):
-        current_time = ids.time[0]
+        current_time = float(ids.time[0])
         value_obj = ids[name]
         if value_obj.metadata.ndim == 0:
-            value = value_obj.value
+            value = float(value_obj.value)
         else:
-            value = value_obj[0]
+            value = float(value_obj[0])
         new_ds = xr.Dataset(
             {name: ("time", [value])},
             coords={"time": [current_time]},
@@ -121,74 +135,43 @@ class State(BaseState):
             self.data[name] = new_ds
 
     def _extract_1d(self, ids, name):
-        current_time = ids.time[0]
+        current_time = float(ids.time[0])
         value_obj = ids[name]
-        arr = np.array(value_obj[:], dtype=float)[np.newaxis, :]
+        arr = np.array(value_obj[:], dtype=float)
         coords_obj = value_obj.coordinates[0]
-        if getattr(coords_obj, "is_time_coordinate", False):
-            new_ds = xr.Dataset(
-                {name: ("time", [arr[0, 0]])},
-                coords={"time": [current_time]},
-            )
-        else:
-            if name not in self.data:
-                coords = np.array(coords_obj, dtype=float)
-                new_ds = xr.Dataset(
-                    {name: (("time", "coord"), arr)},
-                    coords={"time": [current_time], "coord": coords},
-                )
-            else:
-                existing_ds = self.data[name]
-                # FIXME: issue with 2d quadmesh
-                if not np.allclose(
-                    existing_ds["coord"].values,
-                    coords_obj,
-                    rtol=1e-6,
-                    atol=1e-8,
-                ):
-                    logger.warning(
-                        f"Coordinates for variable {name} differ slightly; using existing coordinates."
-                    )
-                new_ds = xr.Dataset(
-                    {name: (("time", "coord"), arr)},
-                    coords={
-                        "time": [current_time],
-                        "coord": existing_ds["coord"].values,
-                    },
-                )
+        coord_name = self.variable_coord_names[name][0]
+        coords = np.array(coords_obj, dtype=float)
+
+        new_ds = xr.Dataset(
+            {
+                name: (("time", "i"), arr[np.newaxis, :]),
+                f"{name}_{coord_name}": (("time", "i"), coords[np.newaxis, :]),
+            },
+            coords={"time": [current_time]},
+        )
         if name in self.data:
             self.data[name] = xr.concat([self.data[name], new_ds], dim="time")
         else:
             self.data[name] = new_ds
 
     def _extract_2d(self, ids, name):
-        current_time = ids.time[0]
+        current_time = float(ids.time[0])
         value_obj = ids[name]
-        arr = np.array(value_obj[:], dtype=float)[np.newaxis, :, :]
+        arr = np.array(value_obj[:], dtype=float)
         coords_obj0 = value_obj.coordinates[0]
         coords_obj1 = value_obj.coordinates[1]
+        coord_names = self.variable_coord_names[name]
+        coords0 = np.array(coords_obj0, dtype=float)
+        coords1 = np.array(coords_obj1, dtype=float)
 
-        if name not in self.data:
-            coords0 = np.array(coords_obj0, dtype=float)
-            coords1 = np.array(coords_obj1, dtype=float)
-            new_ds = xr.Dataset(
-                {name: (("time", "dim0", "dim1"), arr)},
-                coords={
-                    "time": [current_time],
-                    "dim0": coords0,
-                    "dim1": coords1,
-                },
-            )
-        else:
-            existing_ds = self.data[name]
-            new_ds = xr.Dataset(
-                {name: (("time", "dim0", "dim1"), arr)},
-                coords={
-                    "time": [current_time],
-                    "dim0": existing_ds["dim0"].values,
-                    "dim1": existing_ds["dim1"].values,
-                },
-            )
+        new_ds = xr.Dataset(
+            {
+                name: (("time", "y", "x"), arr[np.newaxis, :, :]),
+                f"{name}_{coord_names[0]}": (("time", "y"), coords0[np.newaxis, :]),
+                f"{name}_{coord_names[1]}": (("time", "x"), coords1[np.newaxis, :]),
+            },
+            coords={"time": [current_time]},
+        )
         if name in self.data:
             self.data[name] = xr.concat([self.data[name], new_ds], dim="time")
         else:
@@ -293,65 +276,71 @@ class Plotter(BasePlotter):
             empty_vals = np.zeros((1, 1))
             return hv.QuadMesh(
                 (np.array([0]), np.array([0]), empty_vals),
-                kdims=["dim0", "dim1"],
+                kdims=["x", "y"],
                 vdims=[name],
             ).opts(title=f"No data for t = {self.time}", responsive=True)
-        else:
-            return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-                title=f"No data for t = {self.time}", responsive=True
-            )
-
-    def plot_1d(self, data_var, name, time_array, time_index):
-        if len(data_var.dims) == 1 or (
-            len(data_var.dims) == 2 and data_var.shape[1] == 1
-        ):
-            value = data_var[: time_index + 1].values.flatten()
-            times = time_array[: time_index + 1]
-        else:  # 2D profile flattened to 1D
-            value = data_var[time_index].values.flatten()
-            times = np.arange(value.shape[0])
-        title = f"{name} (t={time_array[time_index]:.3f}s)"
-        return hv.Curve((times, value), kdims=["time"], vdims=["value"]).opts(
-            title=title, xlabel="Time [s]", ylabel=name, responsive=True
+        return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
+            title=f"No data for t = {self.time}", responsive=True
         )
 
-    def plot_2d(self, data_var, name, time_array, time_index):
-        if len(data_var.dims) == 1:
-            vals = data_var[: time_index + 1].values[np.newaxis, :]
-            x = np.arange(vals.shape[1])
-            y = np.zeros(1)
-        elif len(data_var.dims) == 2:
-            vals = data_var[time_index].values
-            x = ds["dim0"].values
-            y = ds["dim1"].values
-        elif len(data_var.dims) == 3:
-            vals = data_var[time_index].values.T
-            x = ds["dim0"].values
-            y = ds["dim1"].values
-        return hv.QuadMesh((x, y, vals), kdims=["dim0", "dim1"], vdims=[name]).opts(
+    def plot_1d(self, ds, name, time_index):
+        data_var = ds[name].isel(time=time_index).values
+        coord_name = self._state.variable_coord_names[name][0]
+        coord_var = ds[f"{name}_{coord_name}"].isel(time=time_index).values
+        xlabel = coord_name
+        ylabel = name
+        title = f"{name} (t={float(ds.time.values[time_index]):.3f}s)"
+        return hv.Curve((coord_var, data_var), kdims=[xlabel], vdims=[ylabel]).opts(
+            title=title, responsive=True
+        )
+
+    def plot_2d(self, ds, name, time_index):
+        coord_names = self._state.variable_coord_names[name]
+        y_name, x_name = coord_names
+
+        data_var = ds[name].isel(time=time_index).values
+        x = ds[f"{name}_{x_name}"].isel(time=time_index).values
+        y = ds[f"{name}_{y_name}"].isel(time=time_index).values
+
+        title = f"{name} (t={float(ds.time.values[time_index]):.3f}s)"
+
+        return hv.QuadMesh(
+            (x, y, data_var),
+            kdims=[x_name, y_name],
+            vdims=[name],
+        ).opts(
             cmap="viridis",
             colorbar=True,
             framewise=True,
-            title=f"{name} 2D (t={time_array[time_index]:.3f}s)",
+            title=title,
             responsive=True,
+            xlabel=x_name,
+            ylabel=y_name,
         )
 
     def _plot_variable_vs_time(self, name: str, time: float):
         ds = self.active_state.data.get(name)
         var_dim = self.active_state.variable_dimensions.get(name, Dim.ZERO_D)
-
         if ds is None or len(ds.time) == 0:
             return self.plot_empty(name, var_dim)
+
         time_array = ds.time.values
         if time not in time_array:
             return self.plot_empty(name, var_dim)
         time_index = np.where(time_array == time)[0][0]
-        data_var = ds[name]
 
-        if var_dim == Dim.ZERO_D or var_dim == Dim.ONE_D:
-            return self.plot_1d(data_var, name, time_array, time_index)
-        elif var_dim == Dim.TWO_D:
-            return self.plot_2d(data_var, name, time_array, time_index)
+        if var_dim == Dim.ZERO_D:
+            t_vals = time_array[: time_index + 1]
+            v_vals = ds[name].isel(time=slice(0, time_index + 1)).values
+            return hv.Curve((t_vals, v_vals), kdims=["time"], vdims=[name]).opts(
+                title=f"{name} vs time", responsive=True
+            )
+
+        if var_dim == Dim.ONE_D:
+            return self.plot_1d(ds, name, time_index)
+
+        if var_dim == Dim.TWO_D:
+            return self.plot_2d(ds, name, time_index)
 
     def __panel__(self) -> Viewable:
         return self._panel
