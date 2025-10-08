@@ -19,6 +19,7 @@ settings:
   visualization_component.port: 5007
   visualization_component.throttle_interval: 0.5
   visualization_component.keep_alive: true
+  visualization_component.interactive_extract_all: true
 implementations:
   visualization_component:
     executable: python

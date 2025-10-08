@@ -18,8 +18,9 @@ class BaseState(param.Parameterized):
         doc="Dictionary of IDS name → machine description data objects.",
     )
 
-    def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
+    def __init__(self, md_dict: Dict[str, IDSToplevel], extract_all=False) -> None:
         super().__init__()
+        self.extract_all = extract_all
         self.md = md_dict
 
     def extract(self, ids: IDSToplevel) -> None:

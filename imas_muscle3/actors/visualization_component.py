@@ -19,7 +19,7 @@ from imas_muscle3.visualization.visualization_actor import VisualizationActor
 logger = logging.getLogger()
 
 
-pn.extension()
+pn.extension(notifications=True)
 hv.extension("bokeh")
 
 
@@ -65,10 +65,17 @@ def main() -> None:
             throttle_interval = get_setting_optional(instance, "throttle_interval", 0.1)
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             open_browser = get_setting_optional(instance, "open_browser", True)
+            extract_all = get_setting_optional(
+                instance, "interactive_extract_all", False
+            )
             md_dict = handle_machine_description(instance)
-            assert port is not None and open_browser is not None
+            assert (
+                port is not None
+                and open_browser is not None
+                and extract_all is not None
+            )
             visualization_actor = VisualizationActor(
-                plot_file_path, port, md_dict, open_browser
+                plot_file_path, port, md_dict, open_browser, extract_all
             )
             first_run = False
         assert visualization_actor is not None and throttle_interval is not None

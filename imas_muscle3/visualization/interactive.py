@@ -49,8 +49,8 @@ class State(BaseState):
         doc="Mapping of variable_path → coordinates",
     )
 
-    def __init__(self, md_dict: Dict[str, IDSToplevel]) -> None:
-        super().__init__(md_dict)
+    def __init__(self, md_dict: Dict[str, IDSToplevel], **kwargs) -> None:
+        super().__init__(md_dict, **kwargs)
         self._discovery_done = set()
 
     def _get_coord_name(self, path: str, i: int, coord_obj) -> str:
@@ -104,12 +104,17 @@ class State(BaseState):
         ids_name = ids.metadata.name
         if ids_name not in self._discovery_done:
             self._discover_variables(ids)
-        if (
-            ids_name not in self.visualized_variables
-            or not self.visualized_variables[ids_name]
-        ):
-            return
-        for name in self.visualized_variables[ids_name]:
+        if self.extract_all:
+            variables_to_extract = self.discovered_variables[ids_name]
+        else:
+            if (
+                ids_name not in self.visualized_variables
+                or not self.visualized_variables[ids_name]
+            ):
+                return
+            variables_to_extract = self.visualized_variables[ids_name]
+
+        for name in variables_to_extract:
             dim = self.variable_dimensions[name]
             if dim == Dim.ZERO_D:
                 self._extract_0d(ids, name)
@@ -237,6 +242,12 @@ class Plotter(BasePlotter):
             float_panel.status = "closed"
 
     def _add_all_plots_callback(self, event) -> None:
+        if len(self.variable_selector.options) > 20:
+            pn.state.notifications.error(
+                "Cannot create more than 20 plots at the same time"
+            )
+            return
+
         for option in self.variable_selector.options:
             self.variable_selector.value = option
             self._add_plot_callback(event)

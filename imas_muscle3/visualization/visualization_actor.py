@@ -23,6 +23,7 @@ class VisualizationActor(param.Parameterized):
         port: int,
         md_dict: Dict[str, IDSToplevel],
         open_browser_on_start: bool,
+        extract_all: bool,
     ):
         """Initialize the visualization actor.
 
@@ -39,19 +40,16 @@ class VisualizationActor(param.Parameterized):
         PlotterClass = run_path.get("Plotter")
         if not StateClass or not PlotterClass:
             raise NameError(
-                f"{plot_file_path} must define a 'State' class and "
-                "a 'Plotter' class."
+                f"{plot_file_path} must define a 'State' class and a 'Plotter' class."
             )
         if not issubclass(StateClass, BaseState):
-            raise TypeError(
-                f"'State' in {plot_file_path} must inherit from BaseState"
-            )
+            raise TypeError(f"'State' in {plot_file_path} must inherit from BaseState")
         if not issubclass(PlotterClass, BasePlotter):
             raise TypeError(
                 f"'Plotter' in {plot_file_path} must inherit from BasePlotter"
             )
 
-        self.state = StateClass(md_dict)
+        self.state = StateClass(md_dict, extract_all=extract_all)
         self.plotter = PlotterClass(self.state)
 
         stop_button = pn.widgets.Button(  # type: ignore[no-untyped-call]
