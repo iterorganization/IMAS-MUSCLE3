@@ -1,5 +1,6 @@
 import functools
 import logging
+import random
 from enum import Enum
 from typing import Dict
 
@@ -250,7 +251,14 @@ class Plotter(BasePlotter):
             ),
             sizing_mode="stretch_both",
         )
-        float_panel = ResizableFloatPanel(dynamic_plot, name=name, contained=False)
+        float_panel = ResizableFloatPanel(
+            dynamic_plot,
+            name=name,
+            position="left-top",
+            offsetx=random.randint(0, 2000),  # Can panel report on current window size?
+            offsety=random.randint(0, 1000),
+            contained=False,
+        )
 
         def on_status_change(event):
             if event.new == "closed":
