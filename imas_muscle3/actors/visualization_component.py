@@ -101,6 +101,7 @@ def main() -> None:
                 last_trigger_time = current_time
             visualization_actor.update_time(temp_ids.time[-1])
 
+        visualization_actor.state.param.trigger("data")
         if keep_alive:
             visualization_actor.notify_done()
         else:
