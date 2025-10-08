@@ -182,14 +182,25 @@ class Plotter(BasePlotter):
     def __init__(self, state: BaseState) -> None:
         self.ui = pn.Column()
         super().__init__(state)
-        self.plot_area = pn.Column(sizing_mode="stretch_width")
+        self.float_panels = pn.Column(sizing_mode="stretch_width")
         self.variable_selector = pn.widgets.Select(width=400)
-        self.add_plot_button = pn.widgets.Button(name="Add Plot", button_type="primary")
-        self.add_plot_button.on_click(self._add_plot_callback)
+        self.add_plot_button = pn.widgets.Button(
+            name="Add Plot", button_type="primary", on_click=self._add_plot_callback
+        )
+        self.add_all_button = pn.widgets.Button(
+            name="Add All Plots", on_click=self._add_all_plots_callback
+        )
+        self.close_all_button = pn.widgets.Button(
+            name="Close All Plots",
+            button_type="danger",
+            on_click=self._close_all_plots_callback,
+        )
 
         self.plotting_controls = pn.Row(
             self.variable_selector,
             self.add_plot_button,
+            self.add_all_button,
+            self.close_all_button,
             sizing_mode="stretch_width",
             align="center",
         )
@@ -199,7 +210,7 @@ class Plotter(BasePlotter):
             width=400,
         )
         self.filter_input.param.watch(self._update_filter_view, "value_input")
-        self.ui.extend([self.filter_input, self.plotting_controls, self.plot_area])
+        self.ui.extend([self.filter_input, self.plotting_controls, self.float_panels])
 
     def _update_filter_view(self, event):
         filter_text = self.filter_input.value_input.lower()
@@ -221,16 +232,14 @@ class Plotter(BasePlotter):
             options.extend(f"{ids_name}/{v}" for v in vars_list)
         self.variable_selector.options = sorted(options)
 
-    def _remove_plot_callback(self, card_to_remove: pn.Card, variable_path: str, event):
-        self.plot_area.remove(card_to_remove)
-        ids_name, name = variable_path.split("/", 1)
-        if ids_name in self._state.visualized_variables:
-            new_list = self._state.visualized_variables[ids_name]
-            if name in new_list:
-                new_list.remove(name)
-                self._state.visualized_variables[ids_name] = new_list
-        self._state.data.pop(name, None)
-        self._state.param.trigger("data")
+    def _close_all_plots_callback(self, event) -> None:
+        for float_panel in self.float_panels:
+            float_panel.status = "closed"
+
+    def _add_all_plots_callback(self, event) -> None:
+        for option in self.variable_selector.options:
+            self.variable_selector.value = option
+            self._add_plot_callback(event)
 
     def _add_plot_callback(self, event) -> None:
         full_path = self.variable_selector.value
@@ -266,7 +275,7 @@ class Plotter(BasePlotter):
 
         float_panel.param.watch(on_status_change, "status")
 
-        self.plot_area.append(float_panel)
+        self.float_panels.append(float_panel)
 
     def _floatpanel_closed_callback(self, variable_path: str, event=None) -> None:
         ids_name, name = variable_path.split("/", 1)
@@ -276,7 +285,6 @@ class Plotter(BasePlotter):
                 new_list.remove(name)
                 self._state.visualized_variables[ids_name] = new_list
         self._state.data.pop(name, None)
-        self._state.param.trigger("data")
 
     def plot_empty(self, name, var_dim):
         if var_dim == Dim.TWO_D:
