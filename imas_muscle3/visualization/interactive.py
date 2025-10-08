@@ -116,7 +116,6 @@ class State(BaseState):
                 self._extract_1d(ids, name)
             elif dim == Dim.TWO_D:
                 self._extract_2d(ids, name)
-        self.param.trigger("data")
 
     def _extract_0d(self, ids, name):
         current_time = float(ids.time[0])
