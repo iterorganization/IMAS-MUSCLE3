@@ -58,6 +58,7 @@ dependencies = [
     "panel",
     "holoviews",
     "hvplot",
+    "xarray"
 ]
 
 [project.optional-dependencies]

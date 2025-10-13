@@ -96,8 +96,6 @@ class State(BaseState):
         self.discovered_variables[ids_name] = relative_paths
         self._discovery_done.add(ids_name)
         self.param.trigger("discovered_variables")
-        self.param.trigger("variable_dimensions")
-        self.param.trigger("variable_coord_names")
         logger.info(f"Discovered {len(relative_paths)} variables in IDS '{ids_name}'.")
 
     def extract(self, ids: IDSToplevel) -> None:
