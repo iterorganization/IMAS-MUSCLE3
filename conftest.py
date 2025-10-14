@@ -47,3 +47,19 @@ def equilibrium():
         eq.time_slice[i].time = t
         eq.time_slice[i].global_quantities.ip = 1e6 + i * 1e5
     return eq
+
+
+@pytest.fixture
+def iron_core():
+    iron_core = imas.IDSFactory("4.0.0").iron_core()
+    iron_core.ids_properties.homogeneous_time = 0  # INT_0D
+    iron_core.time = []
+    return iron_core
+
+
+@pytest.fixture
+def pf_active():
+    pfa = imas.IDSFactory("4.0.0").pf_active()
+    pfa.ids_properties.homogeneous_time = 0  # INT_0D
+    pfa.time = [0.0, 1.0, 2.0]
+    return pfa
