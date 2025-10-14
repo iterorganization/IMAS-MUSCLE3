@@ -107,15 +107,13 @@ def muscled_source() -> None:
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_out = get_port_list(instance, Operator.O_I)
-            t_array = source_db_entry.get(
-                port_list_out[0].replace("_out", ""), lazy=True
-            ).time
+            t_array = time_array_from_IDS(source_db_entry, port_list_out)
             t_min = max(
-                get_setting_optional(instance, "t_min", default=-1e20),
+                get_setting_optional(instance, "t_min") or -1e20,
                 t_array[0],
             )
             t_max = min(
-                get_setting_optional(instance, "t_max", default=1e20),
+                get_setting_optional(instance, "t_max") or 1e20,
                 t_array[-1],
             )
             t_array = [t for t in t_array if t_min <= t <= t_max]
@@ -283,6 +281,16 @@ def fix_interpolation_method(instance: Instance) -> int:
     else:
         interp = CLOSEST_INTERP
     return interp
+
+
+def time_array_from_IDS(
+    db_entry: DBEntry, port_list: List[str]
+) -> List[float]:
+    for port in port_list:
+        t_array = db_entry.get(port.replace("_out", ""), lazy=True).time
+        if len(t_array) > 0:
+            return t_array
+    raise ValueError("No IDS with valid time array found.")
 
 
 if __name__ == "__main__":
