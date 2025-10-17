@@ -1,5 +1,5 @@
 """
-Standalone IMAS Visualization Interface
+Standalone IMAS Visualization Interface - Fixed Version
 """
 
 import logging
@@ -7,7 +7,6 @@ import threading
 import time
 
 import click
-import imas
 import panel as pn
 from imas import DBEntry, ids_defs
 
@@ -18,28 +17,36 @@ pn.extension(notifications=True)
 
 
 def feed_data(
-    entry: DBEntry,
+    uri: str,
     ids_name: str,
     visualization_actor: VisualizationActor,
     throttle_interval: float,
 ) -> None:
     """Continuously feed data into the visualization actor from an IDS."""
-    ids = entry.get(ids_name, lazy=True)
-    times = ids.time
-    last_trigger_time = 0.0
+    try:
+        with DBEntry(uri, "r") as entry:
+            ids = entry.get(ids_name, lazy=True)
+            times = ids.time
+            last_trigger_time = 0.0
 
-    for t in times:
-        ids = entry.get_slice(ids_name, t, ids_defs.CLOSEST_INTERP)
-        visualization_actor.state.extract(ids)
-        visualization_actor.update_time(ids.time[-1])
+            for t in times:
+                ids = entry.get_slice(ids_name, t, ids_defs.CLOSEST_INTERP)
+                visualization_actor.state.extract(ids)
+                visualization_actor.update_time(ids.time[-1])
 
-        current_time = time.time()
-        if current_time - last_trigger_time >= throttle_interval:
+                current_time = time.time()
+                if current_time - last_trigger_time >= throttle_interval:
+                    visualization_actor.state.param.trigger("data")
+                    last_trigger_time = current_time
+
+                # FIXME:
+                time.sleep(0.01)
+
             visualization_actor.state.param.trigger("data")
-            last_trigger_time = current_time
-
-    visualization_actor.notify_done()
-    logger.info("All IDS slices processed.")
+            visualization_actor.notify_done()
+            logger.info("All IDS slices processed.")
+    except Exception as e:
+        logger.error(f"Error in data feeder thread: {e}", exc_info=True)
 
 
 @click.command()
@@ -69,7 +76,7 @@ def main(
     extract_all: bool,
     throttle_interval: float,
 ):
-    """Standalone visualization of an IMAS IDS using a given PLOT_FILE_PATH.
+    """CLI to run the visualization actor as standalone application, without needing MUSCLE3.
 
     Example:
         python visualize_standalone.py "imas:hdf5?path=/path/to/data" equilibrium /path/to/plot_file.py
@@ -86,23 +93,24 @@ def main(
         extract_all=extract_all,
     )
 
-    entry = imas.DBEntry(uri, "r")
-
     feeder_thread = threading.Thread(
         target=feed_data,
-        args=(entry, ids_name, visualization_actor, throttle_interval),
-        daemon=True,
+        args=(uri, ids_name, visualization_actor, throttle_interval),
+        daemon=False,
     )
+    logger.info("Waiting for browser to load...")
+    time.sleep(3)
+    logger.info(f"Loading {ids_name} from {uri}...")
     feeder_thread.start()
 
     try:
-        while feeder_thread.is_alive():
-            time.sleep(0.5)
+        feeder_thread.join()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")
     finally:
         visualization_actor.stop_server()
-        entry.close()
 
 
 if __name__ == "__main__":
