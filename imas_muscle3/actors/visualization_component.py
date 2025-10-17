@@ -45,7 +45,9 @@ def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
-            Operator.S: [f"{ids_name}_in" for ids_name in IDSFactory().ids_names()],
+            Operator.S: [
+                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
+            ],
             Operator.F_INIT: [
                 f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()
             ],
@@ -62,7 +64,9 @@ def main() -> None:
             # FIXME: there is an issue when the plotting takes much longer
             # than it takes for data to arrive from the MUSCLE actor. As a
             # remedy, set a plotting throttle interval.
-            throttle_interval = get_setting_optional(instance, "throttle_interval", 0.1)
+            throttle_interval = get_setting_optional(
+                instance, "throttle_interval", 0.1
+            )
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             open_browser = get_setting_optional(instance, "open_browser", True)
             extract_all = get_setting_optional(
@@ -78,7 +82,9 @@ def main() -> None:
                 plot_file_path, port, md_dict, open_browser, extract_all
             )
             first_run = False
-        assert visualization_actor is not None and throttle_interval is not None
+        assert (
+            visualization_actor is not None and throttle_interval is not None
+        )
 
         is_running = True
         ports_in = get_port_list(instance, Operator.S)
@@ -97,7 +103,9 @@ def main() -> None:
                     common_time = temp_ids.time
                 else:
                     if not (temp_ids.time == common_time).all():
-                        raise ValueError(f"Time mismatch detected in IDS {ids_name}")
+                        raise ValueError(
+                            f"Time mismatch detected in IDS {ids_name}"
+                        )
 
                 visualization_actor.state.extract(temp_ids)
                 if msg.next_timestamp is None:

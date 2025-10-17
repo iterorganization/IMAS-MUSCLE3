@@ -17,7 +17,9 @@ from imas.util import tree_iter
 from panel.viewable import Viewable
 
 from imas_muscle3.visualization.base import BasePlotter, BaseState
-from imas_muscle3.visualization.resizable_float_panel import ResizableFloatPanel
+from imas_muscle3.visualization.resizable_float_panel import (
+    ResizableFloatPanel,
+)
 
 logger = logging.getLogger()
 
@@ -31,22 +33,24 @@ class Dim(Enum):
 
 
 class State(BaseState):
-    """Container for simulation state using xarray for time-aligned datasets."""
+    """Container for simulation state using xarray for time-aligned
+    datasets."""
 
     discovered_variables = param.Dict(
-        default={}, doc="Mapping of IDS name to list of discovered variable paths."
+        default={},
+        doc="Mapping of IDS name to list of discovered paths.",
     )
     visualized_variables = param.Dict(
         default={},
-        doc="Mapping of IDS name → list of variable paths selected for visualization.",
+        doc="Mapping of IDS name to list of paths selected for visualization.",
     )
     variable_dimensions = param.Dict(
         default={},
-        doc="Mapping of variable_path → VariableDimension enum ('0D', '1D', or '2D')",
+        doc="Mapping of path to dimension enum",
     )
     variable_coord_names = param.Dict(
         default={},
-        doc="Mapping of variable_path → coordinates",
+        doc="Mapping of path to coordinates",
     )
 
     def __init__(self, md_dict: Dict[str, IDSToplevel], **kwargs) -> None:
@@ -96,7 +100,9 @@ class State(BaseState):
         self.discovered_variables[ids_name] = relative_paths
         self._discovery_done.add(ids_name)
         self.param.trigger("discovered_variables")
-        logger.info(f"Discovered {len(relative_paths)} variables in IDS '{ids_name}'.")
+        logger.info(
+            f"Discovered {len(relative_paths)} variables in IDS '{ids_name}'."
+        )
 
     def extract(self, ids: IDSToplevel) -> None:
         ids_name = ids.metadata.name
@@ -170,8 +176,14 @@ class State(BaseState):
         new_ds = xr.Dataset(
             {
                 name: (("time", "y", "x"), arr[np.newaxis, :, :]),
-                f"{name}_{coord_names[0]}": (("time", "y"), coords0[np.newaxis, :]),
-                f"{name}_{coord_names[1]}": (("time", "x"), coords1[np.newaxis, :]),
+                f"{name}_{coord_names[0]}": (
+                    ("time", "y"),
+                    coords0[np.newaxis, :],
+                ),
+                f"{name}_{coord_names[1]}": (
+                    ("time", "x"),
+                    coords1[np.newaxis, :],
+                ),
             },
             coords={"time": [current_time]},
         )
@@ -188,7 +200,9 @@ class Plotter(BasePlotter):
         self.float_panels = pn.Column(sizing_mode="stretch_width")
         self.variable_selector = pn.widgets.Select(width=400)
         self.add_plot_button = pn.widgets.Button(
-            name="Add Plot", button_type="primary", on_click=self._add_plot_callback
+            name="Add Plot",
+            button_type="primary",
+            on_click=self._add_plot_callback,
         )
         self.add_all_button = pn.widgets.Button(
             name="Add All Plots", on_click=self._add_all_plots_callback
@@ -213,7 +227,9 @@ class Plotter(BasePlotter):
             width=400,
         )
         self.filter_input.param.watch(self._update_filter_view, "value_input")
-        self.ui.extend([self.filter_input, self.plotting_controls, self.float_panels])
+        self.ui.extend(
+            [self.filter_input, self.plotting_controls, self.float_panels]
+        )
 
     def _update_filter_view(self, event):
         filter_text = self.filter_input.value_input.lower()
@@ -273,7 +289,9 @@ class Plotter(BasePlotter):
             dynamic_plot,
             name=name,
             position="left-top",
-            offsetx=random.randint(0, 2000),  # Can panel report on current window size?
+            offsetx=random.randint(
+                0, 2000
+            ),  # Can panel report on current window size?
             offsety=random.randint(0, 1000),
             contained=False,
         )
@@ -286,7 +304,9 @@ class Plotter(BasePlotter):
 
         self.float_panels.append(float_panel)
 
-    def _floatpanel_closed_callback(self, variable_path: str, event=None) -> None:
+    def _floatpanel_closed_callback(
+        self, variable_path: str, event=None
+    ) -> None:
         ids_name, name = variable_path.split("/", 1)
         if ids_name in self._state.visualized_variables:
             new_list = self._state.visualized_variables[ids_name]
@@ -314,9 +334,9 @@ class Plotter(BasePlotter):
         xlabel = coord_name
         ylabel = name
         title = f"{name} (t={float(ds.time.values[time_index]):.3f}s)"
-        return hv.Curve((coord_var, data_var), kdims=[xlabel], vdims=[ylabel]).opts(
-            title=title, responsive=True
-        )
+        return hv.Curve(
+            (coord_var, data_var), kdims=[xlabel], vdims=[ylabel]
+        ).opts(title=title, responsive=True)
 
     def plot_2d(self, ds, name, time_index):
         coord_names = self._state.variable_coord_names[name]
@@ -356,9 +376,9 @@ class Plotter(BasePlotter):
         if var_dim == Dim.ZERO_D:
             t_vals = time_array[: time_index + 1]
             v_vals = ds[name].isel(time=slice(0, time_index + 1)).values
-            return hv.Curve((t_vals, v_vals), kdims=["time"], vdims=[name]).opts(
-                title=f"{name} vs time", responsive=True
-            )
+            return hv.Curve(
+                (t_vals, v_vals), kdims=["time"], vdims=[name]
+            ).opts(title=f"{name} vs time", responsive=True)
 
         if var_dim == Dim.ONE_D:
             return self.plot_1d(ds, name, time_index)

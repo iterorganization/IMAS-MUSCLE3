@@ -12,13 +12,17 @@ class BaseState(param.Parameterized):
     as well as data from a machine description.
     """
 
-    data = param.Dict(default={}, doc="Dictionary of IDS name → live IDS data objects.")
+    data = param.Dict(
+        default={}, doc="Mapping of IDS name to live IDS data objects."
+    )
     md = param.Dict(
         default={},
-        doc="Dictionary of IDS name → machine description data objects.",
+        doc="Mapping of IDS name to machine description data objects.",
     )
 
-    def __init__(self, md_dict: Dict[str, IDSToplevel], extract_all=False) -> None:
+    def __init__(
+        self, md_dict: Dict[str, IDSToplevel], extract_all: bool = False
+    ) -> None:
         super().__init__()
         self.extract_all = extract_all
         self.md = md_dict
@@ -56,7 +60,9 @@ class BasePlotter(Viewer):
         self._frozen_state = None
         self.active_state = self._state
 
-        self.live_view_checkbox = pn.widgets.Checkbox.from_param(self.param._live_view)
+        self.live_view_checkbox = pn.widgets.Checkbox.from_param(
+            self.param._live_view
+        )
         self.time_slider_widget = pn.widgets.DiscretePlayer.from_param(
             self.param.time,
             margin=15,
@@ -90,12 +96,16 @@ class BasePlotter(Viewer):
     def update_time_label(self) -> None:
         self.time_label.object = f"## showing t = {self.time:.5e} s"
 
-    @param.depends("_state.data", watch=True)
+    @param.depends("_state.data", watch=True)  # type: ignore[misc]
     def _update_on_new_data(self) -> None:
         if not self._state.data:
             return
         all_times = sorted(
-            set(np.concatenate([d.time.values for d in self._state.data.values()]))
+            set(
+                np.concatenate(
+                    [d.time.values for d in self._state.data.values()]
+                )
+            )
         )
         if not all_times:
             return

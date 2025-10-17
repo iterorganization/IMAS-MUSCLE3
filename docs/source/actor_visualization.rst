@@ -34,6 +34,9 @@ Available Settings
     If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
   - ***open_browser***: (bool) If `True`, automatically opens a new tab in your web 
     browser to the visualization page upon starting. Defaults to `True`.
+  - ***interactive_extract_all***: (bool) If `True`, automatically extracts all time dependent
+    quantities of the IDS. If `False`, in interactive mode the data will start to be extracted
+    as soon as a new plot is drawn.
 
 Available Ports
 ---------------

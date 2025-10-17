@@ -1,3 +1,5 @@
+from typing import Any
+
 import panel as pn
 import param
 
@@ -10,7 +12,14 @@ class ResizableFloatPanel(pn.layout.FloatPanel):
     current_w = param.Integer(default=500, bounds=(None, None))
     current_h = param.Integer(default=500, bounds=(None, None))
 
-    def __init__(self, *objects, height_offset=60, width=500, height=500, **params):
+    def __init__(
+        self,
+        *objects: Any,
+        height_offset: int = 60,
+        width: int = 500,
+        height: int = 500,
+        **params: Any,
+    ) -> None:
         self._content_col = pn.Column(
             *objects, sizing_mode="fixed", width=width, height=height
         )
@@ -18,18 +27,27 @@ class ResizableFloatPanel(pn.layout.FloatPanel):
         params.setdefault("width", width)
         params.setdefault("height", height)
         params.setdefault("position", "center")
-        super().__init__(self._content_col, **params)
+        super().__init__(  # type: ignore[no-untyped-call]
+            self._content_col, **params
+        )
         self._height_offset = height_offset
-        pn.bind(self._sync_size, self.param.current_w, self.param.current_h, watch=True)
+        pn.bind(  # type: ignore[no-untyped-call]
+            self._sync_size,
+            self.param.current_w,
+            self.param.current_h,
+            watch=True,
+        )
 
-    def _sync_size(self, w, h):
+    def _sync_size(self, w: int, h: int) -> None:
         if w and h:
             self._content_col.width = w
             self._content_col.height = max(h - self._height_offset, 0)
 
     _scripts = dict(pn.layout.FloatPanel._scripts)
 
-    _scripts["render"] = """
+    _scripts[
+        "render"
+    ] = """
         if (state.panel) {
           view.run_script('close')
         }
@@ -71,5 +89,9 @@ class ResizableFloatPanel(pn.layout.FloatPanel):
             view.invalidate_layout()
           }
         }
-        document.addEventListener('jspanelresizestop', state.resizeHandler, false)
+        document.addEventListener(
+          'jspanelresizestop',
+          state.resizeHandler,
+          false
+          )
     """

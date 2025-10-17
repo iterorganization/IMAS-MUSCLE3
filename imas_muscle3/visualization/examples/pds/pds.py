@@ -163,7 +163,9 @@ class Plotter(BasePlotter):
     )
     DESIRED_SHAPE_OPTS = hv.opts.Curve(color="blue")
 
-    levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
+    levels = param.Integer(
+        default=20, bounds=(1, 100), doc="Number of contour levels"
+    )
 
     def get_dashboard(self):
         # Create poloidal flux plot
@@ -230,13 +232,22 @@ class Plotter(BasePlotter):
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
-                                (annulus.r + annulus.radius_outer * np.cos(phi)),
-                                (annulus.z + annulus.radius_outer * np.sin(phi)),
+                                (
+                                    annulus.r
+                                    + annulus.radius_outer * np.cos(phi)
+                                ),
+                                (
+                                    annulus.z
+                                    + annulus.radius_outer * np.sin(phi)
+                                ),
                                 name,
                             )
                         )
                     else:
-                        logger.warning(f"Coil {name} skipped, no rect/outline/annulus")
+                        logger.warning(
+                            f"Coil {name} was skipped, as it does not have a "
+                            "filled 'rect' or 'outline' node"
+                        )
                         continue
         rects = hv.Rectangles(rectangles, vdims=["name"]).opts(
             line_color="black",
@@ -299,7 +310,9 @@ class Plotter(BasePlotter):
         for i, level in enumerate(tricontour.levels):
             for seg in tricontour.allsegs[i]:
                 if len(seg) > 1:
-                    segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
+                    segments.append(
+                        {"x": seg[:, 0], "y": seg[:, 1], "psi": level}
+                    )
         return segments
 
     @pn.depends("time")
@@ -382,6 +395,8 @@ class Plotter(BasePlotter):
         equilibrium = self.active_state.data.get("equilibrium")
         if equilibrium is not None:
             selected_data = equilibrium.sel(time=self.time)
+
+            # Extract X-points
             x_r = selected_data.x_points_r.values
             x_z = selected_data.x_points_z.values
             x_points = list(zip(x_r, x_z))
@@ -455,7 +470,9 @@ class Plotter(BasePlotter):
             curves = []
             for coil in state.coil.values:
                 current = state.currents.sel(coil=coil)[mask].values
-                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
+                curve = hv.Curve(
+                    (time, current), xlabel, ylabel, label=str(coil)
+                ).opts(
                     framewise=True,
                     title="coil currents over time",
                 )
@@ -474,7 +491,9 @@ class Plotter(BasePlotter):
         if state:
             mask = state.time <= self.time
             times = state.time.values[mask]
-            psi = state.sel(time=self.time, method="nearest").psi_profile.values
+            psi = state.sel(
+                time=self.time, method="nearest"
+            ).psi_profile.values
             f_df_dpsi = state.f_df_dpsi.sel(time=mask).values
             title = "ff' over time"
         else:
@@ -507,7 +526,9 @@ class Plotter(BasePlotter):
         if state:
             mask = state.time <= self.time
             times = state.time.values[mask]
-            psi = state.sel(time=self.time, method="nearest").psi_profile.values
+            psi = state.sel(
+                time=self.time, method="nearest"
+            ).psi_profile.values
             dpressure_dpsi = state.dpressure_dpsi.sel(time=mask).values
             title = "p' over time"
         else:
