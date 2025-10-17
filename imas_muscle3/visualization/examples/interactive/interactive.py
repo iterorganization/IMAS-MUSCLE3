@@ -1,8 +1,9 @@
 import functools
 import logging
 import random
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict
+from typing import Dict, List
 
 import holoviews as hv
 import imas
@@ -32,25 +33,26 @@ class Dim(Enum):
     TWO_D = "2D"
 
 
-class State(BaseState):
-    """Container for simulation state using xarray for time-aligned
-    datasets."""
+@dataclass
+class Variable:
+    """Represents a single discoverable variable from an IDS."""
 
-    discovered_variables = param.Dict(
+    ids_name: str
+    path: str
+    dimension: Dim
+    coord_names: List[str] = field(default_factory=list)
+    is_visualized: bool = False
+
+    @property
+    def full_path(self) -> str:
+        """Returns the full path for UI display (ids_name/path)."""
+        return f"{self.ids_name}/{self.path}"
+
+
+class State(BaseState):
+    variables = param.Dict(
         default={},
-        doc="Mapping of IDS name to list of discovered paths.",
-    )
-    visualized_variables = param.Dict(
-        default={},
-        doc="Mapping of IDS name to list of paths selected for visualization.",
-    )
-    variable_dimensions = param.Dict(
-        default={},
-        doc="Mapping of path to dimension enum",
-    )
-    variable_coord_names = param.Dict(
-        default={},
-        doc="Mapping of path to coordinates",
+        doc=("Mapping of a variable's full path to a Variable object"),
     )
 
     def __init__(self, md_dict: Dict[str, IDSToplevel], **kwargs) -> None:
@@ -58,139 +60,185 @@ class State(BaseState):
         self._discovery_done = set()
 
     def _get_coord_name(self, path: str, i: int, coord_obj) -> str:
+        """Helper to get a coordinate name from metadata or generate one."""
         if isinstance(coord_obj, IDSNumericArray):
             return coord_obj.metadata.name
         return f"{path}_coord{i}"
 
-    def _discover_variables(self, ids):
+    def _discover_variables(self, ids: IDSToplevel):
+        """Discovers numerical variables in an IDS and populates the state.
+
+        Args:
+            ids: The IDS to discover variables for.
+        """
         ids_name = ids.metadata.name
         logger.info(f"Discovering float variables in IDS '{ids_name}'...")
-        relative_paths = []
+        new_variables = {}
         for node in tree_iter(ids, leaf_only=True):
             metadata = node.metadata
-            if metadata.data_type != IDSDataType.FLT:
-                continue
-            if metadata.ndim not in (0, 1, 2):
+            if metadata.data_type != IDSDataType.FLT or metadata.ndim > 2:
                 continue
             path = str(imas.util.get_full_path(node))
             if path == "time":
                 continue
-            relative_paths.append(path)
-            if metadata.ndim == 0:
-                self.variable_dimensions[path] = Dim.ZERO_D
-                self.variable_coord_names[path] = []
-            elif metadata.ndim == 1:
-                if (
+
+            full_path = f"{ids_name}/{path}"
+            dim = Dim.ZERO_D
+            coord_names = []
+
+            if metadata.ndim == 1:
+                # Check if it's a 0D variable over time
+                if not (
                     hasattr(node.coordinates[0], "metadata")
                     and node.coordinates[0].metadata.name == "time"
                 ):
-                    self.variable_dimensions[path] = Dim.ZERO_D
-                    self.variable_coord_names[path] = []
-                else:
-                    self.variable_dimensions[path] = Dim.ONE_D
-                    self.variable_coord_names[path] = [
+                    dim = Dim.ONE_D
+                    coord_names = [
                         self._get_coord_name(path, 0, node.coordinates[0])
                     ]
-            else:
-                self.variable_dimensions[path] = Dim.TWO_D
-                self.variable_coord_names[path] = [
+            elif metadata.ndim == 2:
+                dim = Dim.TWO_D
+                coord_names = [
                     self._get_coord_name(path, 0, node.coordinates[0]),
                     self._get_coord_name(path, 1, node.coordinates[1]),
                 ]
-        self.discovered_variables[ids_name] = relative_paths
+
+            new_variables[full_path] = Variable(
+                ids_name=ids_name,
+                path=path,
+                dimension=dim,
+                coord_names=coord_names,
+            )
+
+        self.variables.update(new_variables)
+        self.param.trigger("variables")
         self._discovery_done.add(ids_name)
-        self.param.trigger("discovered_variables")
         logger.info(
-            f"Discovered {len(relative_paths)} variables in IDS '{ids_name}'."
+            f"Discovered {len(new_variables)} variables in IDS '{ids_name}'."
         )
 
     def extract(self, ids: IDSToplevel) -> None:
+        """Extracts data for visualized variables from the given IDS.
+
+        Args:
+            ids: The IDS to extract data from.
+        """
         ids_name = ids.metadata.name
         if ids_name not in self._discovery_done:
             self._discover_variables(ids)
+
         if self.extract_all:
-            variables_to_extract = self.discovered_variables[ids_name]
+            vars_to_extract = [
+                var
+                for var in self.variables.values()
+                if var.ids_name == ids_name
+            ]
         else:
-            if (
-                ids_name not in self.visualized_variables
-                or not self.visualized_variables[ids_name]
-            ):
-                return
-            variables_to_extract = self.visualized_variables[ids_name]
+            vars_to_extract = [
+                var
+                for var in self.variables.values()
+                if var.ids_name == ids_name and var.is_visualized
+            ]
 
-        for name in variables_to_extract:
-            dim = self.variable_dimensions[name]
-            if dim == Dim.ZERO_D:
-                self._extract_0d(ids, name)
-            elif dim == Dim.ONE_D:
-                self._extract_1d(ids, name)
-            elif dim == Dim.TWO_D:
-                self._extract_2d(ids, name)
+        for var in vars_to_extract:
+            if var.dimension == Dim.ZERO_D:
+                self._extract_0d(ids, var)
+            elif var.dimension == Dim.ONE_D:
+                self._extract_1d(ids, var)
+            elif var.dimension == Dim.TWO_D:
+                self._extract_2d(ids, var)
 
-    def _extract_0d(self, ids, name):
+    def _extract_0d(self, ids: IDSToplevel, var: Variable):
+        """Extracts and stores 0D data.
+
+        Args:
+            ids: The ids to extract data from.
+            var: The variable to extract.
+        """
         current_time = float(ids.time[0])
-        value_obj = ids[name]
-        if value_obj.metadata.ndim == 0:
-            value = float(value_obj.value)
-        else:
-            value = float(value_obj[0])
-        new_ds = xr.Dataset(
-            {name: ("time", [value])},
-            coords={"time": [current_time]},
+        value_obj = ids[var.path]
+        value = (
+            float(value_obj.value)
+            if value_obj.metadata.ndim == 0
+            else float(value_obj[0])
         )
-        if name in self.data:
-            self.data[name] = xr.concat([self.data[name], new_ds], dim="time")
-        else:
-            self.data[name] = new_ds
 
-    def _extract_1d(self, ids, name):
+        new_ds = xr.Dataset(
+            {var.full_path: ("time", [value])}, coords={"time": [current_time]}
+        )
+        if var.full_path in self.data:
+            self.data[var.full_path] = xr.concat(
+                [self.data[var.full_path], new_ds], dim="time"
+            )
+        else:
+            self.data[var.full_path] = new_ds
+
+    def _extract_1d(self, ids: IDSToplevel, var: Variable):
+        """Extracts and stores 1D data.
+
+        Args:
+            ids: The ids to extract data from.
+            var: The variable to extract.
+        """
         current_time = float(ids.time[0])
-        value_obj = ids[name]
+        value_obj = ids[var.path]
         arr = np.array(value_obj[:], dtype=float)
         coords_obj = value_obj.coordinates[0]
-        coord_name = self.variable_coord_names[name][0]
+        coord_name = var.coord_names[0]
         coords = np.array(coords_obj, dtype=float)
 
         new_ds = xr.Dataset(
             {
-                name: (("time", "i"), arr[np.newaxis, :]),
-                f"{name}_{coord_name}": (("time", "i"), coords[np.newaxis, :]),
+                var.full_path: (("time", "i"), arr[np.newaxis, :]),
+                f"{var.full_path}_{coord_name}": (
+                    ("time", "i"),
+                    coords[np.newaxis, :],
+                ),
             },
             coords={"time": [current_time]},
         )
-        if name in self.data:
-            self.data[name] = xr.concat([self.data[name], new_ds], dim="time")
+        if var.full_path in self.data:
+            self.data[var.full_path] = xr.concat(
+                [self.data[var.full_path], new_ds], dim="time"
+            )
         else:
-            self.data[name] = new_ds
+            self.data[var.full_path] = new_ds
 
-    def _extract_2d(self, ids, name):
+    def _extract_2d(self, ids: IDSToplevel, var: Variable):
+        """Extracts and stores 2D data.
+
+        Args:
+            ids: The ids to extract data from.
+            var: The variable to extract.
+        """
         current_time = float(ids.time[0])
-        value_obj = ids[name]
+        value_obj = ids[var.path]
         arr = np.array(value_obj[:], dtype=float)
         coords_obj0 = value_obj.coordinates[0]
         coords_obj1 = value_obj.coordinates[1]
-        coord_names = self.variable_coord_names[name]
         coords0 = np.array(coords_obj0, dtype=float)
         coords1 = np.array(coords_obj1, dtype=float)
 
         new_ds = xr.Dataset(
             {
-                name: (("time", "y", "x"), arr[np.newaxis, :, :]),
-                f"{name}_{coord_names[0]}": (
+                var.full_path: (("time", "y", "x"), arr[np.newaxis, :, :]),
+                f"{var.full_path}_{var.coord_names[0]}": (
                     ("time", "y"),
                     coords0[np.newaxis, :],
                 ),
-                f"{name}_{coord_names[1]}": (
+                f"{var.full_path}_{var.coord_names[1]}": (
                     ("time", "x"),
                     coords1[np.newaxis, :],
                 ),
             },
             coords={"time": [current_time]},
         )
-        if name in self.data:
-            self.data[name] = xr.concat([self.data[name], new_ds], dim="time")
+        if var.full_path in self.data:
+            self.data[var.full_path] = xr.concat(
+                [self.data[var.full_path], new_ds], dim="time"
+            )
         else:
-            self.data[name] = new_ds
+            self.data[var.full_path] = new_ds
 
 
 class Plotter(BasePlotter):
@@ -204,9 +252,6 @@ class Plotter(BasePlotter):
             button_type="primary",
             on_click=self._add_plot_callback,
         )
-        self.add_all_button = pn.widgets.Button(
-            name="Add All Plots", on_click=self._add_all_plots_callback
-        )
         self.close_all_button = pn.widgets.Button(
             name="Close All Plots",
             button_type="danger",
@@ -216,7 +261,6 @@ class Plotter(BasePlotter):
         self.plotting_controls = pn.Row(
             self.variable_selector,
             self.add_plot_button,
-            self.add_all_button,
             self.close_all_button,
             sizing_mode="stretch_width",
             align="center",
@@ -232,53 +276,45 @@ class Plotter(BasePlotter):
         )
 
     def _update_filter_view(self, event):
+        """Updates the variable selector based on the filter text."""
         filter_text = self.filter_input.value_input.lower()
-        options = []
-        for ids_name, vars_list in self._state.discovered_variables.items():
-            for var in vars_list:
-                full_name = f"{ids_name}/{var}"
-                if not filter_text or filter_text in full_name.lower():
-                    options.append(full_name)
+        options = [
+            full_path
+            for full_path in self._state.variables
+            if not filter_text or filter_text in full_path.lower()
+        ]
         self.variable_selector.options = sorted(options)
 
     def get_dashboard(self):
         return self.ui
 
-    @param.depends("_state.discovered_variables", watch=True)
+    @param.depends("_state.variables", watch=True)
     def _update_variable_selector(self) -> None:
-        options = []
-        for ids_name, vars_list in self._state.discovered_variables.items():
-            options.extend(f"{ids_name}/{v}" for v in vars_list)
-        self.variable_selector.options = sorted(options)
+        """Updates the variable selector when new variables are discovered."""
+        self.variable_selector.options = sorted(
+            list(self._state.variables.keys())
+        )
 
     def _close_all_plots_callback(self, event) -> None:
+        """Closes all active plot panels."""
         for float_panel in self.float_panels:
             float_panel.status = "closed"
 
-    def _add_all_plots_callback(self, event) -> None:
-        if len(self.variable_selector.options) > 20:
-            pn.state.notifications.error(
-                "Cannot create more than 20 plots at the same time"
-            )
-            return
-
-        for option in self.variable_selector.options:
-            self.variable_selector.value = option
-            self._add_plot_callback(event)
-
     def _add_plot_callback(self, event) -> None:
+        """Adds a new plot panel for the selected variable."""
         full_path = self.variable_selector.value
-        if not full_path:
+        if not full_path or full_path not in self._state.variables:
             return
-        ids_name, name = full_path.split("/", 1)
 
-        if ids_name not in self._state.visualized_variables:
-            self._state.visualized_variables[ids_name] = []
-        if name in self._state.visualized_variables[ids_name]:
-            return
-        self._state.visualized_variables[ids_name].append(name)
+        var = self._state.variables[full_path]
+        if var.is_visualized:
+            return  # Plot already exists
 
-        plot_func = functools.partial(self._plot_variable_vs_time, name=name)
+        var.is_visualized = True
+
+        plot_func = functools.partial(
+            self._plot_variable_vs_time, full_path=full_path
+        )
         dynamic_plot = pn.pane.HoloViews(
             hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
                 framewise=True, axiswise=True
@@ -287,11 +323,9 @@ class Plotter(BasePlotter):
         )
         float_panel = ResizableFloatPanel(
             dynamic_plot,
-            name=name,
+            name=var.full_path,
             position="left-top",
-            offsetx=random.randint(
-                0, 2000
-            ),  # Can panel report on current window size?
+            offsetx=random.randint(0, 2000),
             offsety=random.randint(0, 1000),
             contained=False,
         )
@@ -301,57 +335,52 @@ class Plotter(BasePlotter):
                 self._floatpanel_closed_callback(full_path)
 
         float_panel.param.watch(on_status_change, "status")
-
         self.float_panels.append(float_panel)
 
-    def _floatpanel_closed_callback(
-        self, variable_path: str, event=None
-    ) -> None:
-        ids_name, name = variable_path.split("/", 1)
-        if ids_name in self._state.visualized_variables:
-            new_list = self._state.visualized_variables[ids_name]
-            if name in new_list:
-                new_list.remove(name)
-                self._state.visualized_variables[ids_name] = new_list
-        self._state.data.pop(name, None)
+    def _floatpanel_closed_callback(self, full_path: str, event=None) -> None:
+        """Handles cleanup when a plot panel is closed."""
+        if full_path in self._state.variables:
+            var = self._state.variables[full_path]
+            var.is_visualized = False
+            self._state.data.pop(var.full_path, None)
 
-    def plot_empty(self, name, var_dim):
+    def plot_empty(self, name: str, var_dim: Dim):
+        """Returns an empty plot to show when no data is available."""
+        title = f"No data for t = {self.time}"
         if var_dim == Dim.TWO_D:
-            empty_vals = np.zeros((1, 1))
             return hv.QuadMesh(
-                (np.array([0]), np.array([0]), empty_vals),
+                (np.array([0]), np.array([0]), np.zeros((1, 1))),
                 kdims=["x", "y"],
                 vdims=[name],
-            ).opts(title=f"No data for t = {self.time}", responsive=True)
+            ).opts(title=title, responsive=True)
         return hv.Curve(([], []), kdims=["time"], vdims=["value"]).opts(
-            title=f"No data for t = {self.time}", responsive=True
+            title=title, responsive=True
         )
 
-    def plot_1d(self, ds, name, time_index):
-        data_var = ds[name].isel(time=time_index).values
-        coord_name = self._state.variable_coord_names[name][0]
-        coord_var = ds[f"{name}_{coord_name}"].isel(time=time_index).values
-        xlabel = coord_name
-        ylabel = name
-        title = f"{name} (t={float(ds.time.values[time_index]):.3f}s)"
+    def plot_1d(self, ds: xr.Dataset, var: Variable, time_index: int):
+        """Generates a 1D plot for a given time index."""
+        data_var = ds[var.full_path].isel(time=time_index).values
+        coord_name = var.coord_names[0]
+        coord_var = (
+            ds[f"{var.full_path}_{coord_name}"].isel(time=time_index).values
+        )
+        title = f"{var.full_path} (t={float(ds.time.values[time_index]):.3f}s)"
         return hv.Curve(
-            (coord_var, data_var), kdims=[xlabel], vdims=[ylabel]
+            (coord_var, data_var), kdims=[coord_name], vdims=[var.full_path]
         ).opts(title=title, responsive=True)
 
-    def plot_2d(self, ds, name, time_index):
-        coord_names = self._state.variable_coord_names[name]
-        y_name, x_name = coord_names
-
-        data_var = ds[name].isel(time=time_index).values
-        x = ds[f"{name}_{x_name}"].isel(time=time_index).values
-        y = ds[f"{name}_{y_name}"].isel(time=time_index).values
-
-        title = f"{name} (t={float(ds.time.values[time_index]):.3f}s)"
+    def plot_2d(self, ds: xr.Dataset, var: Variable, time_index: int):
+        """Generates a 2D plot for a given time index."""
+        y_name, x_name = var.coord_names
+        data_var = ds[var.full_path].isel(time=time_index).values
+        x = ds[f"{var.full_path}_{x_name}"].isel(time=time_index).values
+        y = ds[f"{var.full_path}_{y_name}"].isel(time=time_index).values
+        title = f"{var.full_path} (t={float(ds.time.values[time_index]):.3f}s)"
 
         return hv.QuadMesh(
             (x, y, data_var),
             kdims=[x_name, y_name],
-            vdims=[name],
+            vdims=[var.full_path],
         ).opts(
             cmap="viridis",
             colorbar=True,
@@ -362,29 +391,34 @@ class Plotter(BasePlotter):
             ylabel=y_name,
         )
 
-    def _plot_variable_vs_time(self, name: str, time: float):
-        ds = self.active_state.data.get(name)
-        var_dim = self.active_state.variable_dimensions.get(name, Dim.ZERO_D)
+    def _plot_variable_vs_time(self, full_path: str, time: float):
+        """Core plotting function that dispatches to specific plot types."""
+        var = self.active_state.variables.get(full_path)
+        if not var:
+            return self.plot_empty("unknown", Dim.ZERO_D)
+
+        ds = self.active_state.data.get(var.full_path)
         if ds is None or len(ds.time) == 0:
-            return self.plot_empty(name, var_dim)
+            return self.plot_empty(var.full_path, var.dimension)
 
         time_array = ds.time.values
         if time not in time_array:
-            return self.plot_empty(name, var_dim)
+            return self.plot_empty(var.full_path, var.dimension)
+
         time_index = np.where(time_array == time)[0][0]
 
-        if var_dim == Dim.ZERO_D:
+        if var.dimension == Dim.ZERO_D:
             t_vals = time_array[: time_index + 1]
-            v_vals = ds[name].isel(time=slice(0, time_index + 1)).values
+            v_vals = (
+                ds[var.full_path].isel(time=slice(0, time_index + 1)).values
+            )
             return hv.Curve(
-                (t_vals, v_vals), kdims=["time"], vdims=[name]
-            ).opts(title=f"{name} vs time", responsive=True)
-
-        if var_dim == Dim.ONE_D:
-            return self.plot_1d(ds, name, time_index)
-
-        if var_dim == Dim.TWO_D:
-            return self.plot_2d(ds, name, time_index)
+                (t_vals, v_vals), kdims=["time"], vdims=[var.full_path]
+            ).opts(title=f"{var.full_path} vs time", responsive=True)
+        elif var.dimension == Dim.ONE_D:
+            return self.plot_1d(ds, var, time_index)
+        elif var.dimension == Dim.TWO_D:
+            return self.plot_2d(ds, var, time_index)
 
     def __panel__(self) -> Viewable:
         return self._panel
