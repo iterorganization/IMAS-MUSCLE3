@@ -31,7 +31,7 @@ class ResizableFloatPanel(pn.layout.FloatPanel):
             self._content_col, **params
         )
         self._height_offset = height_offset
-        pn.bind(  # type: ignore[no-untyped-call]
+        pn.bind(
             self._sync_size,
             self.param.current_w,
             self.param.current_h,
