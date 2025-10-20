@@ -9,10 +9,6 @@ from imas import DBEntry, ids_defs
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
-from imas_muscle3.visualization.examples.simple_1d_plot.simple_1d_plot import (
-    Plotter,
-    State,
-)
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 """Force 'spawn' start method to avoid deadlocks with pytest."""
@@ -132,7 +128,7 @@ def test_visualization_actor_missing_classes(tmpdir, equilibrium, tmp_path):
     script_path = tmp_path / "bad_plot.py"
     script_path.write_text("class NotState: pass\nclass NotPlotter: pass")
     settings = {"visualization_component.plot_file_path": str(script_path)}
-    expected_error = "must define a 'State' class and a 'Plotter' class"
+    expected_error = "must have a 'State' and a 'Plotter' class."
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
@@ -140,7 +136,7 @@ def test_visualization_actor_bad_state_inheritance(tmpdir, equilibrium, tmp_path
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
-from imas_muscle3.visualization.base import BasePlotter
+from imas_muscle3.visualization.base_plotter import BasePlotter
 class State: pass  # Does not inherit from BaseState
 class Plotter(BasePlotter): pass
 """
@@ -154,7 +150,7 @@ def test_visualization_actor_bad_plotter_inheritance(tmpdir, equilibrium, tmp_pa
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
-from imas_muscle3.visualization.base import BaseState
+from imas_muscle3.visualization.base_state import BaseState
 class State(BaseState): pass
 class Plotter: pass  # Does not inherit from BasePlotter
 """

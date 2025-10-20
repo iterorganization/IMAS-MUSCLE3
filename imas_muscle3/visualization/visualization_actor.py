@@ -24,8 +24,8 @@ class VisualizationActor(param.Parameterized):
         port: int,
         md_dict: Dict[str, IDSToplevel],
         open_browser_on_start: bool,
-        extract_all: bool,
-        automatic_mode: bool,
+        extract_all: bool = False,
+        automatic_mode: bool = False,
     ):
         """Initialize the visualization actor.
 
