@@ -6,7 +6,8 @@ import holoviews as hv
 import param
 import xarray as xr
 
-from imas_muscle3.visualization.base import BasePlotter, BaseState
+from imas_muscle3.visualization.base_plotter import BasePlotter
+from imas_muscle3.visualization.base_state import BaseState
 
 
 class State(BaseState):

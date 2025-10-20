@@ -7,7 +7,8 @@ import panel as pn
 import param
 from imas.ids_toplevel import IDSToplevel
 
-from imas_muscle3.visualization.base import BasePlotter, BaseState
+from imas_muscle3.visualization.base_plotter import BasePlotter
+from imas_muscle3.visualization.base_state import BaseState
 
 logger = logging.getLogger()
 
@@ -24,6 +25,7 @@ class VisualizationActor(param.Parameterized):
         md_dict: Dict[str, IDSToplevel],
         open_browser_on_start: bool,
         extract_all: bool,
+        automatic_mode: bool,
     ):
         """Initialize the visualization actor.
 
@@ -40,8 +42,7 @@ class VisualizationActor(param.Parameterized):
         PlotterClass = run_path.get("Plotter")
         if not StateClass or not PlotterClass:
             raise NameError(
-                f"{plot_file_path} must define a 'State' class and "
-                "a 'Plotter' class."
+                f"{plot_file_path} must have a 'State' and a 'Plotter' class."
             )
         if not issubclass(StateClass, BaseState):
             raise TypeError(
@@ -52,7 +53,9 @@ class VisualizationActor(param.Parameterized):
                 f"'Plotter' in {plot_file_path} must inherit from BasePlotter"
             )
 
-        self.state = StateClass(md_dict, extract_all=extract_all)
+        self.state = StateClass(
+            md_dict, auto=automatic_mode, extract_all=extract_all
+        )
         self.plotter = PlotterClass(self.state)
 
         stop_button = pn.widgets.Button(  # type: ignore[no-untyped-call]
