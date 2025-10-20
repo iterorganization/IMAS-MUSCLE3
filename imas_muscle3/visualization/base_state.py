@@ -5,12 +5,11 @@ from typing import Dict, List
 
 import imas
 import numpy as np
-import panel as pn
 import param
 import xarray as xr
 from imas.ids_data_type import IDSDataType
 from imas.ids_metadata import IDSType
-from imas.ids_primitive import IDSNumericArray
+from imas.ids_primitive import IDSNumericArray, IDSPrimitive
 from imas.ids_toplevel import IDSToplevel
 from imas.util import tree_iter
 
@@ -61,22 +60,24 @@ class BaseState(param.Parameterized):
     def __init__(
         self,
         md_dict: Dict[str, IDSToplevel],
-        auto=False,
+        auto: bool = False,
         extract_all: bool = False,
     ) -> None:
         super().__init__()
         self.extract_all = extract_all
         self.auto = auto
         self.md = md_dict
-        self._discovery_done = set()
+        self._discovery_done: set[str] = set()
 
-    def _get_coord_name(self, path: str, i: int, coord_obj) -> str:
+    def _get_coord_name(
+        self, path: str, i: int, coord_obj: IDSPrimitive
+    ) -> str:
         """Helper to get a coordinate name from metadata or generate one."""
         if isinstance(coord_obj, IDSNumericArray):
             return coord_obj.metadata.name
         return f"{path}_coord{i}"
 
-    def _discover_variables(self, ids: IDSToplevel):
+    def _discover_variables(self, ids: IDSToplevel) -> None:
         """Discovers numerical variables in an IDS and populates the state.
 
         Args:
@@ -132,7 +133,6 @@ class BaseState(param.Parameterized):
                     "Cannot automatically discover more than 1000 quantities, "
                     "only the first 1000 are shown"
                 )
-                pn.state.notifications.error(msg)
                 logger.error(msg)
                 break
 
@@ -143,7 +143,7 @@ class BaseState(param.Parameterized):
             f"Discovered {len(new_variables)} variables in IDS '{ids_name}'."
         )
 
-    def extract_data(self, ids):
+    def extract_data(self, ids: IDSToplevel) -> None:
         if self.auto:
             self.automatic_extract(ids)
         self.extract(ids)
@@ -190,7 +190,7 @@ class BaseState(param.Parameterized):
             elif var.dimension == Dim.TWO_D:
                 self._extract_2d(ids, var)
 
-    def _extract_0d(self, ids: IDSToplevel, var: Variable):
+    def _extract_0d(self, ids: IDSToplevel, var: Variable) -> None:
         """Extracts and stores 0D data.
 
         Args:
@@ -215,7 +215,7 @@ class BaseState(param.Parameterized):
         else:
             self.data[var.full_path] = new_ds
 
-    def _extract_1d(self, ids: IDSToplevel, var: Variable):
+    def _extract_1d(self, ids: IDSToplevel, var: Variable) -> None:
         """Extracts and stores 1D data.
 
         Args:
@@ -246,7 +246,7 @@ class BaseState(param.Parameterized):
         else:
             self.data[var.full_path] = new_ds
 
-    def _extract_2d(self, ids: IDSToplevel, var: Variable):
+    def _extract_2d(self, ids: IDSToplevel, var: Variable) -> None:
         """Extracts and stores 2D data.
 
         Args:

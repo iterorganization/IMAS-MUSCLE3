@@ -58,13 +58,15 @@ class BasePlotter(Viewer):
         self.float_panels = pn.Column(sizing_mode="stretch_width")
 
         if self._state.auto:
-            self.variable_selector = pn.widgets.Select(width=400)
-            self.add_plot_button = pn.widgets.Button(
+            self.variable_selector = pn.widgets.Select(  # type: ignore
+                width=400
+            )
+            self.add_plot_button = pn.widgets.Button(  # type: ignore
                 name="Add Plot",
                 button_type="primary",
                 on_click=self._add_plot_callback,
             )
-            self.close_all_button = pn.widgets.Button(
+            self.close_all_button = pn.widgets.Button(  # type: ignore
                 name="Close All Plots",
                 button_type="danger",
                 on_click=self._close_all_plots_callback,
@@ -78,7 +80,7 @@ class BasePlotter(Viewer):
                 align="center",
             )
 
-            self.filter_input = pn.widgets.TextInput(
+            self.filter_input = pn.widgets.TextInput(  # type: ignore
                 placeholder="Filter...",
                 width=400,
             )
@@ -124,7 +126,7 @@ class BasePlotter(Viewer):
             self.active_state = self._state
             self.time = all_times[-1]
 
-    def _update_filter_view(self, event):
+    def _update_filter_view(self, event: param.Event) -> None:
         """Updates the variable selector based on the filter text."""
         filter_text = self.filter_input.value_input.lower()
         options = [
@@ -134,19 +136,19 @@ class BasePlotter(Viewer):
         ]
         self.variable_selector.options = sorted(options)
 
-    @param.depends("_state.variables", watch=True)
+    @param.depends("_state.variables", watch=True)  # type: ignore[misc]
     def _update_variable_selector(self) -> None:
         """Updates the variable selector when new variables are discovered."""
         self.variable_selector.options = sorted(
             list(self._state.variables.keys())
         )
 
-    def _close_all_plots_callback(self, event) -> None:
+    def _close_all_plots_callback(self, event: param.Event) -> None:
         """Closes all active plot panels."""
         for float_panel in self.float_panels:
             float_panel.status = "closed"
 
-    def _add_plot_callback(self, event) -> None:
+    def _add_plot_callback(self, event: param.Event) -> None:
         """Adds a new plot panel for the selected variable."""
         full_path = self.variable_selector.value
         if not full_path or full_path not in self._state.variables:
@@ -161,7 +163,7 @@ class BasePlotter(Viewer):
         plot_func = functools.partial(
             self._plot_variable_vs_time, full_path=full_path
         )
-        dynamic_plot = pn.pane.HoloViews(
+        dynamic_plot = pn.pane.HoloViews(  # type: ignore[no-untyped-call]
             hv.DynamicMap(param.bind(plot_func, time=self.param.time)).opts(
                 framewise=True, axiswise=True
             ),
@@ -176,21 +178,23 @@ class BasePlotter(Viewer):
             contained=False,
         )
 
-        def on_status_change(event):
+        def on_status_change(event: param.Event) -> None:
             if event.new == "closed":
                 self._floatpanel_closed_callback(full_path)
 
         float_panel.param.watch(on_status_change, "status")
         self.float_panels.append(float_panel)
 
-    def _floatpanel_closed_callback(self, full_path: str, event=None) -> None:
+    def _floatpanel_closed_callback(
+        self, full_path: str, event: param.Event = None
+    ) -> None:
         """Handles cleanup when a plot panel is closed."""
         if full_path in self._state.variables:
             var = self._state.variables[full_path]
             var.is_visualized = False
             self._state.data.pop(var.full_path, None)
 
-    def plot_empty(self, name: str, var_dim: Dim):
+    def plot_empty(self, name: str, var_dim: Dim) -> hv.Element:
         """Returns an empty plot to show when no data is available."""
         title = f"No data for t = {self.time}"
         if var_dim == Dim.TWO_D:
@@ -203,7 +207,9 @@ class BasePlotter(Viewer):
             title=title, responsive=True
         )
 
-    def plot_1d(self, ds: xr.Dataset, var: Variable, time_index: int):
+    def plot_1d(
+        self, ds: xr.Dataset, var: Variable, time_index: int
+    ) -> hv.Element:
         """Generates a 1D plot for a given time index."""
         data_var = ds[var.full_path].isel(time=time_index).values
         coord_name = var.coord_names[0]
@@ -215,7 +221,9 @@ class BasePlotter(Viewer):
             (coord_var, data_var), kdims=[coord_name], vdims=[var.full_path]
         ).opts(title=title, responsive=True)
 
-    def plot_2d(self, ds: xr.Dataset, var: Variable, time_index: int):
+    def plot_2d(
+        self, ds: xr.Dataset, var: Variable, time_index: int
+    ) -> hv.Element:
         """Generates a 2D plot for a given time index."""
         y_name, x_name = var.coord_names
         data_var = ds[var.full_path].isel(time=time_index).values
@@ -237,7 +245,9 @@ class BasePlotter(Viewer):
             ylabel=y_name,
         )
 
-    def _plot_variable_vs_time(self, full_path: str, time: float):
+    def _plot_variable_vs_time(
+        self, full_path: str, time: float
+    ) -> hv.Element:
         """Core plotting function that dispatches to specific plot types."""
         var = self.active_state.variables.get(full_path)
         if not var:
