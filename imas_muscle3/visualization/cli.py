@@ -1,5 +1,5 @@
 """
-Standalone IMAS Visualization Interface - Fixed Version
+Standalone IMAS Visualization Interface
 """
 
 import logging
@@ -31,7 +31,7 @@ def feed_data(
 
             for t in times:
                 ids = entry.get_slice(ids_name, t, ids_defs.CLOSEST_INTERP)
-                visualization_actor.state.extract(ids)
+                visualization_actor.state.extract_data(ids)
                 visualization_actor.update_time(ids.time[-1])
 
                 current_time = time.time()
@@ -39,7 +39,7 @@ def feed_data(
                     visualization_actor.state.param.trigger("data")
                     last_trigger_time = current_time
 
-                # FIXME:
+                # FIXME: panel doesn't load if we do not add sleep
                 time.sleep(0.01)
 
             visualization_actor.state.param.trigger("data")
@@ -54,13 +54,22 @@ def feed_data(
 @click.argument("ids_name", type=str)
 @click.argument("plot_file_path", type=click.Path(exists=True))
 @click.option(
-    "--port", default=5006, show_default=True, help="Port to run Panel server on."
+    "--port",
+    default=5006,
+    show_default=True,
+    help="Port to run Panel server on.",
+)
+@click.option(
+    "--automatic-mode",
+    default=False,
+    is_flag=True,
+    help="Automatically discover and visualize time-dependent quantities.",
 )
 @click.option(
     "--extract-all",
     default=False,
     is_flag=True,
-    help="Extract all time-dependent IDS data on load.",
+    help="Extract all time-dependent IDS data in automatic mode.",
 )
 @click.option(
     "--throttle-interval",
@@ -73,13 +82,17 @@ def main(
     ids_name: str,
     plot_file_path: str,
     port: int,
+    automatic_mode: bool,
     extract_all: bool,
     throttle_interval: float,
-):
-    """CLI to run the visualization actor as standalone application, without needing MUSCLE3.
+) -> None:
+    """CLI to run the visualization actor as standalone application,
+    without needing MUSCLE3.
 
     Example:
-        python visualize_standalone.py "imas:hdf5?path=/path/to/data" equilibrium /path/to/plot_file.py
+
+        python cli.py "imas:hdf5?path=/path/to/data" equilibrium
+            /path/to/plot_file.py
     """
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -90,6 +103,7 @@ def main(
         md_dict={},
         port=port,
         open_browser_on_start=True,
+        automatic_mode=automatic_mode,
         extract_all=extract_all,
     )
 
