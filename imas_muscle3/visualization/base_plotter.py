@@ -34,7 +34,6 @@ class BasePlotter(Viewer):
     )
 
     def __init__(self, state: BaseState) -> None:
-        self.ui = pn.Column()
         super().__init__(_state=state)
         self._frozen_state = None
         self.active_state = self._state
@@ -50,23 +49,26 @@ class BasePlotter(Viewer):
             value=0.0,
             visible=self.param._live_view.rx.not_(),
         )
-        self.time_label = pn.pane.Markdown("")  # type: ignore[no-untyped-call]
+        self.time_label = pn.pane.Markdown(  # type: ignore[no-untyped-call]
+            visible=self.param._live_view.rx.bool()
+        )
         controls = pn.Row(
             self.live_view_checkbox, self.time_slider_widget, self.time_label
         )
         plots = self.get_dashboard()
         self.float_panels = pn.Column(sizing_mode="stretch_width")
 
+        ui = pn.Row()
         if self._state.auto:
             self.variable_selector = pn.widgets.Select(  # type: ignore
                 width=400
             )
-            self.add_plot_button = pn.widgets.Button(  # type: ignore
+            add_plot_button = pn.widgets.Button(  # type: ignore
                 name="Add Plot",
                 button_type="primary",
                 on_click=self._add_plot_callback,
             )
-            self.close_all_button = pn.widgets.Button(  # type: ignore
+            close_all_button = pn.widgets.Button(  # type: ignore
                 name="Close All Plots",
                 button_type="danger",
                 on_click=self._close_all_plots_callback,
@@ -74,8 +76,8 @@ class BasePlotter(Viewer):
 
             self.plotting_controls = pn.Row(
                 self.variable_selector,
-                self.add_plot_button,
-                self.close_all_button,
+                add_plot_button,
+                close_all_button,
                 sizing_mode="stretch_width",
                 align="center",
             )
@@ -87,8 +89,14 @@ class BasePlotter(Viewer):
             self.filter_input.param.watch(
                 self._update_filter_view, "value_input"
             )
-            self.ui.extend([self.filter_input, self.plotting_controls])
-        self._panel = pn.Column(controls, self.ui, plots, self.float_panels)
+            automatic_ui = pn.Column(
+                self.filter_input,
+                self.variable_selector,
+                pn.Row(add_plot_button, close_all_button),
+            )
+            ui.append(automatic_ui)
+        ui.append(controls)
+        self._panel = pn.Column(ui, plots, self.float_panels)
 
     def get_dashboard(self) -> Viewable:
         """Return Panel layout for the visualization."""
@@ -106,7 +114,7 @@ class BasePlotter(Viewer):
 
     @param.depends("time", watch=True)  # type: ignore[misc]
     def update_time_label(self) -> None:
-        self.time_label.object = f"## showing t = {self.time:.5e} s"
+        self.time_label.object = f"## t = {self.time:.5e} s"
 
     @param.depends("_state.data", watch=True)  # type: ignore[misc]
     def _update_on_new_data(self) -> None:
