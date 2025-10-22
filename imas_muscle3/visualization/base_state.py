@@ -1,17 +1,18 @@
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 import imas
 import numpy as np
 import param
 import xarray as xr
+from imas.ids_base import IDSBase
 from imas.ids_data_type import IDSDataType
 from imas.ids_metadata import IDSType
 from imas.ids_primitive import IDSNumericArray, IDSPrimitive
+from imas.ids_structure import IDSStructure
 from imas.ids_toplevel import IDSToplevel
-from imas.util import tree_iter
 
 logger = logging.getLogger()
 
@@ -69,6 +70,38 @@ class BaseState(param.Parameterized):
         self.md = md_dict
         self._discovery_done: set[str] = set()
 
+    def tree_iter(self, node: IDSBase) -> Iterator[IDSBase]:
+        if not isinstance(node, IDSPrimitive):
+            yield from self._tree_iter(node)
+
+    def _tree_iter(self, node: IDSBase) -> Iterator[IDSBase]:
+        iterator = node
+        if isinstance(node, IDSStructure):
+            # Only iterate over non-empty nodes
+            iterator = node.iter_nonempty_()
+
+        for child in iterator:
+            # FIXME: Panel crashes when too many quantities are discovered.
+            # As GGDs can generate tens of thousands of time dependent
+            # quantities, it is skipped for now.
+            structure_reference = getattr(
+                child.metadata, "structure_reference", None
+            )
+            if (
+                structure_reference
+                in (
+                    "generic_grid_dynamic",
+                    "generic_grid_aos3_root",
+                    "grid",
+                )
+                or child.metadata.name == "ggd"
+            ):
+                continue
+            if isinstance(child, IDSPrimitive):
+                yield child
+            else:
+                yield from self._tree_iter(child)
+
     def _get_coord_name(
         self, path: str, i: int, coord_obj: IDSPrimitive
     ) -> str:
@@ -86,7 +119,7 @@ class BaseState(param.Parameterized):
         ids_name = ids.metadata.name
         logger.info(f"Discovering float variables in IDS '{ids_name}'...")
         new_variables = {}
-        for node in tree_iter(ids, leaf_only=True):
+        for node in self.tree_iter(ids):
             metadata = node.metadata
             # Only discover time-dependent 0D, 1D and 2D FLT quantities
             if (
@@ -126,15 +159,6 @@ class BaseState(param.Parameterized):
                 dimension=dim,
                 coord_names=coord_names,
             )
-
-            # FIXME: panel crashes when too many quantities are discovered
-            if len(new_variables) >= 1000:
-                msg = (
-                    "Cannot automatically discover more than 1000 quantities, "
-                    "only the first 1000 are shown"
-                )
-                logger.error(msg)
-                break
 
         self.variables.update(new_variables)
         self.param.trigger("variables")
@@ -229,6 +253,32 @@ class BaseState(param.Parameterized):
         coord_name = var.coord_names[0]
         coords = np.array(coords_obj, dtype=float)
 
+        current_size = len(arr)
+
+        if var.full_path in self.data:
+            existing_ds = self.data[var.full_path]
+            existing_size = existing_ds.sizes["i"]
+            max_size = max(existing_size, current_size)
+
+            # Pad new data if needed
+            if current_size < max_size:
+                arr = np.pad(
+                    arr, (0, max_size - current_size), constant_values=np.nan
+                )
+                coords = np.pad(
+                    coords,
+                    (0, max_size - current_size),
+                    constant_values=np.nan,
+                )
+
+            # Pad existing data if needed
+            if existing_size < max_size:
+                self.data[var.full_path] = existing_ds.pad(
+                    i=(0, max_size - existing_size),
+                    mode="constant",
+                    constant_values=np.nan,
+                )
+
         new_ds = xr.Dataset(
             {
                 var.full_path: (("time", "i"), arr[np.newaxis, :]),
@@ -239,6 +289,7 @@ class BaseState(param.Parameterized):
             },
             coords={"time": [current_time]},
         )
+
         if var.full_path in self.data:
             self.data[var.full_path] = xr.concat(
                 [self.data[var.full_path], new_ds], dim="time"
