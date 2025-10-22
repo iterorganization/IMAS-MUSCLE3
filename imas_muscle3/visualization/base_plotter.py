@@ -59,6 +59,8 @@ class BasePlotter(Viewer):
         self.float_panels = pn.Column(sizing_mode="stretch_width")
 
         ui = pn.Row()
+
+        # Add UI elements for automatic mic
         if self._state.auto:
             self.variable_selector = pn.widgets.Select(  # type: ignore
                 width=400
@@ -73,7 +75,6 @@ class BasePlotter(Viewer):
                 button_type="danger",
                 on_click=self._close_all_plots_callback,
             )
-
             self.plotting_controls = pn.Row(
                 self.variable_selector,
                 add_plot_button,
@@ -81,7 +82,6 @@ class BasePlotter(Viewer):
                 sizing_mode="stretch_width",
                 align="center",
             )
-
             self.filter_input = pn.widgets.TextInput(  # type: ignore
                 placeholder="Filter...",
                 width=400,
@@ -114,10 +114,12 @@ class BasePlotter(Viewer):
 
     @param.depends("time", watch=True)  # type: ignore[misc]
     def update_time_label(self) -> None:
+        """Updates the time label in the UI."""
         self.time_label.object = f"## t = {self.time:.5e} s"
 
     @param.depends("_state.data", watch=True)  # type: ignore[misc]
     def _update_on_new_data(self) -> None:
+        """Updates time slider options when new data is added to the state."""
         if not self._state.data:
             return
         all_times = sorted(

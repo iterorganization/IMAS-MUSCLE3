@@ -71,13 +71,19 @@ class BaseState(param.Parameterized):
         self._discovery_done: set[str] = set()
 
     def tree_iter(self, node: IDSBase) -> Iterator[IDSBase]:
+        """Tree iterator that iterates through all leaf nodes, and
+        skips grid_ggd and ggd quantities.
+
+        Args:
+            node: Node to start iterating from.
+        """
         if not isinstance(node, IDSPrimitive):
             yield from self._tree_iter(node)
 
     def _tree_iter(self, node: IDSBase) -> Iterator[IDSBase]:
+        """Implement :func:`tree_iter` recursively."""
         iterator = node
         if isinstance(node, IDSStructure):
-            # Only iterate over non-empty nodes
             iterator = node.iter_nonempty_()
 
         for child in iterator:
@@ -168,23 +174,31 @@ class BaseState(param.Parameterized):
         )
 
     def extract_data(self, ids: IDSToplevel) -> None:
+        """Extract data from an IDS and store it into the data object.
+
+        Args:
+            ids: The IDS to extract data from.
+        """
         if self.auto:
             self.automatic_extract(ids)
         self.extract(ids)
 
     def extract(self, ids: IDSToplevel) -> None:
-        """Extract data from an IDS and store it into a state object. Must be
+        """Extract data from an IDS and store it into the data object. Must be
         implemented by subclasses.
 
         Args:
-            ids: An IDS containing simulation results.
+            ids: The IDS to extract data from.
         """
         raise NotImplementedError(
             "A state class needs to implement an `extract` method"
         )
 
     def automatic_extract(self, ids: IDSToplevel) -> None:
-        """Extracts data for visualized variables from the given IDS.
+        """Automatically extract data for visualized variables from the
+        given IDS. If extract_all is enabled, data for all discovered
+        variables will be extracted, otherwise, only currently visualized
+        data will be extracted.
 
         Args:
             ids: The IDS to extract data from.

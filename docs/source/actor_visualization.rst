@@ -43,6 +43,7 @@ Available Settings
   - ***automatic_extract_all***: (bool) This only works if automatic_mode is enabled. 
     If `True`, automatically extracts all time dependent quantities of the IDS. 
     If `False`, the data will only start to be extracted as soon as a new plot is selected. 
+    Enabling this can cause significant computation and memory overhead, depending on the size of the IDS.
 
 Available Ports
 ---------------
