@@ -17,6 +17,9 @@ To use the visualization actor, include it in the ymmsl file:
       executable: python
       args: -u -m imas_muscle3.actors.visualization_component
 
+.. warning::
+    The visualization actor is still in a prototype state and may not always behave as expected!
+
 Available Settings
 ------------------
 
@@ -34,6 +37,13 @@ Available Settings
     If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
   - ***open_browser***: (bool) If `True`, automatically opens a new tab in your web 
     browser to the visualization page upon starting. Defaults to `True`.
+  - ***automatic_mode***: (bool) If `True`, time-dependent IDS quantities can automatically
+    be visualized using a dropdown menu. Data will automatically be extracted, and an
+    appropriate plot for the quantity will be selected.
+  - ***automatic_extract_all***: (bool) This only works if automatic_mode is enabled. 
+    If `True`, automatically extracts all time dependent quantities of the IDS. 
+    If `False`, the data will only start to be extracted as soon as a new plot is selected. 
+    Enabling this can cause significant computation and memory overhead, depending on the size of the IDS.
 
 Available Ports
 ---------------

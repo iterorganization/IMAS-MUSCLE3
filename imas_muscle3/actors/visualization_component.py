@@ -19,7 +19,7 @@ from imas_muscle3.visualization.visualization_actor import VisualizationActor
 logger = logging.getLogger()
 
 
-pn.extension()
+pn.extension(notifications=True)
 hv.extension("bokeh")
 
 
@@ -69,10 +69,26 @@ def main() -> None:
             )
             keep_alive = get_setting_optional(instance, "keep_alive", False)
             open_browser = get_setting_optional(instance, "open_browser", True)
+            automatic_mode = get_setting_optional(
+                instance, "automatic_mode", False
+            )
+            extract_all = get_setting_optional(
+                instance, "automatic_extract_all", False
+            )
             md_dict = handle_machine_description(instance)
-            assert port is not None and open_browser is not None
+            assert (
+                port is not None
+                and open_browser is not None
+                and extract_all is not None
+                and automatic_mode is not None
+            )
             visualization_actor = VisualizationActor(
-                plot_file_path, port, md_dict, open_browser
+                plot_file_path,
+                port,
+                md_dict,
+                open_browser,
+                extract_all,
+                automatic_mode,
             )
             first_run = False
         assert (
@@ -100,7 +116,7 @@ def main() -> None:
                             f"Time mismatch detected in IDS {ids_name}"
                         )
 
-                visualization_actor.state.extract(temp_ids)
+                visualization_actor.state.extract_data(temp_ids)
                 if msg.next_timestamp is None:
                     is_running = False
             current_time = time.time()
@@ -109,6 +125,7 @@ def main() -> None:
                 last_trigger_time = current_time
             visualization_actor.update_time(temp_ids.time[-1])
 
+        visualization_actor.state.param.trigger("data")
         if keep_alive:
             visualization_actor.notify_done()
         else:

@@ -18,7 +18,8 @@ import panel as pn
 import param
 import xarray as xr
 
-from imas_muscle3.visualization.base import BasePlotter, BaseState
+from imas_muscle3.visualization.base_plotter import BasePlotter
+from imas_muscle3.visualization.base_state import BaseState
 
 logger = logging.getLogger()
 
@@ -264,7 +265,7 @@ class Plotter(BasePlotter):
         )
         return rects * paths
 
-    @pn.depends("time_index", "levels")
+    @pn.depends("time", "levels")
     def _plot_contours(self):
         """Generates contour plot for poloidal flux.
 
@@ -275,7 +276,7 @@ class Plotter(BasePlotter):
         if state is None:
             contours = hv.Contours(([0], [0], 0), vdims="psi")
         else:
-            selected_data = state.isel(time=self.time_index)
+            selected_data = state.sel(time=self.time)
             contours = self._calc_contours(selected_data, self.levels)
         return contours.opts(self.CONTOUR_OPTS)
 
@@ -315,7 +316,7 @@ class Plotter(BasePlotter):
                     )
         return segments
 
-    @pn.depends("time_index")
+    @pn.depends("time")
     def _plot_separatrix(self):
         """Plots the separatrix from the equilibrium boundary.
 
@@ -328,7 +329,7 @@ class Plotter(BasePlotter):
             r = z = []
             contour = hv.Contours(([0], [0], 0), vdims="psi")
         else:
-            selected_data = state.isel(time=self.time_index)
+            selected_data = state.sel(time=self.time)
             r = selected_data.r
             z = selected_data.z
 
@@ -382,7 +383,7 @@ class Plotter(BasePlotter):
             hover_tooltips=[("", "@name")],
         )
 
-    @pn.depends("time_index")
+    @pn.depends("time")
     def _plot_xo_points(self):
         """Plots X-points and O-points from the equilibrium.
 
@@ -394,7 +395,7 @@ class Plotter(BasePlotter):
 
         equilibrium = self.active_state.data.get("equilibrium")
         if equilibrium is not None:
-            selected_data = equilibrium.isel(time=self.time_index)
+            selected_data = equilibrium.sel(time=self.time)
 
             # Extract X-points
             x_r = selected_data.x_points_r.values
@@ -422,14 +423,14 @@ class Plotter(BasePlotter):
         )
         return o_scatter * x_scatter
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_f_df_dpsi_profile(self):
         xlabel = "Psi"
         ylabel = "ff'"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            selected_data = state.isel(time=self.time_index)
+            selected_data = state.sel(time=self.time)
             psi = selected_data.psi_profile
             f_df_dpsi = selected_data.f_df_dpsi
             title = "ff' profile"
@@ -440,14 +441,14 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=600, title=title
         )
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_dpressure_dpsi(self):
         xlabel = "Psi"
         ylabel = "p'"
         state = self.active_state.data.get("equilibrium")
 
         if state:
-            selected_data = state.isel(time=self.time_index)
+            selected_data = state.sel(time=self.time)
             psi = selected_data.psi_profile
             dpressure_dpsi = selected_data.dpressure_dpsi
             title = "p' profile"
@@ -458,19 +459,18 @@ class Plotter(BasePlotter):
             framewise=True, height=300, width=600, title=title
         )
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_coil_currents(self):
         state = self.active_state.data.get("pf_active")
         xlabel = "Time [s]"
         ylabel = "Coil currents [A]"
 
         if state:
-            time = state.time[: self.time_index + 1]
+            mask = state.time <= self.time
+            time = state.time[mask]
             curves = []
             for coil in state.coil.values:
-                current = state.currents.sel(coil=coil)[
-                    : self.time_index + 1
-                ].values
+                current = state.currents.sel(coil=coil)[mask].values
                 curve = hv.Curve(
                     (time, current), xlabel, ylabel, label=str(coil)
                 ).opts(
@@ -483,16 +483,19 @@ class Plotter(BasePlotter):
 
         return hv.Overlay(curves).opts(height=450, width=1200)
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_f_df_dpsi_2d(self):
         state = self.active_state.data.get("equilibrium")
         ylabel = "Time [s]"
         xlabel = "psi"
 
         if state:
-            times = state.time.values[: self.time_index + 1]
-            psi = state.psi_profile.values[self.time_index]
-            f_df_dpsi = state.f_df_dpsi.values[: self.time_index + 1, :]
+            mask = state.time <= self.time
+            times = state.time.values[mask]
+            psi = state.sel(
+                time=self.time, method="nearest"
+            ).psi_profile.values
+            f_df_dpsi = state.f_df_dpsi.sel(time=mask).values
             title = "ff' over time"
         else:
             times = np.array([0, 1])
@@ -515,18 +518,19 @@ class Plotter(BasePlotter):
             title=title,
         )
 
-    @param.depends("time_index")
+    @param.depends("time")
     def plot_dpressure_dpsi_2d(self):
         state = self.active_state.data.get("equilibrium")
         ylabel = "Time [s]"
         xlabel = "psi"
 
         if state:
-            times = state.time.values[: self.time_index + 1]
-            psi = state.psi_profile.values[self.time_index]
-            dpressure_dpsi = state.dpressure_dpsi.values[
-                : self.time_index + 1, :
-            ]
+            mask = state.time <= self.time
+            times = state.time.values[mask]
+            psi = state.sel(
+                time=self.time, method="nearest"
+            ).psi_profile.values
+            dpressure_dpsi = state.dpressure_dpsi.sel(time=mask).values
             title = "p' over time"
         else:
             times = np.array([0, 1])
