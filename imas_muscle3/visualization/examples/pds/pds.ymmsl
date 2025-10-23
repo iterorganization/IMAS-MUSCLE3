@@ -13,8 +13,7 @@ model:
     visualization_component:
       implementation: visualization_component
       ports:
-        f_init: [pf_active_md_in, wall_md_in]
-        s: [equilibrium_in, pf_active_in]
+        s: [equilibrium_in, pf_active_in, pf_active_md_in, wall_md_in]
   conduits:
     source_component.equilibrium_out: visualization_component.equilibrium_in
     source_component.pf_active_out: visualization_component.pf_active_in
