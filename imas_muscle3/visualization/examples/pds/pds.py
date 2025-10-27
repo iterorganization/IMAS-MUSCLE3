@@ -159,11 +159,6 @@ class State(BaseState):
 
 
 class Plotter(BasePlotter):
-    WIDTH = 800
-    HEIGHT = 1000
-
-    PROFILE_WIDTH = 350
-    PROFILE_HEIGHT = 350
     DEFAULT_OPTS = hv.opts.Overlay(
         xlim=(0, 13),
         ylim=(-10, 10),
@@ -180,7 +175,9 @@ class Plotter(BasePlotter):
     )
     DESIRED_SHAPE_OPTS = hv.opts.Curve(color="blue")
 
-    levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
+    levels = param.Integer(
+        default=20, bounds=(1, 100), doc="Number of contour levels"
+    )
 
     def get_dashboard(self):
         # Create poloidal flux plot
@@ -199,7 +196,7 @@ class Plotter(BasePlotter):
             hv.Overlay(flux_map_elements).collate().opts(self.DEFAULT_OPTS)
         )
 
-        coil_currents = hv.DynamicMap(self.plot_coil_currents)
+        coil_currents = self.make_coil_current_plots()
         f_df_dpsi = hv.DynamicMap(self.plot_f_df_dpsi_profile)
         dpressure_dpsi = hv.DynamicMap(self.plot_dpressure_dpsi)
         ip = hv.DynamicMap(self.plot_ip)
@@ -208,9 +205,7 @@ class Plotter(BasePlotter):
         return pn.Row(
             pn.Column(
                 contour_slider,
-                pn.pane.HoloViews(
-                    flux_map_overlay, width=self.WIDTH, height=self.HEIGHT
-                ),
+                pn.pane.HoloViews(flux_map_overlay, width=800, height=1000),
             ),
             pn.Column(
                 pn.Row(f_df_dpsi, dpressure_dpsi),
@@ -247,8 +242,14 @@ class Plotter(BasePlotter):
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
-                                (annulus.r + annulus.radius_outer * np.cos(phi)),
-                                (annulus.z + annulus.radius_outer * np.sin(phi)),
+                                (
+                                    annulus.r
+                                    + annulus.radius_outer * np.cos(phi)
+                                ),
+                                (
+                                    annulus.z
+                                    + annulus.radius_outer * np.sin(phi)
+                                ),
                                 name,
                             )
                         )
@@ -319,7 +320,9 @@ class Plotter(BasePlotter):
         for i, level in enumerate(tricontour.levels):
             for seg in tricontour.allsegs[i]:
                 if len(seg) > 1:
-                    segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
+                    segments.append(
+                        {"x": seg[:, 0], "y": seg[:, 1], "psi": level}
+                    )
         return segments
 
     @pn.depends("time")
@@ -444,7 +447,7 @@ class Plotter(BasePlotter):
             psi, f_df_dpsi, title = [], [], "Waiting for data..."
 
         return hv.Curve((psi, f_df_dpsi), xlabel, ylabel).opts(
-            framewise=True, height=300, width=600, title=title
+            framewise=True, height=200, width=600, title=title
         )
 
     @param.depends("time")
@@ -462,30 +465,50 @@ class Plotter(BasePlotter):
             psi, dpressure_dpsi, title = [], [], "Waiting for data..."
 
         return hv.Curve((psi, dpressure_dpsi), xlabel, ylabel).opts(
-            framewise=True, height=300, width=600, title=title
+            framewise=True, height=200, width=600, title=title
         )
 
-    @param.depends("time")
-    def plot_coil_currents(self):
-        state = self.active_state.data.get("pf_active")
-        xlabel = "Time [s]"
-        ylabel = "Coil currents [A]"
+    def make_coil_current_plots(self):
+        coil_maps = []
+        width = 300
+        height = 150
+        for coil_idx in range(14):
 
-        if state:
-            mask = state.time <= self.time
-            time = state.time[mask]
-            curves = []
-            for coil in state.coil.values:
-                current = state.currents.sel(coil=coil)[mask].values
-                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
-                    framewise=True,
-                    title="coil currents over time",
-                )
-                curves.append(curve)
-        else:
-            curves = [hv.Curve(([0], [0]), xlabel, ylabel)]
+            def _make_coil_current_dmap(idx):
+                @pn.depends(self.param.time)
+                def _coil_curve(time):
+                    s = self.active_state.data.get("pf_active")
+                    if s is None:
+                        return hv.Curve(
+                            ([0], [0]),
+                            kdims=[f"time_{idx}"],
+                            vdims=[f"current_{idx}"],
+                        ).opts(
+                            xlabel="Time [s]",
+                            ylabel="Current [A]",
+                            framewise=True,
+                            height=height,
+                            width=width,
+                        )
+                    t = s.time[s.time <= time].values
+                    coil_name = s.coil.values[idx]
+                    i = s.currents.sel(coil=coil_name)[s.time <= time].values
+                    return hv.Curve(
+                        (t, i), kdims=[f"time_{idx}"], vdims=[f"current_{idx}"]
+                    ).opts(
+                        xlabel="Time [s]",
+                        ylabel="Current [A]",
+                        framewise=True,
+                        height=height,
+                        width=width,
+                        title=str(coil_name),
+                    )
 
-        return hv.Overlay(curves).opts(height=450, width=1200)
+                return hv.DynamicMap(_coil_curve)
+
+            coil_maps.append(_make_coil_current_dmap(coil_idx))
+
+        return pn.GridBox(*coil_maps, ncols=4)
 
     @param.depends("time")
     def plot_ip(self):
@@ -505,7 +528,7 @@ class Plotter(BasePlotter):
 
         return hv.Curve((time, ip), xlabel, ylabel).opts(
             framewise=True,
-            height=300,
+            height=200,
             width=600,
             title=title,
         )
@@ -528,7 +551,7 @@ class Plotter(BasePlotter):
 
         return hv.Curve((time, beta_tor), xlabel, ylabel).opts(
             framewise=True,
-            height=300,
+            height=200,
             width=600,
             title=title,
         )
