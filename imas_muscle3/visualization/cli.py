@@ -7,8 +7,8 @@ import threading
 import time
 
 import click
+import imas
 import panel as pn
-from imas import DBEntry, ids_defs
 
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
@@ -18,29 +18,40 @@ pn.extension(notifications=True)
 
 def feed_data(
     uri: str,
-    ids_name: str,
     visualization_actor: VisualizationActor,
     throttle_interval: float,
 ) -> None:
-    """Continuously feed data into the visualization actor from an IDS."""
+    """Continuously feed data into the visualization actor from an IDS.
+
+    Args:
+        uri: URI to load IDSs from.
+        visualization_actor: The visualization actor object to visualize the data with.
+        throttle_interval: Interval for how often the UI data is updated.
+    """
+
+    first_run = True
     try:
-        with DBEntry(uri, "r") as entry:
-            ids = entry.get(ids_name, lazy=True)
-            times = ids.time
+        with imas.DBEntry(uri, "r") as entry:
+            ids_in_entry = get_available_ids(entry)
             last_trigger_time = 0.0
+            for ids_name in ids_in_entry:
+                if first_run:
+                    ids = entry.get(ids_name, lazy=True)
+                    times = ids.time
+                    first_run = False
 
-            for t in times:
-                ids = entry.get_slice(ids_name, t, ids_defs.CLOSEST_INTERP)
-                visualization_actor.state.extract_data(ids)
-                visualization_actor.update_time(ids.time[-1])
+                for t in times:
+                    ids = entry.get_slice(ids_name, t, imas.ids_defs.CLOSEST_INTERP)
+                    visualization_actor.state.extract_data(ids)
+                    visualization_actor.update_time(ids.time[-1])
 
-                current_time = time.time()
-                if current_time - last_trigger_time >= throttle_interval:
-                    visualization_actor.state.param.trigger("data")
-                    last_trigger_time = current_time
+                    current_time = time.time()
+                    if current_time - last_trigger_time >= throttle_interval:
+                        visualization_actor.state.param.trigger("data")
+                        last_trigger_time = current_time
 
-                # FIXME: panel doesn't load if we do not add sleep
-                time.sleep(0.01)
+                    # FIXME: panel doesn't load if we do not add sleep
+                    time.sleep(0.01)
 
             visualization_actor.state.param.trigger("data")
             visualization_actor.notify_done()
@@ -49,15 +60,65 @@ def feed_data(
         logger.error(f"Error in data feeder thread: {e}", exc_info=True)
 
 
+def get_available_ids(entry):
+    """Return list of availble IDS names in an IMAS entry.
+
+    Args:
+        entry: The IMAS entry to check for available IDSs.
+
+    Returns:
+        List of available IDS names.
+    """
+    factory = entry.factory
+    ids_names = factory.ids_names()
+    ids_in_entry = []
+    for ids_name in ids_names:
+        try:
+            entry.get(ids_name, lazy=True)
+            ids_in_entry.append(ids_name)
+        except imas.exception.DataEntryException:
+            pass
+    return ids_in_entry
+
+
+def create_md_dict(md):
+    """Convert --md args into a dictionary of IDS objects.
+
+    Args:
+        md: Tuple of md cli arguments like 'ids_name=imas_uri'.
+
+    Returns:
+        Dictionary containing mapping from IDS name to IDS object.
+    """
+    md_dict = {}
+    print(md)
+    for entry in md:
+        if "=" not in entry:
+            raise click.BadParameter(
+                f"Invalid machine description entry '{entry}'. Expected format name=uri"
+            )
+        ids_name, value = entry.split("=", 1)
+        md_uri = value.strip()
+        with imas.DBEntry(md_uri, "r") as dbentry:
+            md_ids = dbentry.get(ids_name)
+        md_dict[ids_name.strip()] = md_ids
+    return md_dict
+
+
 @click.command()
 @click.argument("uri", type=str)
-@click.argument("ids_name", type=str)
 @click.argument("plot_file_path", type=click.Path(exists=True))
 @click.option(
     "--port",
     default=5006,
     show_default=True,
     help="Port to run Panel server on.",
+)
+@click.option(
+    "--md",
+    multiple=True,
+    type=str,
+    help="Machine description mapping from IDS name to URI, e.g. --md wall=imas:hdf5?path=/path/to/file --md pf_active=imas:hdf5?path=/path/to/other",
 )
 @click.option(
     "--automatic-mode",
@@ -79,7 +140,7 @@ def feed_data(
 )
 def main(
     uri: str,
-    ids_name: str,
+    md: tuple[str],
     plot_file_path: str,
     port: int,
     automatic_mode: bool,
@@ -91,16 +152,16 @@ def main(
 
     Example:
 
-        python cli.py "imas:hdf5?path=/path/to/data" equilibrium
-            /path/to/plot_file.py
+        python cli.py imas:hdf5?path=/path/to/data /path/to/plot_file.py
     """
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
     )
 
+    md_dict = create_md_dict(md)
     visualization_actor = VisualizationActor(
         plot_file_path=plot_file_path,
-        md_dict={},
+        md_dict=md_dict,
         port=port,
         open_browser_on_start=True,
         automatic_mode=automatic_mode,
@@ -109,12 +170,11 @@ def main(
 
     feeder_thread = threading.Thread(
         target=feed_data,
-        args=(uri, ids_name, visualization_actor, throttle_interval),
+        args=(uri, visualization_actor, throttle_interval),
         daemon=False,
     )
     logger.info("Waiting for browser to load...")
     time.sleep(3)
-    logger.info(f"Loading {ids_name} from {uri}...")
     feeder_thread.start()
 
     try:
