@@ -5,10 +5,12 @@ Standalone IMAS Visualization Interface
 import logging
 import threading
 import time
+from typing import Dict, List, Tuple
 
 import click
 import imas
 import panel as pn
+from imas.ids_toplevel import IDSToplevel
 
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
@@ -25,8 +27,8 @@ def feed_data(
 
     Args:
         uri: URI to load IDSs from.
-        visualization_actor: The visualization actor object to visualize the data with.
-        throttle_interval: Interval for how often the UI data is updated.
+        visualization_actor: The visualization actor object.
+        throttle_interval: Interval how often the UI data is updated.
     """
 
     first_run = True
@@ -41,7 +43,9 @@ def feed_data(
                     first_run = False
 
                 for t in times:
-                    ids = entry.get_slice(ids_name, t, imas.ids_defs.CLOSEST_INTERP)
+                    ids = entry.get_slice(
+                        ids_name, t, imas.ids_defs.CLOSEST_INTERP
+                    )
                     visualization_actor.state.extract_data(ids)
                     visualization_actor.update_time(ids.time[-1])
 
@@ -60,7 +64,7 @@ def feed_data(
         logger.error(f"Error in data feeder thread: {e}", exc_info=True)
 
 
-def get_available_ids(entry):
+def get_available_ids(entry: imas.DBEntry) -> List[str]:
     """Return list of availble IDS names in an IMAS entry.
 
     Args:
@@ -81,7 +85,7 @@ def get_available_ids(entry):
     return ids_in_entry
 
 
-def create_md_dict(md):
+def create_md_dict(md: Tuple[str]) -> Dict[str, IDSToplevel]:
     """Convert --md args into a dictionary of IDS objects.
 
     Args:
@@ -91,11 +95,11 @@ def create_md_dict(md):
         Dictionary containing mapping from IDS name to IDS object.
     """
     md_dict = {}
-    print(md)
     for entry in md:
         if "=" not in entry:
             raise click.BadParameter(
-                f"Invalid machine description entry '{entry}'. Expected format name=uri"
+                f"Invalid machine description entry '{entry}'. "
+                "Expected input to be in the format name=uri"
             )
         ids_name, value = entry.split("=", 1)
         md_uri = value.strip()
@@ -118,7 +122,9 @@ def create_md_dict(md):
     "--md",
     multiple=True,
     type=str,
-    help="Machine description mapping from IDS name to URI, e.g. --md wall=imas:hdf5?path=/path/to/file --md pf_active=imas:hdf5?path=/path/to/other",
+    help="Machine description mapping from IDS name to URI, e.g."
+    " --md wall=imas:hdf5?path=/path/to/file "
+    "--md pf_active=imas:hdf5?path=/path/to/other",
 )
 @click.option(
     "--automatic-mode",
