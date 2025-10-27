@@ -4,8 +4,8 @@ Example that plots the following:
   and X/O-points from an equilibrium IDS.
 - The inner wall / vacuum vessel from a wall machine description IDS.
 - The outline of the coils from a pf_active machine description IDS.
-- 1D profile and waterfall plot of ff' profile.
-- 1D profile and waterfall plot of p' profile.
+- 1D profile plot of ff'  and p' profiles.
+- Ip current and toroidal beta over time
 - Coil currents over time.
 """
 
@@ -128,9 +128,25 @@ class State(BaseState):
             },
         )
 
+        ip_beta_tor = xr.Dataset(
+            {
+                "ip": ("time", [ts.global_quantities.ip]),
+                "beta_tor": ("time", [ts.global_quantities.beta_tor]),
+            },
+            coords={
+                "time": [ids.time[0]],
+            },
+        )
+
         # Combine all datasets
         new_data = xr.merge(
-            [separatrix_data, grid_data, critical_points_data, profiles_data]
+            [
+                separatrix_data,
+                grid_data,
+                critical_points_data,
+                profiles_data,
+                ip_beta_tor,
+            ]
         )
 
         current_data = self.data.get("equilibrium")
@@ -164,9 +180,7 @@ class Plotter(BasePlotter):
     )
     DESIRED_SHAPE_OPTS = hv.opts.Curve(color="blue")
 
-    levels = param.Integer(
-        default=20, bounds=(1, 100), doc="Number of contour levels"
-    )
+    levels = param.Integer(default=20, bounds=(1, 100), doc="Number of contour levels")
 
     def get_dashboard(self):
         # Create poloidal flux plot
@@ -187,9 +201,9 @@ class Plotter(BasePlotter):
 
         coil_currents = hv.DynamicMap(self.plot_coil_currents)
         f_df_dpsi = hv.DynamicMap(self.plot_f_df_dpsi_profile)
-        f_df_dpsi_2d = hv.DynamicMap(self.plot_f_df_dpsi_2d)
         dpressure_dpsi = hv.DynamicMap(self.plot_dpressure_dpsi)
-        dpressure_dpsi_2d = hv.DynamicMap(self.plot_dpressure_dpsi_2d)
+        ip = hv.DynamicMap(self.plot_ip)
+        beta_tor = hv.DynamicMap(self.plot_beta_tor)
 
         return pn.Row(
             pn.Column(
@@ -199,8 +213,8 @@ class Plotter(BasePlotter):
                 ),
             ),
             pn.Column(
-                pn.Row(f_df_dpsi, f_df_dpsi_2d),
-                pn.Row(dpressure_dpsi, dpressure_dpsi_2d),
+                pn.Row(f_df_dpsi, dpressure_dpsi),
+                pn.Row(ip, beta_tor),
                 coil_currents,
             ),
         )
@@ -233,14 +247,8 @@ class Plotter(BasePlotter):
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
-                                (
-                                    annulus.r
-                                    + annulus.radius_outer * np.cos(phi)
-                                ),
-                                (
-                                    annulus.z
-                                    + annulus.radius_outer * np.sin(phi)
-                                ),
+                                (annulus.r + annulus.radius_outer * np.cos(phi)),
+                                (annulus.z + annulus.radius_outer * np.sin(phi)),
                                 name,
                             )
                         )
@@ -311,9 +319,7 @@ class Plotter(BasePlotter):
         for i, level in enumerate(tricontour.levels):
             for seg in tricontour.allsegs[i]:
                 if len(seg) > 1:
-                    segments.append(
-                        {"x": seg[:, 0], "y": seg[:, 1], "psi": level}
-                    )
+                    segments.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
         return segments
 
     @pn.depends("time")
@@ -471,9 +477,7 @@ class Plotter(BasePlotter):
             curves = []
             for coil in state.coil.values:
                 current = state.currents.sel(coil=coil)[mask].values
-                curve = hv.Curve(
-                    (time, current), xlabel, ylabel, label=str(coil)
-                ).opts(
+                curve = hv.Curve((time, current), xlabel, ylabel, label=str(coil)).opts(
                     framewise=True,
                     title="coil currents over time",
                 )
@@ -484,34 +488,22 @@ class Plotter(BasePlotter):
         return hv.Overlay(curves).opts(height=450, width=1200)
 
     @param.depends("time")
-    def plot_f_df_dpsi_2d(self):
+    def plot_ip(self):
         state = self.active_state.data.get("equilibrium")
-        ylabel = "Time [s]"
-        xlabel = "psi"
+        xlabel = "Time [s]"
+        ylabel = "Ip [A]"
 
         if state:
             mask = state.time <= self.time
-            times = state.time.values[mask]
-            psi = state.sel(
-                time=self.time, method="nearest"
-            ).psi_profile.values
-            f_df_dpsi = state.f_df_dpsi.sel(time=mask).values
-            title = "ff' over time"
+            time = state.time[mask].values
+            ip = state.ip.sel(time=mask).values
+            title = "Plasma current over time"
         else:
-            times = np.array([0, 1])
-            psi = np.array([0, 1])
-            f_df_dpsi = np.full((2, 2), 0)
+            time = np.array([0])
+            ip = np.array([0])
             title = "Waiting for data..."
 
-        return hv.QuadMesh(
-            (psi, times, f_df_dpsi),
-            kdims=["profile_dim", "time_dim"],
-            vdims=["ffprime"],
-        ).opts(
-            cmap="viridis",
-            xlabel=xlabel,
-            ylabel=ylabel,
-            colorbar=True,
+        return hv.Curve((time, ip), xlabel, ylabel).opts(
             framewise=True,
             height=300,
             width=600,
@@ -519,34 +511,22 @@ class Plotter(BasePlotter):
         )
 
     @param.depends("time")
-    def plot_dpressure_dpsi_2d(self):
+    def plot_beta_tor(self):
         state = self.active_state.data.get("equilibrium")
-        ylabel = "Time [s]"
-        xlabel = "psi"
+        xlabel = "Time [s]"
+        ylabel = "beta_tor"
 
         if state:
             mask = state.time <= self.time
-            times = state.time.values[mask]
-            psi = state.sel(
-                time=self.time, method="nearest"
-            ).psi_profile.values
-            dpressure_dpsi = state.dpressure_dpsi.sel(time=mask).values
-            title = "p' over time"
+            time = state.time[mask].values
+            beta_tor = state.beta_tor.sel(time=mask).values
+            title = "Toroidal beta over time"
         else:
-            times = np.array([0, 1])
-            psi = np.array([0, 1])
-            dpressure_dpsi = np.full((2, 2), 0)
+            time = np.array([0])
+            beta_tor = np.array([0])
             title = "Waiting for data..."
 
-        return hv.QuadMesh(
-            (psi, times, dpressure_dpsi),
-            kdims=["profile_dim", "time_dim"],
-            vdims=["ffprime"],
-        ).opts(
-            cmap="viridis",
-            xlabel=xlabel,
-            ylabel=ylabel,
-            colorbar=True,
+        return hv.Curve((time, beta_tor), xlabel, ylabel).opts(
             framewise=True,
             height=300,
             width=600,
