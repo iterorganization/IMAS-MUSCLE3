@@ -35,7 +35,8 @@ def feed_data(
     try:
         with imas.DBEntry(uri, "r") as entry:
             last_trigger_time = 0.0
-            # FIXME: Here we assume all IDSs in this URI have the same time basis
+            # FIXME: Here we assume all IDSs in this URI
+            # have the same time basis
             ids = entry.get(ids_in_entry[0], lazy=True)
             times = ids.time
 
@@ -129,9 +130,11 @@ def create_md_dict(
     "--md",
     multiple=True,
     type=str,
-    help="Machine description mapping from IDS name to URI, e.g."
-    " --md wall=imas:hdf5?path=/path/to/file "
-    "--md pf_active=imas:hdf5?path=/path/to/other",
+    help="""Machine description mapping from IDS name to URI.
+    If not provided, URI will be used by default to load MD IDSs.
+    Multiple URIs can be provided per IDS, e.g.
+    `--md wall=imas:hdf5?path=/path/to/file
+    --md pf_active=imas:hdf5?path=/path/to/other`""",
 )
 @click.option(
     "--automatic-mode",
