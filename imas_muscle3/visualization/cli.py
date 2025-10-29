@@ -47,10 +47,12 @@ def feed_data(
                         ids_name, t, imas.ids_defs.CLOSEST_INTERP
                     )
                     logger.info(f"Finished getting t={t} from {ids_name}")
+                    if ids.time:
+                        ids_time = ids.time[-1]
                     visualization_actor.state.extract_data(ids)
-                    visualization_actor.update_time(ids.time[-1])
 
                 current_time = time.time()
+                visualization_actor.update_time(ids_time)
                 if current_time - last_trigger_time >= throttle_interval:
                     visualization_actor.state.param.trigger("data")
                     logger.info("Triggered UI update")
