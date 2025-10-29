@@ -55,7 +55,7 @@ in the ymmsl file and will be skipped otherwise.
 
   - ***<ids_name>_in (S)***: Any incoming IDS timeslices on the `S` port. 
     Replace `<ids_name>` with the required IDS name (e.g., ``equilibrium_in``).
-  - ***<ids_name>_md_in (F_INIT)***: Any incoming machine description IDS's on the `F_INIT` port. 
+  - ***<ids_name>_md_in (S)***: Any incoming machine description IDS's on the `S` port. 
     These are typically static data like the machine wall or coil geometry. 
     Replace `<ids_name>` with the required IDS name (e.g., ``wall_md_in``).
 

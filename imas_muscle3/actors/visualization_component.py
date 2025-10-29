@@ -1,4 +1,4 @@
-r"""
+"""
 MUSCLE3 actor for visualization
 """
 
@@ -29,12 +29,14 @@ def handle_machine_description(instance: Instance) -> Dict[str, IDSToplevel]:
     Returns:
         Mapping of IDS names to machine description IDSs.
     """
-    ports_in = get_port_list(instance, Operator.F_INIT)
     md_dict = {}
-    for port_name in ports_in:
+
+    md_ports_in = [
+        p for p in get_port_list(instance, Operator.S) if p.endswith("_md_in")
+    ]
+    for port_name in md_ports_in:
         msg = instance.receive(port_name)
         ids_name = port_name.replace("_md_in", "")
-
         ids = IDSFactory().new(ids_name)
         ids.deserialize(msg.data)
         md_dict[ids_name] = ids
@@ -47,10 +49,8 @@ def main() -> None:
         {
             Operator.S: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
-            ],
-            Operator.F_INIT: [
-                f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()
-            ],
+            ]
+            + [f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()],
         }
     )
 
@@ -75,7 +75,9 @@ def main() -> None:
             extract_all = get_setting_optional(
                 instance, "automatic_extract_all", False
             )
+
             md_dict = handle_machine_description(instance)
+
             assert (
                 port is not None
                 and open_browser is not None
@@ -96,7 +98,11 @@ def main() -> None:
         )
 
         is_running = True
-        ports_in = get_port_list(instance, Operator.S)
+        ports_in = [
+            p
+            for p in get_port_list(instance, Operator.S)
+            if not p.endswith("_md_in")
+        ]
 
         while is_running:
             common_time = None
