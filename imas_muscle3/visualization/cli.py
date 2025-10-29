@@ -43,7 +43,9 @@ def feed_data(
             for t in times:
                 for ids_name in ids_in_entry:
                     logger.info(f"Getting t={t} from {ids_name}...")
-                    ids = entry.get_slice(ids_name, t, imas.ids_defs.CLOSEST_INTERP)
+                    ids = entry.get_slice(
+                        ids_name, t, imas.ids_defs.CLOSEST_INTERP
+                    )
                     logger.info(f"Finished getting t={t} from {ids_name}")
                     visualization_actor.state.extract_data(ids)
                     visualization_actor.update_time(ids.time[-1])
