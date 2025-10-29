@@ -32,30 +32,26 @@ def feed_data(
         throttle_interval: Interval how often the UI data is updated.
     """
 
-    first_run = True
     try:
         with imas.DBEntry(uri, "r") as entry:
             last_trigger_time = 0.0
-            for ids_name in ids_in_entry:
-                if first_run:
-                    ids = entry.get(ids_name, lazy=True)
-                    times = ids.time
-                    first_run = False
+            # FIXME: Here we assume all IDSs in this URI have the same time basis
+            ids = entry.get(ids_in_entry[0], lazy=True)
+            times = ids.time
 
-                for t in times:
-                    ids = entry.get_slice(
-                        ids_name, t, imas.ids_defs.CLOSEST_INTERP
-                    )
+            for t in times:
+                for ids_name in ids_in_entry:
+                    logger.info(f"Getting t={t} from {ids_name}...")
+                    ids = entry.get_slice(ids_name, t, imas.ids_defs.CLOSEST_INTERP)
+                    logger.info(f"Finished getting t={t} from {ids_name}")
                     visualization_actor.state.extract_data(ids)
                     visualization_actor.update_time(ids.time[-1])
 
-                    current_time = time.time()
-                    if current_time - last_trigger_time >= throttle_interval:
-                        visualization_actor.state.param.trigger("data")
-                        last_trigger_time = current_time
-
-                    # FIXME: panel doesn't load if we do not add sleep
-                    time.sleep(0.01)
+                current_time = time.time()
+                if current_time - last_trigger_time >= throttle_interval:
+                    visualization_actor.state.param.trigger("data")
+                    logger.info("Triggered UI update")
+                    last_trigger_time = current_time
 
             visualization_actor.state.param.trigger("data")
             visualization_actor.notify_done()
