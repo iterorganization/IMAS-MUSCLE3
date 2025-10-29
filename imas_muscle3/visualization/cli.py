@@ -20,6 +20,7 @@ pn.extension(notifications=True)
 
 def feed_data(
     uri: str,
+    ids_in_entry: list[str],
     visualization_actor: VisualizationActor,
     throttle_interval: float,
 ) -> None:
@@ -34,7 +35,6 @@ def feed_data(
     first_run = True
     try:
         with imas.DBEntry(uri, "r") as entry:
-            ids_in_entry = get_available_ids(entry)
             last_trigger_time = 0.0
             for ids_name in ids_in_entry:
                 if first_run:
@@ -85,27 +85,38 @@ def get_available_ids(entry: imas.DBEntry) -> List[str]:
     return ids_in_entry
 
 
-def create_md_dict(md: Tuple[str]) -> Dict[str, IDSToplevel]:
+def create_md_dict(
+    default_entry: imas.DBEntry,
+    md: Tuple[str],
+    ids_in_entry: list[str],
+) -> Dict[str, IDSToplevel]:
     """Convert --md args into a dictionary of IDS objects.
 
     Args:
+        default_entry: Default dbentry to use if no --md is provided.
         md: Tuple of md cli arguments like 'ids_name=imas_uri'.
+        ids_in_entry: List of IDSs in the default entry.
 
     Returns:
         Dictionary containing mapping from IDS name to IDS object.
     """
     md_dict = {}
-    for entry in md:
-        if "=" not in entry:
+    for md_arg in md:
+        if "=" not in md_arg:
             raise click.BadParameter(
-                f"Invalid machine description entry '{entry}'. "
+                f"Invalid machine description entry '{md_arg}'. "
                 "Expected input to be in the format name=uri"
             )
-        ids_name, value = entry.split("=", 1)
+        ids_name, value = md_arg.split("=", 1)
         md_uri = value.strip()
         with imas.DBEntry(md_uri, "r") as dbentry:
             md_ids = dbentry.get(ids_name)
         md_dict[ids_name.strip()] = md_ids
+
+    for ids_name in ids_in_entry:
+        if ids_name not in md_dict:
+            md_ids = default_entry.get(ids_name, lazy=True)
+            md_dict[ids_name] = md_ids
     return md_dict
 
 
@@ -164,24 +175,27 @@ def main(
         format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
     )
 
-    md_dict = create_md_dict(md)
-    visualization_actor = VisualizationActor(
-        plot_file_path=plot_file_path,
-        md_dict=md_dict,
-        port=port,
-        open_browser_on_start=True,
-        automatic_mode=automatic_mode,
-        extract_all=extract_all,
-    )
+    with imas.DBEntry(uri, "r") as entry:
+        ids_in_entry = get_available_ids(entry)
+        md_dict = create_md_dict(entry, md, ids_in_entry)
 
-    feeder_thread = threading.Thread(
-        target=feed_data,
-        args=(uri, visualization_actor, throttle_interval),
-        daemon=False,
-    )
-    logger.info("Waiting for browser to load...")
-    time.sleep(3)
-    feeder_thread.start()
+        visualization_actor = VisualizationActor(
+            plot_file_path=plot_file_path,
+            md_dict=md_dict,
+            port=port,
+            open_browser_on_start=True,
+            automatic_mode=automatic_mode,
+            extract_all=extract_all,
+        )
+
+        feeder_thread = threading.Thread(
+            target=feed_data,
+            args=(uri, ids_in_entry, visualization_actor, throttle_interval),
+            daemon=False,
+        )
+        logger.info("Waiting for browser to load...")
+        time.sleep(3)
+        feeder_thread.start()
 
     try:
         feeder_thread.join()
