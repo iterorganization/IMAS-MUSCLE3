@@ -18,8 +18,12 @@ In this training you will learn the following:
 All examples assume you have an environment with IMAS-MUSCLE3 up and running.
 If you do not have this yet, please have a look at the :ref:`installation instructions <installing>`.
 
-.. note:: The visualization actor requires a graphical environment and a browser. If you
-   are on ITER's SDCC, it is recommended to follow the training through the NoMachine client.
+For this training you will need access to a graphical environment to visualize
+the simulation results. If you are on SDCC, it is recommended to follow this training
+through the NoMachine client, and using chrome as your default browser (there have been
+issues when using firefox through NoMachine).
+
+
 
 Exercise 1a: Understanding the Basic Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
