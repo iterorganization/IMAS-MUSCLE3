@@ -220,7 +220,7 @@ class Plotter(BasePlotter):
         Returns:
             Coil geometry overlay.
         """
-        pf_active = self.active_state.md["pf_active"]
+        pf_active = self.active_state.md.get("pf_active")
         rectangles = []
         paths = []
         if pf_active is not None:
@@ -230,15 +230,15 @@ class Plotter(BasePlotter):
                     rect = element.geometry.rectangle
                     outline = element.geometry.outline
                     annulus = element.geometry.annulus
-                    if rect.has_value:
+                    if rect.r and rect.width and rect.z and rect.height:
                         r0 = rect.r - rect.width / 2
                         r1 = rect.r + rect.width / 2
                         z0 = rect.z - rect.height / 2
                         z1 = rect.z + rect.height / 2
                         rectangles.append((r0, z0, r1, z1, name))
-                    elif outline.has_value:
+                    elif outline.r and outline.z:
                         paths.append((outline.r, outline.z, name))
-                    elif annulus.r.has_value:
+                    elif annulus.r and annulus.z and annulus.radius_outer:
                         phi = np.linspace(0, 2 * np.pi, 17)
                         paths.append(
                             (
@@ -359,7 +359,7 @@ class Plotter(BasePlotter):
             Holoviews path containing the geometry.
         """
         paths = []
-        wall = self.active_state.md["wall"]
+        wall = self.active_state.md.get("wall")
         if wall is not None:
             for unit in wall.description_2d[0].vessel.unit:
                 name = str(unit.name)
@@ -379,7 +379,7 @@ class Plotter(BasePlotter):
             Holoviews path containing the geometry.
         """
         paths = []
-        wall = self.active_state.md["wall"]
+        wall = self.active_state.md.get("wall")
         if wall is not None:
             for unit in wall.description_2d[0].limiter.unit:
                 name = str(unit.name)

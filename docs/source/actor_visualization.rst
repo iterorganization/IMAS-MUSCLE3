@@ -73,6 +73,24 @@ It must define two classes that inherit from the provided base classes:
     define and arrange the plots in a Panel dashboard. It must implement a 
     ``get_dashboard(self)`` method that returns a Panel object.
 
+Command Line Interface
+----------------------
+
+A command line interface is made available if you want to run the visualization actor
+directly from the terminal instead of through a MUSCLE3 actor. You will need to provide 
+at least both the URI of the data, as well as the ``plot_file_path``, for example:
+
+.. code-block:: bash
+
+  python ./imas_muscle3/visualization/cli.py <URI> ./imas_muscle3/visualization/examples/pds/pds.py
+
+Usage details, such as how to supply separate URIs for machine description data, 
+can be found by supplying the ``--help`` option:
+
+.. code-block:: bash
+
+  python ./imas_muscle3/visualization/cli.py --help
+
 Example
 --------
 
