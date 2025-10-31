@@ -40,8 +40,8 @@ Exercise 1a: Setting Up Your First Visualization
       We will start by running the visualization actor for a simple example configuration. 
       First, create a yMMSL configuration file that sets up a simple visualization pipeline with:
 
-      1. A source actor that sends the equilibrium IDS
-      2. A visualization actor that receives and plots the data.
+      1. A :ref:`source actor <actor_sink_source>` that sends the equilibrium IDS
+      2. A :ref:`visualization actor <actor_visualization>` that receives and plots the data.
 
       Use the following settings in the yMMSL:
       
@@ -60,7 +60,8 @@ Exercise 1a: Setting Up Your First Visualization
       What do you see in your browser?
 
       .. hint::
-         Take a look at the example yMMSL file in ``imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl``. If you want detailed information about the visualization actor, take a look
+         There are premade examples available that you use can use available, located in this
+         location: ``imas_muscle3/visualization/examples``. For this specific exercise, take a look at the example yMMSL file in ``imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl``. If you want detailed information about the visualization actor, take a look
          at the :ref:`documentation <actor_visualization>`.
 
    .. md-tab-item:: Solution
@@ -99,7 +100,7 @@ Exercise 1a: Setting Up Your First Visualization
            visualization_component:
              threads: 1
 
-      When you launch the muscle_manger, the browser should open, and you will see the
+      When you launch the muscle_manager, the browser should open, and you will see the
       plasma current plotted over time, updating in real-time as the new time slices are 
       received by the visualization actor.
 
@@ -137,7 +138,7 @@ Exercise 1b: Understanding the Basic Structure
       The ``State`` class **must** implement the ``extract(self, ids)`` method.
       The ``extract`` method for this example case:
       
-      - Checks if the incoming IDS is an equilibrium IDS.
+      - handles every IDS that is received on the S port, one at a time. So first it checks if the incoming IDS is an equilibrium IDS.
       - Extracts the plasma current of the time slice (``ids.time_slice[0].global_quantities.ip``) and 
         its corresponding time value (``ids.time[0]``), and stores it in an Xarray dataset.
       - Either stores the first Xarray dataset entry in ``self.data`` or appends it to the existing Xarray dataset.
@@ -145,6 +146,7 @@ Exercise 1b: Understanding the Basic Structure
       The ``Plotter`` class **must** implement the ``get_dashboard(self)`` method.
       The ``get_dashboard`` method for this example case:
       
+      - Gets called once when the visualization actor is initialized.
       - Uses `HoloViews <https://holoviews.org/>`_ as its cornerstone to enable interactive visualizations.
       - Returns a `HoloViews DynamicMap <https://holoviews.org/reference/containers/bokeh/DynamicMap.html>`_ object, 
         which allows you to dynamically update a plot whenever its argument function is called, here ``self.plot_ip_vs_time``.
@@ -210,13 +212,13 @@ Exercise 1c: Creating a custom visualization
          the profile points in addition to time.
 
       Also implement the ``plot_f_df_dpsi_profile`` method in the ``Plotter`` class that 
-      displays the ff' profile as a function of psi for the current time step. 
+      displays the ff' profile stored in the state object as a function of psi for the current time step. 
 
       Your ``plot_f_df_dpsi_profile`` should do the following:
       
       - Load the state data from the current ``self.active_state``.
       - Extract the arrays for ff' and psi from the state data (use ``state.sel(time=self.time)``).
-      - Display psi on the x-axis and f_df_dpsi on the y-axis.
+      - Display psi on the x-axis and f_df_dpsi on the y-axis, using a `HoloViews Curve <https://holoviews.org/reference/elements/bokeh/Curve.html>`_.
       - Give an appropriate title, xlabel, and ylabel.
       - Properly handle the case when no data is available yet (Return an empty ``hv.Curve``).
 
@@ -320,6 +322,7 @@ Exercise 2: Using Automatic Mode
 
       - No fine grain control over the plots
       - Unable to combine data
+      - Slower performance and increased memory usage
 
       Repeat exercise 1a, however this time add the following settings to the yMMSL:
 
