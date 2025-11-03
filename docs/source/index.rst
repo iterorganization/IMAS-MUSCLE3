@@ -26,6 +26,7 @@ Manual
    installing
    usage
    tips_and_tricks
+   training
 
 .. toctree::
    :caption: API docs

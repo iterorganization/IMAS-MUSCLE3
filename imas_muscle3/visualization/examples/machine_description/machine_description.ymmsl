@@ -6,16 +6,22 @@ model:
       implementation: source_component
       ports:
         o_i: [equilibrium_out]
+    source_component_md:
+      implementation: source_component
+      ports:
+        o_i: [wall_out, pf_active_out]
     visualization_component:
       implementation: visualization_component
       ports:
-        s: [equilibrium_in]
+        s: [equilibrium_in, pf_active_md_in, wall_md_in]
   conduits:
     source_component.equilibrium_out: visualization_component.equilibrium_in
+    source_component_md.wall_out: visualization_component.wall_md_in
+    source_component_md.pf_active_out: visualization_component.pf_active_md_in
 settings:
   source_component.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
-  visualization_component.plot_file_path: /home/ITER/blokhus/projects/IMAS-MUSCLE3/imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py
-  visualization_component.throttle_interval: 0
+  source_component_md.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
+  visualization_component.plot_file_path: /home/ITER/blokhus/projects/IMAS-MUSCLE3/imas_muscle3/visualization/examples/machine_description/machine_description.py
   visualization_component.keep_alive: true
 implementations:
   visualization_component:
@@ -26,6 +32,8 @@ implementations:
     args: -u -m imas_muscle3.actors.source_component
 resources:
   source_component:
+    threads: 1
+  source_component_md:
     threads: 1
   visualization_component:
     threads: 1

@@ -1,6 +1,5 @@
 import logging
 import runpy
-import webbrowser
 from typing import Dict
 
 import panel as pn
@@ -92,18 +91,7 @@ class VisualizationActor(param.Parameterized):
         self.server = pn.serve(  # type: ignore[no-untyped-call]
             self.dynamic_panel,
             port=self.port,
-            show=False,
+            show=self.open_browser_on_start,
             threaded=True,
             start=True,
         )
-        if self.open_browser_on_start:
-            self._open_browser()
-
-    def _open_browser(self) -> None:
-        """Open the dashboard in the system web browser."""
-        url = f"http://localhost:{self.port}"
-        try:
-            webbrowser.open(url)
-        except Exception as e:
-            logger.warning(f"Could not open browser automatically: {e}")
-        logger.info(f"Dashboard is available at {url}")
