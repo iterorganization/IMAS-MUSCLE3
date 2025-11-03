@@ -5,7 +5,7 @@ model:
     source_component:
       implementation: source_component
       ports:
-        o_i: [equilibrium_out, pf_active_out]
+        o_i: [equilibrium_out]
     source_component_md:
       implementation: source_component
       ports:
@@ -19,9 +19,9 @@ model:
     source_component_md.wall_out: visualization_component.wall_md_in
     source_component_md.pf_active_out: visualization_component.pf_active_md_in
 settings:
-  source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/pds_example
-  source_component_md.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/Waveform-Editor/data/nice-input-dd4
-  visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/examples/machine_description/machine_description.py
+  source_component.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
+  source_component_md.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
+  visualization_component.plot_file_path: /home/ITER/blokhus/projects/IMAS-MUSCLE3/imas_muscle3/visualization/examples/machine_description/machine_description.py
   visualization_component.keep_alive: true
 implementations:
   visualization_component:

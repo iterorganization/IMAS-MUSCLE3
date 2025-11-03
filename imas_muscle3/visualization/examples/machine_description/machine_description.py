@@ -1,6 +1,13 @@
+"""
+Example that plots the following:
+- First wall and divertor from machine description IDS.
+- Boundary outline from an equilibrium IDS
+"""
+
 import logging
 
 import holoviews as hv
+import numpy as np
 import panel as pn
 import xarray as xr
 
@@ -13,29 +20,29 @@ logger = logging.getLogger()
 class State(BaseState):
     def extract(self, ids):
         if ids.metadata.name == "equilibrium":
-            self._extract_equilibrium(ids)
+            self.extract_equilibrium(ids)
 
-    def _extract_equilibrium(self, ids):
+    def extract_equilibrium(self, ids):
         ts = ids.time_slice[0]
-        prof2d = ts.profiles_2d[0]
-        psi = prof2d.psi
-        new_point = xr.Dataset(
+        outline = ts.boundary.outline
+
+        boundary_data = xr.Dataset(
             {
-                "psi": (("dim1", "dim2"), psi.value),
+                "r": (("time", "point"), [outline.r]),
+                "z": (("time", "point"), [outline.z]),
             },
             coords={
                 "time": [ids.time[0]],
-                "dim1": prof2d.grid.dim1,
-                "dim2": prof2d.grid.dim2,
+                "point": np.arange(len(outline.r)),
             },
         )
 
         current_data = self.data.get("equilibrium")
         if current_data is None:
-            self.data["equilibrium"] = new_point
+            self.data["equilibrium"] = boundary_data
         else:
             self.data["equilibrium"] = xr.concat(
-                [current_data, new_point.expand_dims("time")], dim="time", join="outer"
+                [current_data, boundary_data], dim="time", join="outer"
             )
 
 
@@ -43,40 +50,31 @@ class Plotter(BasePlotter):
     DEFAULT_OPTS = hv.opts.Overlay(
         xlim=(0, 13),
         ylim=(-10, 10),
-        title="Equilibrium poloidal flux",
+        title="Wall and equilibrium boundary outline",
         xlabel="r [m]",
         ylabel="z [m]",
     )
-    QUADMESH_OPTS = hv.opts.QuadMesh(
-        cmap="viridis",
-        colorbar=True,
-        colorbar_opts={"title": "Poloidal flux [Wb]"},
-        tools=["hover"],
-        aspect="equal",
-        framewise=True,
-    )
 
     def get_dashboard(self):
-        flux_map_elements = [
-            hv.DynamicMap(self._plot_psi_quadmesh),
+        elements = [
+            hv.DynamicMap(self._plot_boundary_outline),
             hv.DynamicMap(self._plot_wall),
         ]
-        flux_map_overlay = (
-            hv.Overlay(flux_map_elements).collate().opts(self.DEFAULT_OPTS)
-        )
-        return pn.pane.HoloViews(flux_map_overlay, width=800, height=1000)
+        overlay = hv.Overlay(elements).collate().opts(self.DEFAULT_OPTS)
+        return pn.pane.HoloViews(overlay, width=800, height=1000)
 
     @pn.depends("time")
-    def _plot_psi_quadmesh(self):
-        """Plots 2D poloidal flux as QuadMesh."""
+    def _plot_boundary_outline(self):
         state = self.active_state.data.get("equilibrium")
-        if state is None:
-            return hv.QuadMesh(([0, 1], [0, 1], np.zeros((1, 1))))
-        selected_data = state.sel(time=self.time)
-        r = selected_data.grid_r.values
-        z = selected_data.grid_z.values
-        psi = selected_data.psi.values
-        return hv.QuadMesh((r, z, psi)).opts(self.QUADMESH_OPTS)
+
+        if state is not None and "r" in state and "z" in state:
+            selected_data = state.sel(time=self.time)
+            r = selected_data.r.values
+            z = selected_data.z.values
+        else:
+            r, z = [], [], "Waiting for data..."
+
+        return hv.Curve((r, z)).opts(self.DEFAULT_OPTS)
 
     def _plot_wall(self):
         """Generates path for limiter and divertor."""
