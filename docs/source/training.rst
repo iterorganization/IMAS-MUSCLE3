@@ -395,7 +395,7 @@ Exercise 4: Loading Machine Descriptions
          .. code-block:: bash
 
             imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
-      - The visulization actor should receive the machine description IDSs on the S port, with the names ``wall_md_in`` and ``pf_active_md_in``.
+      - The visualization actor should receive the machine description IDSs on the S port, with the names ``wall_md_in`` and ``pf_active_md_in``.
 
 
       You will need to implement the ``extract_equilibrium``, ``_plot_boundary_outline``, and ``_plot_wall`` methods, in the template below.
@@ -403,7 +403,7 @@ Exercise 4: Loading Machine Descriptions
       Implement the ``extract_equilibrium`` method which does the following:
 
       - Loads R and Z coordinates of the the boundary outline from the equilibrium IDS: 
-        ``ids.time_slice[0].boundary.ouline.r``, ``ids.time_slice[0].boundary.ouline.z``
+        ``ids.time_slice[0].boundary.outline.r``, ``ids.time_slice[0].boundary.outline.z``
       - Stores both in an Xarray Dataset.
       - Either saves the first entry in ``self.data`` or concatenates it to an existing Dataset.
 
