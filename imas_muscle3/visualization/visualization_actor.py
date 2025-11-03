@@ -1,6 +1,5 @@
 import logging
 import runpy
-import webbrowser
 from typing import Dict
 
 import panel as pn
