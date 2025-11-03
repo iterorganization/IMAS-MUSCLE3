@@ -295,8 +295,6 @@ Exercise 1c: Creating a custom visualization
 
       .. figure:: ../source/images/ff_prime.gif
 
-Exercise 1d: Loading Machine Descriptions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. tip:: More complex examples of visualizations are available in the 
    ``imas_muscle3/visualization/examples/`` directory. For example, the PDS example
@@ -376,4 +374,105 @@ Exercise 3: Using the CLI
          python -m imas_muscle3.visualization.cli \
              "imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/" \
              imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py
+
+
+Exercise 4: Loading Machine Descriptions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. md-tab-set::
+   .. md-tab-item:: Exercise
+
+      In this exercise you will create a 2D plot that combines **static machine description data** with **time-evolving equilibrium data**. Specifically,
+
+      - The plasma boundary outline (from the `equilibrium` IDS) as it changes over time.
+      - The tokamak first wall and divertor (from the `wall` machine description IDS).
+
+      You will need to update your yMMSL from exercise 1a, with the following changes:
+
+      - Add a new source actor which will send the ``wall`` and ``pf_active``
+        machine description IDSs to the visualization actor.
+      - The new source actor should use the following URI:
+         .. code-block:: bash
+
+            imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
+      - The visulization actor should receive the machine description IDSs on the S port, with the names ``wall_md_in`` and ``pf_active_md_in``.
+
+
+      You will need to implement the ``extract_equilibrium``, ``_plot_boundary_outline``, and ``_plot_wall`` methods, in the template below.
+
+      Implement the ``extract_equilibrium`` method which does the following:
+
+      - Loads R and Z coordinates of the the boundary outline from the equilibrium IDS: 
+        ``ids.time_slice[0].boundary.ouline.r``, ``ids.time_slice[0].boundary.ouline.z``
+      - Stores both in an Xarray Dataset.
+      - Either saves the first entry in ``self.data`` or concatenates it to an existing Dataset.
+
+      Implement the ``_plot_boundary_outline`` method which does the following:
+
+      - Load the state data from the current ``self.active_state``.
+      - Extract the r and z arrays from the state data (use ``state.sel(time=self.time)``).
+      - Display r and z, using a `HoloViews Curve <https://holoviews.org/reference/elements/bokeh/Curve.html>`_.
+
+      Implement the ``_plot_wall`` method which does the following:
+
+      - Load the wall machine description IDS using ``self.active_state.md.get("wall")``.
+      - Loads the first wall and divertor from the wall IDS:
+        ``ids.description_2d[0].limiter.unit[i].outline.r`` and ``ids.description_2d[0].limiter.unit[i].outline.z`` for ``i = 0`` and ``i = 1``.
+      - Display r and z, using a `HoloViews Path <https://holoviews.org/reference/elements/bokeh/Path.html>`_.
+
+      .. code-block:: python
+
+
+         import holoviews as hv
+         import numpy as np
+         import panel as pn
+         import xarray as xr
+
+         from imas_muscle3.visualization.base_plotter import BasePlotter
+         from imas_muscle3.visualization.base_state import BaseState
+
+
+         class State(BaseState):
+             def extract(self, ids):
+                 if ids.metadata.name == "equilibrium":
+                     self.extract_equilibrium(ids)
+
+             def extract_equilibrium(self, ids):
+                 # Implement this method!
+
+         class Plotter(BasePlotter):
+             DEFAULT_OPTS = hv.opts.Overlay(
+                 xlim=(0, 13),
+                 ylim=(-10, 10),
+                 title="Wall and equilibrium boundary outline",
+                 xlabel="r [m]",
+                 ylabel="z [m]",
+             )
+
+             def get_dashboard(self):
+                 elements = [
+                     hv.DynamicMap(self._plot_boundary_outline),
+                     hv.DynamicMap(self._plot_wall),
+                 ]
+                 overlay = hv.Overlay(elements).collate().opts(self.DEFAULT_OPTS)
+                 return pn.pane.HoloViews(overlay, width=800, height=1000)
+
+             @pn.depends("time")
+             def _plot_boundary_outline(self):
+                 # Implement this method!
+
+             def _plot_wall(self):
+                 # Implement this method!
+
+
+   .. md-tab-item:: Solution
+
+      Example yMMSL file:
+
+      .. literalinclude:: ../../imas_muscle3/visualization/examples/machine_description/machine_description.ymmsl
+
+      Example plotting script:
+
+      .. literalinclude:: ../../imas_muscle3/visualization/examples/machine_description/machine_description.py
+         :language: python
 

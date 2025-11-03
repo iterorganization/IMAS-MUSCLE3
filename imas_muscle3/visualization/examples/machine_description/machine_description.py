@@ -4,8 +4,6 @@ Example that plots the following:
 - Boundary outline from an equilibrium IDS
 """
 
-import logging
-
 import holoviews as hv
 import numpy as np
 import panel as pn
@@ -13,8 +11,6 @@ import xarray as xr
 
 from imas_muscle3.visualization.base_plotter import BasePlotter
 from imas_muscle3.visualization.base_state import BaseState
-
-logger = logging.getLogger()
 
 
 class State(BaseState):
