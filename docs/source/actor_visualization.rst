@@ -29,7 +29,7 @@ Available Settings
 
 * Optional
 
-  - ***port***: (int) The port on which the visualization server will run. Defaults to `5006`.
+  - ***port***: (int) The port on which the visualization server will run. Defaults to `0`, indicating a random available port.
   - ***throttle_interval***: (float) The minimum time in seconds between plot updates. 
     This can be used to prevent the visualization from slowing down if data arrives very quickly. Defaults to `0.1`.
   - ***keep_alive***: (bool) If `True`, the visualization server will remain active after 

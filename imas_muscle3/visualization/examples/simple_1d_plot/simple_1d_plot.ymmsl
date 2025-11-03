@@ -15,7 +15,6 @@ model:
 settings:
   source_component.source_uri: imas:hdf5?path=/home/sebbe/projects/iter_python/IMAS-MUSCLE3/data/striped_eq
   visualization_component.plot_file_path: /home/sebbe/projects/iter_python/IMAS-MUSCLE3/imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py
-  visualization_component.port: 5007
   visualization_component.throttle_interval: 0
   visualization_component.keep_alive: true
 implementations:

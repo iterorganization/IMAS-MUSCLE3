@@ -60,7 +60,8 @@ def main() -> None:
     while instance.reuse_instance():
         if first_run:
             plot_file_path = instance.get_setting("plot_file_path", "str")
-            port = get_setting_optional(instance, "port", 5006)
+            # If port is not specified, use a random available port
+            port = get_setting_optional(instance, "port", 0)
             # FIXME: there is an issue when the plotting takes much longer
             # than it takes for data to arrive from the MUSCLE actor. As a
             # remedy, set a plotting throttle interval.
