@@ -295,10 +295,14 @@ Exercise 1c: Creating a custom visualization
 
       .. figure:: ../source/images/ff_prime.gif
 
+Exercise 1d: Loading Machine Descriptions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. tip:: More complex examples of visualizations are available in the 
    ``imas_muscle3/visualization/examples/`` directory. For example, the PDS example
    combines data from multiple IDSs, handles machine description data, and 
    handles different types of plots.
+
 
 Exercise 2: Using Automatic Mode
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
