@@ -467,6 +467,8 @@ Exercise 4: Loading Machine Descriptions
 
    .. md-tab-item:: Solution
 
+      .. figure:: ../source/images/outline.gif
+
       Example yMMSL file:
 
       .. literalinclude:: ../../imas_muscle3/visualization/examples/machine_description/machine_description.ymmsl
