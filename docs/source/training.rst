@@ -20,7 +20,7 @@ please take a look at the `MUSCLE3 documentation <https://muscle3.readthedocs.io
 
 There is also training material available for the ITER Pulse Design Simulation, which can also serve as
 an introduction to IMAS-MUSCLE3 workflows, which is available 
-`here <https://sharepoint.iter.org/departments/POP/CM/IMDesign/Code Documentation/PDS/courses/basic_user_training.html>`_. Note that this requires an ITER account to view.
+`here <https://sharepoint.iter.org/departments/POP/CM/IMDesign/Code%20Documentation/PDS/courses/basic_user_training.html>`_. Note that this requires an ITER account to view.
 
 All examples require that you have an environment with IMAS-MUSCLE3 up and running.
 If you do not have this yet, please have a look at the :ref:`installation instructions <installing>`.
@@ -60,13 +60,13 @@ Exercise 1a: Setting Up Your First Visualization
       What do you see in your browser?
 
       .. hint::
-         There are premade examples available that you use can use available, located in this
-         location: ``imas_muscle3/visualization/examples``. For this specific exercise, take a look at the example yMMSL file in ``imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl``. If you want detailed information about the visualization actor, take a look
+         There are premade examples available that you can use, located in this
+         directory: ``imas_muscle3/visualization/examples``. For this specific exercise, take a look at the example yMMSL file in ``imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl``. If you want detailed information about the visualization actor, take a look
          at the :ref:`documentation <actor_visualization>`.
 
    .. md-tab-item:: Solution
 
-      Create a file called ``my_visualization.ymmsl`` with the following content:
+      Create a yMMSL file with the following content:
 
       .. code-block:: yaml
 
@@ -114,7 +114,8 @@ Exercise 1b: Understanding the Basic Structure
    .. md-tab-item:: Exercise
 
       Now that you were able to run the visualization actor in the previous exercise, let's
-      take a look under the hood to see what the plotting script actually does.
+      take a look under the hood to see what plotting script that you supplied actually does.
+      We will take a look at the example plotting script located in ``imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py``
 
       Every plotting script for the visualization actor must include the following two classes:
 
