@@ -20,7 +20,7 @@ please take a look at the `MUSCLE3 documentation <https://muscle3.readthedocs.io
 
 There is also training material available for the ITER Pulse Design Simulation, which can also serve as
 an introduction to IMAS-MUSCLE3 workflows, which is available 
-`here <https://sharepoint.iter.org/departments/POP/CM/IMDesign/Code Documentation/PDS/courses/basic_user_training.html>`_. Note that this requires an ITER account to view.
+`here <https://sharepoint.iter.org/departments/POP/CM/IMDesign/Code%20Documentation/PDS/courses/basic_user_training.html>`_. Note that this requires an ITER account to view.
 
 All examples require that you have an environment with IMAS-MUSCLE3 up and running.
 If you do not have this yet, please have a look at the :ref:`installation instructions <installing>`.
