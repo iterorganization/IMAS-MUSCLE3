@@ -51,6 +51,7 @@ Available Settings
   - ***t_min***: (float) Minimum time value for loading timeslices. Defaults to None.
   - ***t_max***: (float) Maximum time value for loading timeslices. Defaults to None.
   - ***interpoation_method***: (int) Which IMAS interpolation ethod to use for source. Defaults to CLOSEST_INTERP.
+  - ***iterative***: (bool) Whether to loop over all timeslices or send them all at once. Defaults to true.
 
 Available Ports
 ---------------

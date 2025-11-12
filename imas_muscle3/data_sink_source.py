@@ -104,6 +104,7 @@ def muscled_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
+            iterative = get_setting_optional(instance, "iterative")
             dd_version = get_setting_optional(instance, "dd_version")
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
@@ -121,22 +122,32 @@ def muscled_source() -> None:
         if instance.should_init():
             pass
 
-        for i, t_inner in enumerate(t_array):
-            # O_I
-            if i < len(t_array) - 1:
-                next_t = t_array[i + 1]
-            else:
-                next_t = None
+        if iterative:
+            for i, t_inner in enumerate(t_array):
+                # O_I
+                if i < len(t_array) - 1:
+                    next_t = t_array[i + 1]
+                else:
+                    next_t = None
+                handle_source(
+                    instance,
+                    source_db_entry,
+                    port_list_out,
+                    t_inner,
+                    next_timestamp=next_t,
+                )
+                if instance.should_save_snapshot(t_inner):
+                    msg = Message(t_inner)
+                    instance.save_snapshot(msg)
+        else:
             handle_source(
                 instance,
                 source_db_entry,
                 port_list_out,
-                t_inner,
-                next_timestamp=next_t,
+                t_array[0],
+                iterative=iterative,
             )
-            if instance.should_save_snapshot(t_inner):
-                msg = Message(t_inner)
-                instance.save_snapshot(msg)
+
 
         if instance.should_save_final_snapshot():
             msg = Message(t_inner)
@@ -195,6 +206,7 @@ def handle_source(
     port_list: List[str],
     t_cur: float,
     next_timestamp: Optional[float] = None,
+    iterative: bool = True,
 ) -> None:
     """Loop through source ids_names and send all outgoing messages"""
     if db_entry is None:
@@ -204,12 +216,18 @@ def handle_source(
         ids_name = port_name.replace("_out", "")
         occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
         interp_method = fix_interpolation_method(instance)
-        slice_out = db_entry.get_slice(
-            ids_name=ids_name,
-            occurrence=occ,
-            time_requested=t_cur,
-            interpolation_method=interp_method,
-        )
+        if iterative:
+            slice_out = db_entry.get_slice(
+                ids_name=ids_name,
+                occurrence=occ,
+                time_requested=t_cur,
+                interpolation_method=interp_method,
+            )
+        else:
+            slice_out = db_entry.get(
+                ids_name=ids_name,
+                occurrence=occ,
+            )
         msg_out = Message(
             t_cur, data=slice_out.serialize(), next_timestamp=next_timestamp
         )
