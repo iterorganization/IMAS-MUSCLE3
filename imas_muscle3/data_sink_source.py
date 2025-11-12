@@ -58,7 +58,7 @@ from imas.ids_defs import (
     LINEAR_INTERP,
     PREVIOUS_INTERP,
 )
-from libmuscle import Instance, Message
+from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
@@ -75,7 +75,7 @@ def muscled_sink() -> None:
     # we can leave out port names on f_init since any connected port will
     # automatically be put there, this minimizes logs getting clogged with
     # prereceive messages
-    instance = Instance()
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
     first_run = True
     while instance.reuse_instance():
         if first_run:
@@ -98,7 +98,8 @@ def muscled_source() -> None:
             Operator.O_I: [
                 f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.USES_CHECKPOINT_API,
     )
     first_run = True
     while instance.reuse_instance():
@@ -113,6 +114,13 @@ def muscled_source() -> None:
             sanity_check_ports(instance)
             first_run = False
 
+        if instance.resuming():
+            msg = instance.load_snapshot()
+            t_cur = msg.timestamp
+            t_array = [t for t in t_array if t > t_cur]
+        if instance.should_init():
+            pass
+
         for i, t_inner in enumerate(t_array):
             # O_I
             if i < len(t_array) - 1:
@@ -126,6 +134,13 @@ def muscled_source() -> None:
                 t_inner,
                 next_timestamp=next_t,
             )
+            if instance.should_save_snapshot(t_inner):
+                msg = Message(t_inner)
+                instance.save_snapshot(msg)
+
+        if instance.should_save_final_snapshot():
+            msg = Message(t_inner)
+            instance.save_final_snapshot(msg)
     source_db_entry.close()
 
 
@@ -140,7 +155,8 @@ def muscled_sink_source() -> None:
             Operator.O_F: [
                 f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
     )
     sink_db_entry = None
     first_run = True

@@ -22,7 +22,7 @@ from typing import Dict, List
 
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
-from libmuscle import Instance, Message
+from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list
@@ -44,7 +44,8 @@ def main() -> None:
             Operator.O_F: [
                 f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.USES_CHECKPOINT_API,
     )
     # fix connected ports
     port_list_in = get_port_list(instance, Operator.S)
@@ -54,13 +55,22 @@ def main() -> None:
     sanity_check_ports(port_list_in, port_list_out)
 
     while instance.reuse_instance():
-        # keep track of whether or not each IDS should keep receiving
-        ids_next: Dict[str, bool] = {
-            port.replace("_in", ""): True for port in port_list_in
-        }
-
         # use memory backend db entry to accumulate timeslices in a single IDS
+        ids_next: Dict[str, bool]
         with DBEntry("imas:memory?path=/", "w") as db:
+            if instance.resuming():
+                msg = instance.load_snapshot()
+                t_cur = msg.timestamp
+                ids_next = msg.data[0]
+                for ids_name, obj in msg.data[1]:
+                    ids = db.factory.new(ids_name)
+                    ids.deserialize(obj)
+                    db.put(ids)
+            if instance.should_init():
+                # keep track of whether or not each IDS should keep receiving
+                ids_next = {
+                    port.replace("_in", ""): True for port in port_list_in
+                }
             while any(ids_next.values()):
                 # loop over IDSs and receive until the last timeslice
                 for port_name in port_list_in:
@@ -68,6 +78,7 @@ def main() -> None:
                     if ids_next.get(ids_name, True):
                         # receive IDS
                         msg_in = instance.receive(port_name)
+                        t_cur = msg_in.timestamp
                         ids = db.factory.new(ids_name)
                         ids.deserialize(msg_in.data)
                         if (
@@ -84,6 +95,16 @@ def main() -> None:
                     msg_in = instance.receive("t_next")
                     if msg_in.next_timestamp is None:
                         break
+                if instance.should_save_snapshot(t_cur):
+                    data = [
+                        ids_next,
+                        {
+                            db.get(ids_name).serialize()
+                            for ids_name in ids_next.keys()
+                        },
+                    ]
+                    msg = Message(t_cur, data=data)
+                    instance.save_snapshot(msg)
 
             # send output with all timeslices at once
             for port_name in port_list_out:
@@ -95,6 +116,9 @@ def main() -> None:
                     time_out = 0
                 msg_out = Message(time_out, data=ids.serialize())
                 instance.send(port_name, msg_out)
+        if instance.should_save_final_snapshot():
+            msg = Message(t_cur)
+            instance.save_final_snapshot(msg)
 
 
 def sanity_check_ports(
