@@ -104,7 +104,7 @@ def muscled_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            iterative = get_setting_optional(instance, "iterative")
+            iterative = get_setting_optional(instance, "iterative", True)
             dd_version = get_setting_optional(instance, "dd_version")
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
@@ -145,12 +145,11 @@ def muscled_source() -> None:
                 source_db_entry,
                 port_list_out,
                 t_array[0],
-                iterative=iterative,
+                iterative=False,
             )
 
-
         if instance.should_save_final_snapshot():
-            msg = Message(t_inner)
+            msg = Message(t_array[-1])
             instance.save_final_snapshot(msg)
     source_db_entry.close()
 
