@@ -25,22 +25,22 @@ Available Settings
 
 * Mandatory
 
-  - ***plot_file_path***: (string) The path to the Python script that defines the plotting logic. This script must contain a `State` class and a `Plotter` class, as described below.
+  - **plot_file_path**: (string) The path to the Python script that defines the plotting logic. This script must contain a `State` class and a `Plotter` class, as described below.
 
 * Optional
 
-  - ***port***: (int) The port on which the visualization server will run. Defaults to `0`, indicating a random available port.
-  - ***throttle_interval***: (float) The minimum time in seconds between plot updates. 
+  - **port**: (int) The port on which the visualization server will run. Defaults to `0`, indicating a random available port.
+  - **throttle_interval**: (float) The minimum time in seconds between plot updates. 
     This can be used to prevent the visualization from slowing down if data arrives very quickly. Defaults to `0.1`.
-  - ***keep_alive***: (bool) If `True`, the visualization server will remain active after 
+  - **keep_alive**: (bool) If `True`, the visualization server will remain active after 
     the last MUSCLE message was received, allowing for inspection of the received data. 
     If `False`, the server stops after the last MUSCLE message is received. Defaults to `False`.
-  - ***open_browser***: (bool) If `True`, automatically opens a new tab in your web 
+  - **open_browser**: (bool) If `True`, automatically opens a new tab in your web 
     browser to the visualization page upon starting. Defaults to `True`.
-  - ***automatic_mode***: (bool) If `True`, time-dependent IDS quantities can automatically
+  - **automatic_mode**: (bool) If `True`, time-dependent IDS quantities can automatically
     be visualized using a dropdown menu. Data will automatically be extracted, and an
     appropriate plot for the quantity will be selected.
-  - ***automatic_extract_all***: (bool) This only works if automatic_mode is enabled. 
+  - **automatic_extract_all**: (bool) This only works if automatic_mode is enabled. 
     If `True`, automatically extracts all time dependent quantities of the IDS. 
     If `False`, the data will only start to be extracted as soon as a new plot is selected. 
     Enabling this can cause significant computation and memory overhead, depending on the size of the IDS.
@@ -53,9 +53,9 @@ in the ymmsl file and will be skipped otherwise.
 
 * Optional
 
-  - ***<ids_name>_in (S)***: Any incoming IDS timeslices on the `S` port. 
+  - **<ids_name>_in (S)**: Any incoming IDS timeslices on the `S` port. 
     Replace `<ids_name>` with the required IDS name (e.g., ``equilibrium_in``).
-  - ***<ids_name>_md_in (S)***: Any incoming machine description IDS's on the `S` port. 
+  - **<ids_name>_md_in (S)**: Any incoming machine description IDS's on the `S` port. 
     These are typically static data like the machine wall or coil geometry. 
     Replace `<ids_name>` with the required IDS name (e.g., ``wall_md_in``).
 
