@@ -10,7 +10,7 @@ import holoviews as hv
 import panel as pn
 from imas import IDSFactory
 from imas.ids_toplevel import IDSToplevel
-from libmuscle import Instance, InstanceFlags
+from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
@@ -23,7 +23,9 @@ pn.extension(notifications=True)
 hv.extension("bokeh")
 
 
-def handle_machine_description(instance: Instance) -> Dict[str, IDSToplevel]:
+def handle_machine_description(
+    instance: Instance, first_run: bool
+) -> Dict[str, IDSToplevel]:
     """Receive and deserialize all machine description IDSs.
 
     Returns:
@@ -36,6 +38,10 @@ def handle_machine_description(instance: Instance) -> Dict[str, IDSToplevel]:
     ]
     for port_name in md_ports_in:
         msg = instance.receive(port_name)
+        # In order for checkpointing to work, we must receive the
+        # machine description messages coming in on the S-port
+        if not first_run:
+            continue
         ids_name = port_name.replace("_md_in", "")
         ids = IDSFactory().new(ids_name)
         ids.deserialize(msg.data)
@@ -52,64 +58,68 @@ def main() -> None:
             ]
             + [f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()],
         },
-        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
+        flags=InstanceFlags.USES_CHECKPOINT_API,
     )
 
     visualization_actor = None
     first_run = True
     last_trigger_time = 0.0
+    ports_in = [
+        p
+        for p in get_port_list(instance, Operator.S)
+        if not p.endswith("_md_in")
+    ]
     while instance.reuse_instance():
-        if first_run:
-            plot_file_path = instance.get_setting("plot_file_path", "str")
-            # If port is not specified, use a random available port
-            port = get_setting_optional(instance, "port", 0)
-            # FIXME: there is an issue when the plotting takes much longer
-            # than it takes for data to arrive from the MUSCLE actor. As a
-            # remedy, set a plotting throttle interval.
-            throttle_interval = get_setting_optional(
-                instance, "throttle_interval", 0.1
-            )
-            keep_alive = get_setting_optional(instance, "keep_alive", False)
-            open_browser = get_setting_optional(instance, "open_browser", True)
-            automatic_mode = get_setting_optional(
-                instance, "automatic_mode", False
-            )
-            extract_all = get_setting_optional(
-                instance, "automatic_extract_all", False
-            )
+        if instance.resuming():
+            pass
+        if instance.should_init():
+            pass
 
-            md_dict = handle_machine_description(instance)
+        plot_file_path = instance.get_setting("plot_file_path", "str")
+        # If port is not specified, use a random available port
+        port = get_setting_optional(instance, "port", 0)
+        # FIXME: there is an issue when the plotting takes much longer
+        # than it takes for data to arrive from the MUSCLE actor. As a
+        # remedy, set a plotting throttle interval.
+        throttle_interval = get_setting_optional(
+            instance, "throttle_interval", 0.1
+        )
+        keep_alive = get_setting_optional(instance, "keep_alive", False)
+        open_browser = get_setting_optional(instance, "open_browser", True)
+        automatic_mode = get_setting_optional(
+            instance, "automatic_mode", False
+        )
+        extract_all = get_setting_optional(
+            instance, "automatic_extract_all", False
+        )
 
-            assert (
-                port is not None
-                and open_browser is not None
-                and extract_all is not None
-                and automatic_mode is not None
-            )
-            visualization_actor = VisualizationActor(
-                plot_file_path,
-                port,
-                md_dict,
-                open_browser,
-                extract_all,
-                automatic_mode,
-            )
-            first_run = False
         assert (
-            visualization_actor is not None and throttle_interval is not None
+            port is not None
+            and open_browser is not None
+            and extract_all is not None
+            and automatic_mode is not None
+            and throttle_interval is not None
         )
 
         is_running = True
-        ports_in = [
-            p
-            for p in get_port_list(instance, Operator.S)
-            if not p.endswith("_md_in")
-        ]
-
         while is_running:
+            md_dict = handle_machine_description(instance, first_run)
+            if first_run:
+                visualization_actor = VisualizationActor(
+                    plot_file_path,
+                    port,
+                    md_dict,
+                    open_browser,
+                    extract_all,
+                    automatic_mode,
+                )
+                first_run = False
+
+            assert visualization_actor is not None
             common_time = None
             for port_name in ports_in:
                 msg = instance.receive(port_name)
+                t_cur = msg.timestamp
                 ids_name = port_name.replace("_in", "")
 
                 temp_ids = IDSFactory().new(ids_name)
@@ -133,16 +143,25 @@ def main() -> None:
                 last_trigger_time = current_time
             visualization_actor.update_time(temp_ids.time[-1])
 
+            if instance.should_save_snapshot(t_cur):
+                msg = Message(t_cur)
+                instance.save_snapshot(msg)
+
+        assert visualization_actor is not None
         visualization_actor.state.param.trigger("data")
         if keep_alive:
             visualization_actor.notify_done()
         else:
             visualization_actor.stop_server()
 
+        if instance.should_save_final_snapshot():
+            msg = Message(t_cur)
+            instance.save_final_snapshot(msg)
+
 
 if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
+        level=logging.DEBUG,
     )
     main()
