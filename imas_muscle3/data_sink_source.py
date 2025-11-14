@@ -75,24 +75,28 @@ def muscled_sink() -> None:
     # we can leave out port names on f_init since any connected port will
     # automatically be put there, this minimizes logs getting clogged with
     # prereceive messages
+    sink_db_entry = None
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
     first_run = True
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
+            sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = instance.get_setting("sink_uri")
-            sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
             first_run = False
 
         # F_INIT
         handle_sink(instance, sink_db_entry, port_list_in)
-    sink_db_entry.close()
+    if sink_db_entry is not None:
+        sink_db_entry.close()
 
 
 def muscled_source() -> None:
     """Implementation of source component"""
+    source_db_entry = None
     instance = Instance(
         {
             Operator.O_I: [
@@ -141,12 +145,14 @@ def muscled_source() -> None:
         if instance.should_save_final_snapshot():
             msg = Message(t_inner)
             instance.save_final_snapshot(msg)
-    source_db_entry.close()
+    if source_db_entry is not None:
+        source_db_entry.close()
 
 
 def muscled_sink_source() -> None:
     """Implementation of hybrid sink source component"""
     sink_db_entry = None
+    source_db_entry = None
     instance = Instance(
         {
             Operator.F_INIT: [
@@ -163,10 +169,11 @@ def muscled_sink_source() -> None:
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
+            sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
             if sink_uri is not None:
-                sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+                sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
@@ -186,7 +193,8 @@ def muscled_sink_source() -> None:
 
     if sink_db_entry is not None:
         sink_db_entry.close()
-    source_db_entry.close()
+    if source_db_entry is not None:
+        source_db_entry.close()
 
 
 def handle_source(
