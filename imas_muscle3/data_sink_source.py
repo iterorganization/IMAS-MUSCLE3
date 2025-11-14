@@ -183,7 +183,9 @@ def muscled_sink_source() -> None:
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
             if sink_uri is not None:
-                sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
+                sink_db_entry = DBEntry(
+                    sink_uri, sink_mode, dd_version=dd_version
+                )
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
