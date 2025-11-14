@@ -75,38 +75,36 @@ def main() -> None:
         if instance.should_init():
             pass
 
+        plot_file_path = instance.get_setting("plot_file_path", "str")
+        # If port is not specified, use a random available port
+        port = get_setting_optional(instance, "port", 0)
+        # FIXME: there is an issue when the plotting takes much longer
+        # than it takes for data to arrive from the MUSCLE actor. As a
+        # remedy, set a plotting throttle interval.
+        throttle_interval = get_setting_optional(
+            instance, "throttle_interval", 0.1
+        )
+        keep_alive = get_setting_optional(instance, "keep_alive", False)
+        open_browser = get_setting_optional(instance, "open_browser", True)
+        automatic_mode = get_setting_optional(
+            instance, "automatic_mode", False
+        )
+        extract_all = get_setting_optional(
+            instance, "automatic_extract_all", False
+        )
+
+        assert (
+            port is not None
+            and open_browser is not None
+            and extract_all is not None
+            and automatic_mode is not None
+            and throttle_interval is not None
+        )
+
         is_running = True
         while is_running:
             md_dict = handle_machine_description(instance, first_run)
             if first_run:
-                plot_file_path = instance.get_setting("plot_file_path", "str")
-                # If port is not specified, use a random available port
-                port = get_setting_optional(instance, "port", 0)
-                # FIXME: there is an issue when the plotting takes much longer
-                # than it takes for data to arrive from the MUSCLE actor. As a
-                # remedy, set a plotting throttle interval.
-                throttle_interval = get_setting_optional(
-                    instance, "throttle_interval", 0.1
-                )
-                keep_alive = get_setting_optional(
-                    instance, "keep_alive", False
-                )
-                open_browser = get_setting_optional(
-                    instance, "open_browser", True
-                )
-                automatic_mode = get_setting_optional(
-                    instance, "automatic_mode", False
-                )
-                extract_all = get_setting_optional(
-                    instance, "automatic_extract_all", False
-                )
-
-                assert (
-                    port is not None
-                    and open_browser is not None
-                    and extract_all is not None
-                    and automatic_mode is not None
-                )
                 visualization_actor = VisualizationActor(
                     plot_file_path,
                     port,
@@ -115,12 +113,9 @@ def main() -> None:
                     extract_all,
                     automatic_mode,
                 )
-                assert (
-                    visualization_actor is not None
-                    and throttle_interval is not None
-                )
                 first_run = False
 
+            assert visualization_actor is not None
             common_time = None
             for port_name in ports_in:
                 msg = instance.receive(port_name)
@@ -152,6 +147,7 @@ def main() -> None:
                 msg = Message(t_cur)
                 instance.save_snapshot(msg)
 
+        assert visualization_actor is not None
         visualization_actor.state.param.trigger("data")
         if keep_alive:
             visualization_actor.notify_done()
