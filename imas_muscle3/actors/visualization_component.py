@@ -10,7 +10,7 @@ import holoviews as hv
 import panel as pn
 from imas import IDSFactory
 from imas.ids_toplevel import IDSToplevel
-from libmuscle import Instance
+from libmuscle import Instance, InstanceFlags
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
@@ -51,7 +51,8 @@ def main() -> None:
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
             ]
             + [f"{ids_name}_md_in" for ids_name in IDSFactory().ids_names()],
-        }
+        },
+        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
     )
 
     visualization_actor = None
