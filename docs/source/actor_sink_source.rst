@@ -50,7 +50,8 @@ Available Settings
   - **<ids_name>_occ**: (int) Occurence number to load from or save to for a given ids_name. Replace <ids_name> with the required ids i.e. equilibrium_occ. Defaults to 0.
   - **t_min**: (float) Minimum time value for loading timeslices. Defaults to None.
   - **t_max**: (float) Maximum time value for loading timeslices. Defaults to None.
-  - **interpoation_method**: (int) Which IMAS interpolation ethod to use for source. Defaults to CLOSEST_INTERP.
+  - **interpolation_method**: (int) Which IMAS interpolation method to use for source. Defaults to CLOSEST_INTERP.
+  - **sink_mode**: (string) Mode argument for DBEntry. 'w' means you always overwrite your full data entry. 'x' means you are not allowed to overwrite old data. Defaults to 'x'.
 
 Available Ports
 ---------------

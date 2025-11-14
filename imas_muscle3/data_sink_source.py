@@ -58,7 +58,7 @@ from imas.ids_defs import (
     LINEAR_INTERP,
     PREVIOUS_INTERP,
 )
-from libmuscle import Instance, Message
+from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
@@ -75,30 +75,35 @@ def muscled_sink() -> None:
     # we can leave out port names on f_init since any connected port will
     # automatically be put there, this minimizes logs getting clogged with
     # prereceive messages
-    instance = Instance()
+    sink_db_entry = None
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
     first_run = True
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
+            sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = instance.get_setting("sink_uri")
-            sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
             first_run = False
 
         # F_INIT
         handle_sink(instance, sink_db_entry, port_list_in)
-    sink_db_entry.close()
+    if sink_db_entry is not None:
+        sink_db_entry.close()
 
 
 def muscled_source() -> None:
     """Implementation of source component"""
+    source_db_entry = None
     instance = Instance(
         {
             Operator.O_I: [
                 f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.USES_CHECKPOINT_API,
     )
     first_run = True
     while instance.reuse_instance():
@@ -113,6 +118,13 @@ def muscled_source() -> None:
             sanity_check_ports(instance)
             first_run = False
 
+        if instance.resuming():
+            msg = instance.load_snapshot()
+            t_cur = msg.timestamp
+            t_array = [t for t in t_array if t > t_cur]
+        if instance.should_init():
+            pass
+
         for i, t_inner in enumerate(t_array):
             # O_I
             if i < len(t_array) - 1:
@@ -126,12 +138,21 @@ def muscled_source() -> None:
                 t_inner,
                 next_timestamp=next_t,
             )
-    source_db_entry.close()
+            if instance.should_save_snapshot(t_inner):
+                msg = Message(t_inner)
+                instance.save_snapshot(msg)
+
+        if instance.should_save_final_snapshot():
+            msg = Message(t_inner)
+            instance.save_final_snapshot(msg)
+    if source_db_entry is not None:
+        source_db_entry.close()
 
 
 def muscled_sink_source() -> None:
     """Implementation of hybrid sink source component"""
     sink_db_entry = None
+    source_db_entry = None
     instance = Instance(
         {
             Operator.F_INIT: [
@@ -140,17 +161,21 @@ def muscled_sink_source() -> None:
             Operator.O_F: [
                 f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
     )
     sink_db_entry = None
     first_run = True
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
+            sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
             if sink_uri is not None:
-                sink_db_entry = DBEntry(sink_uri, "w", dd_version=dd_version)
+                sink_db_entry = DBEntry(
+                    sink_uri, sink_mode, dd_version=dd_version
+                )
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
@@ -170,7 +195,8 @@ def muscled_sink_source() -> None:
 
     if sink_db_entry is not None:
         sink_db_entry.close()
-    source_db_entry.close()
+    if source_db_entry is not None:
+        source_db_entry.close()
 
 
 def handle_source(

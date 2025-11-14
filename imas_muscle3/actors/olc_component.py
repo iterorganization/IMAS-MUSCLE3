@@ -16,7 +16,7 @@ from imas import DBEntry, IDSFactory
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
-from libmuscle import Instance
+from libmuscle import Instance, InstanceFlags
 from ymmsl import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
@@ -32,7 +32,8 @@ def main() -> None:
             Operator.F_INIT: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
             ],
-        }
+        },
+        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
     )
 
     # enter re-use loop
