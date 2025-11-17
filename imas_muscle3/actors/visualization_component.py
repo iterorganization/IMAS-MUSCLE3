@@ -93,13 +93,12 @@ def main() -> None:
             instance, "automatic_extract_all", False
         )
 
-        assert (
-            port is not None
-            and open_browser is not None
-            and extract_all is not None
-            and automatic_mode is not None
-            and throttle_interval is not None
-        )
+        # for mypy
+        assert port is not None
+        assert open_browser is not None
+        assert extract_all is not None
+        assert automatic_mode is not None
+        assert throttle_interval is not None
 
         is_running = True
         while is_running:
@@ -162,6 +161,6 @@ def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.DEBUG,
+        level=logging.INFO,
     )
     main()
