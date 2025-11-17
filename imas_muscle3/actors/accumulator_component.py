@@ -99,7 +99,7 @@ def main() -> None:
                     data = [
                         ids_next,
                         {
-                            db.get(ids_name).serialize()
+                            ids_name: db.get(ids_name).serialize()
                             for ids_name in ids_next.keys()
                         },
                     ]
