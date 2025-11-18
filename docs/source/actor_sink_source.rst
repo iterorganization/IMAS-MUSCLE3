@@ -50,8 +50,8 @@ Available Settings
   - **<ids_name>_occ**: (int) Occurence number to load from or save to for a given ids_name. Replace <ids_name> with the required ids i.e. equilibrium_occ. Defaults to 0.
   - **t_min**: (float) Minimum time value for loading timeslices. Defaults to None.
   - **t_max**: (float) Maximum time value for loading timeslices. Defaults to None.
-  - **interpolation_method**: (int) Which IMAS interpolation method to use for source. Defaults to CLOSEST_INTERP.
-  - **sink_mode**: (string) Mode argument for DBEntry. 'w' means you always overwrite your full data entry. 'x' means you are not allowed to overwrite old data. Defaults to 'x'.
+  - **interpolation_method**: (int) Which `IMAS interpolation method <https://imas-python.readthedocs.io/en/stable/generated/imas.db_entry.DBEntry.html#imas.db_entry.DBEntry.get_sample.interpolation_method>`_ to use for source. Defaults to CLOSEST_INTERP.
+  - **sink_mode**: (string) Mode argument for `DBEntry <https://imas-python.readthedocs.io/en/stable/generated/imas.db_entry.DBEntry.html#imas.db_entry.DBEntry.__init__.mode>`_. 'w' means you always overwrite your full data entry. 'x' means you are not allowed to overwrite old data. Defaults to 'x'.
   - **iterative**: (bool) True loops over all timeslices, False sends them all at once. Defaults to True.
 
 Available Ports
