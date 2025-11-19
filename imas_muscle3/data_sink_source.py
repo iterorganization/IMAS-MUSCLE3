@@ -308,11 +308,11 @@ def sanity_check_ports(instance: Instance) -> None:
 
 def fix_interpolation_method(instance: Instance) -> int:
     setting = get_setting_optional(instance, "interpolation_method")
-    if setting == "CLOSEST_INTERP":
+    if setting == "closest":
         interp = CLOSEST_INTERP
-    elif setting == "PREVIOUS_INTERP":
+    elif setting == "previous":
         interp = PREVIOUS_INTERP
-    elif setting == "LINEAR_INTERP":
+    elif setting == "linear":
         interp = LINEAR_INTERP
     else:
         interp = CLOSEST_INTERP
