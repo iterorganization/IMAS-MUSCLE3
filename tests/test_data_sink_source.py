@@ -7,14 +7,13 @@ from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
 
-def test_source_to_sink(tmpdir, core_profiles):
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+def test_source_to_sink(tmp_path, core_profiles):
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
-    tmppath = Path(str(tmpdir))
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
@@ -51,7 +50,7 @@ resources:
     config = ymmsl.load(ymmsl_text)
 
     # set up
-    run_dir = RunDir(tmppath / "run")
+    run_dir = RunDir(tmp_path / "run")
 
     # launch MUSCLE Manager with simulation
     manager = Manager(config, run_dir)
@@ -67,14 +66,14 @@ resources:
 
 
 @pytest.mark.parametrize("use_sink", [True, False])
-def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
     data_hybrid_source_path = (
-        Path(tmpdir) / "source_hybrid_component_data"
+        tmp_path / "source_hybrid_component_data"
     ).absolute()
     data_hybrid_sink_path = (
-        Path(tmpdir) / "sink_hybrid_component_data"
+        tmp_path / "sink_hybrid_component_data"
     ).absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
@@ -84,7 +83,6 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
         entry.put(core_profiles)
     with DBEntry(hybrid_source_uri, "w") as entry:
         entry.put(core_profiles)
-    tmppath = Path(str(tmpdir))
     # make config
     ymmsl_text = f"""
     ymmsl_version: v0.1
@@ -134,7 +132,7 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
     config = ymmsl.load(ymmsl_text)
 
     # set up
-    run_dir = RunDir(tmppath / "run")
+    run_dir = RunDir(tmp_path / "run")
 
     # launch MUSCLE Manager with simulation
     manager = Manager(config, run_dir)
@@ -155,14 +153,13 @@ def test_source_to_hybrid_to_sink(tmpdir, core_profiles, use_sink):
         assert not data_hybrid_sink_path.exists()
 
 
-def test_source_with_time_range(tmpdir, core_profiles):
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+def test_source_with_time_range(tmp_path, core_profiles):
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
-    tmppath = Path(str(tmpdir))
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
@@ -201,7 +198,7 @@ resources:
     config = ymmsl.load(ymmsl_text)
 
     # set up
-    run_dir = RunDir(tmppath / "run")
+    run_dir = RunDir(tmp_path / "run")
 
     # launch MUSCLE Manager with simulation
     manager = Manager(config, run_dir)
@@ -217,19 +214,18 @@ resources:
         assert all(entry.get("core_profiles").time == [1])
 
 
-def test_source_without_time_array(tmpdir, iron_core, pf_active):
+def test_source_without_time_array(tmp_path, iron_core, pf_active):
     """
     Test if t_array in source is taken from pf_active even if
     iron_core is first in list
     """
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(iron_core)
         entry.put(pf_active)
-    tmppath = Path(str(tmpdir))
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
@@ -267,7 +263,7 @@ resources:
     config = ymmsl.load(ymmsl_text)
 
     # set up
-    run_dir = RunDir(tmppath / "run")
+    run_dir = RunDir(tmp_path / "run")
 
     # launch MUSCLE Manager with simulation
     manager = Manager(config, run_dir)
@@ -291,17 +287,16 @@ def ls_snapshots(run_dir, instance=None):
     )
 
 
-def test_source_checkpoints(tmpdir, pf_active):
+def test_source_checkpoints(tmp_path, pf_active):
     """
     Test if checkpointing works as intended
     """
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(pf_active)
-    tmppath = Path(str(tmpdir))
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
@@ -342,8 +337,8 @@ checkpoints:
 """
 
     config = ymmsl.load(ymmsl_text)
-    run_dir = RunDir(tmppath / "run")
-    run_dir2 = RunDir(tmppath / "run2")
+    run_dir = RunDir(tmp_path / "run")
+    run_dir2 = RunDir(tmp_path / "run2")
     assert all(pf_active.time == [0, 1, 2])
     for i in range(2):
         if i == 0:
