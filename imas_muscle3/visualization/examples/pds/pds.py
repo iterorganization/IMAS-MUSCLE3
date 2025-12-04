@@ -492,7 +492,7 @@ class Plotter(BasePlotter):
                         )
                     t = s.time[s.time <= time].values
                     coil_name = s.coil.values[idx]
-                    i = s.currents.sel(coil=coil_name)[s.time <= time].values
+                    i = s.currents.isel(coil=idx)[s.time <= time].values
                     return hv.Curve(
                         (t, i), kdims=[f"time_{idx}"], vdims=[f"current_{idx}"]
                     ).opts(
