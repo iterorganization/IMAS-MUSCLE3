@@ -104,7 +104,7 @@ class BasePlotter(Viewer):
             "a plotter class needs to implement a `get_dashboard` method"
         )
 
-    @param.depends("_live_view", watch=True)  # type: ignore[misc]
+    @param.depends("_live_view", watch=True)  # type: ignore[untyped-decorator]
     def _store_frozen_state(self) -> None:
         """Store frozen state when live view is toggled."""
         if self._live_view:
@@ -112,12 +112,12 @@ class BasePlotter(Viewer):
         else:
             self._frozen_state = self._state
 
-    @param.depends("time", watch=True)  # type: ignore[misc]
+    @param.depends("time", watch=True)  # type: ignore[untyped-decorator]
     def update_time_label(self) -> None:
         """Updates the time label in the UI."""
         self.time_label.object = f"## t = {self.time:.5e} s"
 
-    @param.depends("_state.data", watch=True)  # type: ignore[misc]
+    @param.depends("_state.data", watch=True)  # type: ignore[untyped-decorator]
     def _update_on_new_data(self) -> None:
         """Updates time slider options when new data is added to the state."""
         if not self._state.data:
@@ -146,7 +146,7 @@ class BasePlotter(Viewer):
         ]
         self.variable_selector.options = sorted(options)
 
-    @param.depends("_state.variables", watch=True)  # type: ignore[misc]
+    @param.depends("_state.variables", watch=True)  # type: ignore[untyped-decorator]
     def _update_variable_selector(self) -> None:
         """Updates the variable selector when new variables are discovered."""
         self.variable_selector.options = sorted(
