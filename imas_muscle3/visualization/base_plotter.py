@@ -117,7 +117,7 @@ class BasePlotter(Viewer):
         """Updates the time label in the UI."""
         self.time_label.object = f"## t = {self.time:.5e} s"
 
-    @param.depends("_state.data", watch=True)  # type: ignore[untyped-decorator]
+    @param.depends("_state.data", watch=True)  # type: ignore[untyped-decorator] # noqa: E501
     def _update_on_new_data(self) -> None:
         """Updates time slider options when new data is added to the state."""
         if not self._state.data:
@@ -146,7 +146,7 @@ class BasePlotter(Viewer):
         ]
         self.variable_selector.options = sorted(options)
 
-    @param.depends("_state.variables", watch=True)  # type: ignore[untyped-decorator]
+    @param.depends("_state.variables", watch=True)  # type: ignore[untyped-decorator] # noqa: E501
     def _update_variable_selector(self) -> None:
         """Updates the variable selector when new variables are discovered."""
         self.variable_selector.options = sorted(
