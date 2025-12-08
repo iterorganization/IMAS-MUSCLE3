@@ -8,7 +8,7 @@ User installation
 
   .. code-block:: bash
 
-    pip install IMAS-MUSCLE3
+    pip install imas-muscle3
 
 SDCC installation
 -----------------
