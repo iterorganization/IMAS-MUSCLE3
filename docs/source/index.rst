@@ -15,6 +15,8 @@ README
 
 The README is best read on the `git page <https://github.com/iterorganization/IMAS-MUSCLE3>`_.
 
+Read what's new in the current version of IMAS-MUSCLE3 in our :ref:`changelog`!
+
 Manual
 ------
 
@@ -27,6 +29,7 @@ Manual
    usage
    tips_and_tricks
    training
+   changelog
 
 .. toctree::
    :caption: API docs

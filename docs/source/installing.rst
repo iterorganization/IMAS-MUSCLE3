@@ -3,8 +3,15 @@
 Installing IMAS-MUSCLE3
 =======================
 
-SDCC installation
+User installation
 -------------------
+
+  .. code-block:: bash
+
+    pip install IMAS-MUSCLE3
+
+SDCC installation
+-----------------
 
 * Setup a project folder and clone git repository
 
