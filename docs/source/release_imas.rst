@@ -1,7 +1,7 @@
 .. _`release_imas`:
 
 IMAS-MUSCLE3 development and release process
-===========================================
+============================================
 
 IMAS-MUSCLE3 development follows the fork-based model described in
 `the contributing guidelines
@@ -9,7 +9,7 @@ IMAS-MUSCLE3 development follows the fork-based model described in
 
 
 Creating an IMAS-MUSCLE3 release
--------------------------------
+--------------------------------
 
 1.  Create a Pull Request from ``develop`` to ``main``.
 2.  Add a change log to the Pull Request, briefly describing new features, bug fixes,
@@ -22,7 +22,7 @@ Creating an IMAS-MUSCLE3 release
 
 
 Updating and testing the IMAS-MUSCLE3 Easybuild configuration
-------------------------------------------------------------
+-------------------------------------------------------------
 
 The following steps must be performed for each of the supported tool chains
 (currently ``intel-2023b``, ``foss-2023b``):
