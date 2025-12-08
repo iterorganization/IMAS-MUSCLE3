@@ -24,7 +24,7 @@ Important: IMAS-Core is needed for IMAS-MUSCLE3 to work (which is not publicly a
 As a user, simply install IMAS-MUSCLE3 with pip:
 
 ```bash
-pip install IMAS-MUSCLE3
+pip install imas-muscle3
 ```
 
 Quick developer installation guide
