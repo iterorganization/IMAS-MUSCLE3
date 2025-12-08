@@ -43,6 +43,7 @@ Manual
 
    code_style
    ci_config
+   release_imas
 
 
 
