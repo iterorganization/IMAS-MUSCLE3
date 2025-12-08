@@ -75,7 +75,6 @@ The following steps must be performed for each of the supported tool chains
             module purge
             module use ~/.local/easybuild/modules/all/
             module load IMAS-MUSCLE3/<version>-<toolchain>
-            module load IMAS-AL-Core
     
     c.  Sanity check the module, for example by running the ``pytest`` unit tests.
 
