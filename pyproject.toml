@@ -7,7 +7,6 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "imas-muscle3"
 authors = [
-  {name = "Daan van Vugt", email = "dvanvugt@ignitioncomputing.com"},
   {name = "Mike Sanders", email = "msanders@ignitioncomputing.com"}
 ]
 description = "IMAS MUSCLE3 tools"
