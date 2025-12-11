@@ -52,6 +52,7 @@ dependencies = [
     "rich",
     "packaging",
     "imas-python",
+    "imas-core",
     "imas-validator",
     "muscle3",
     "panel",
