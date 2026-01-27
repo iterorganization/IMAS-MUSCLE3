@@ -14,6 +14,7 @@ from pathlib import Path
 
 from imas import DBEntry, IDSFactory
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
+from imas_validator.report.validationReportGenerator import ValidationReportGenerator
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
@@ -91,17 +92,25 @@ def main() -> None:
                 # or the detailed
                 summary_generator = SummaryReportGenerator([result], today)
                 summary_generator.save_html(f"{t_cur}_report.html")
+                summary_generator = ValidationReportGenerator(result)
+                summary_generator.save_txt(f"{t_cur}_report.txt")
 
                 if get_setting_optional(
                     instance, "halt_on_error", default=False
                 ):
-                    logger.critical("Check failed!")
+                    logger.critical(
+                        "Check failed! Read the IMAS-Validator summary "
+                        "report in the working directory for more information"
+                    )
                     sys.exit(1)
                 else:
                     # this message can be much more verbose. Should include:
                     # - IDSes that have failed
                     # - rules that have been violated (unless there are many?)
-                    logger.warning("Check failed!")
+                    logger.warning(
+                        "Check failed! Read the IMAS-Validator summary "
+                        "report in the working directory for more information"
+                    )
 
 
 if __name__ == "__main__":
