@@ -14,7 +14,9 @@ from pathlib import Path
 
 from imas import DBEntry, IDSFactory
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
-from imas_validator.report.validationReportGenerator import ValidationReportGenerator
+from imas_validator.report.validationReportGenerator import (
+    ValidationReportGenerator,
+)
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
@@ -102,7 +104,8 @@ def main() -> None:
                 # - rules that have been violated (unless there are many?)
                 msg = (
                     "Check failed! Read the IMAS-Validator reports written to "
-                    f"{html_path} and {txt_path} in the working directory for more information"
+                    f"{html_path} and {txt_path} in the working directory for "
+                    "more information"
                 )
                 if get_setting_optional(
                     instance, "halt_on_error", default=False
