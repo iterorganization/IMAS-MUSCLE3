@@ -90,27 +90,27 @@ def main() -> None:
                 today = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                 # not sure whether we need the summary report generator
                 # or the detailed
+                html_path = Path.cwd() / f"{t_cur}_report.html"
+                txt_path = Path.cwd() / f"{t_cur}_report.txt"
                 summary_generator = SummaryReportGenerator([result], today)
-                summary_generator.save_html(f"{t_cur}_report.html")
+                summary_generator.save_html(html_path)
                 summary_generator = ValidationReportGenerator(result)
-                summary_generator.save_txt(f"{t_cur}_report.txt")
+                summary_generator.save_txt(txt_path)
 
+                # this message can be much more verbose. Should include:
+                # - IDSes that have failed
+                # - rules that have been violated (unless there are many?)
+                msg = (
+                    "Check failed! Read the IMAS-Validator reports written to "
+                    f"{html_path} and {txt_path} in the working directory for more information"
+                )
                 if get_setting_optional(
                     instance, "halt_on_error", default=False
                 ):
-                    logger.critical(
-                        "Check failed! Read the IMAS-Validator summary "
-                        "report in the working directory for more information"
-                    )
+                    logger.critical(msg)
                     sys.exit(1)
                 else:
-                    # this message can be much more verbose. Should include:
-                    # - IDSes that have failed
-                    # - rules that have been violated (unless there are many?)
-                    logger.warning(
-                        "Check failed! Read the IMAS-Validator summary "
-                        "report in the working directory for more information"
-                    )
+                    logger.warning(msg)
 
 
 if __name__ == "__main__":
