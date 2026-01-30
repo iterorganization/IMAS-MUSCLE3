@@ -58,16 +58,34 @@ from imas.ids_defs import (
     LINEAR_INTERP,
     PREVIOUS_INTERP,
 )
+from imas_core.exception import ImasCoreBackendException
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import (
+    get_port_list,
+    get_setting_optional,
+    increment_suffix,
+)
 
 # TODO: enable specifying time range
 # TODO: setting for full ids instead of separate time_slices
 # TODO: handle sanity checks for timestamps
 # TODO: make interp_method a setting
 # TODO: make fully flexible single component
+
+
+def get_sink_db_entry(
+    sink_uri: str, sink_mode: Optional[str], dd_version: Optional[str]
+) -> DBEntry:
+    while True:
+        try:
+            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
+        except ImasCoreBackendException:
+            sink_uri = increment_suffix(sink_uri)
+        else:
+            break
+    return sink_db_entry
 
 
 def muscled_sink() -> None:
@@ -83,7 +101,8 @@ def muscled_sink() -> None:
             dd_version = get_setting_optional(instance, "dd_version")
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = instance.get_setting("sink_uri")
-            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
+            assert isinstance(sink_uri, str)
+            sink_db_entry = get_sink_db_entry(sink_uri, sink_mode, dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
             first_run = False
@@ -182,9 +201,9 @@ def muscled_sink_source() -> None:
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
-            if sink_uri is not None:
-                sink_db_entry = DBEntry(
-                    sink_uri, sink_mode, dd_version=dd_version
+            if isinstance(sink_uri, str):
+                sink_db_entry = get_sink_db_entry(
+                    sink_uri, sink_mode, dd_version
                 )
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)

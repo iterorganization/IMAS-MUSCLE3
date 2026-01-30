@@ -29,3 +29,10 @@ def get_port_list(instance: Instance, operator: Operator) -> List[str]:
         port for port in total_port_list if instance.is_connected(port)
     ]
     return port_list
+
+
+def increment_suffix(my_string: str) -> str:
+    if "_" in my_string and my_string.rsplit("_", 1)[-1].isdigit():
+        base, num = my_string.rsplit("_", 1)
+        return f"{base}_{int(num) + 1}"
+    return f"{my_string}_1"
