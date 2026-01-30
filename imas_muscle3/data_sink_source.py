@@ -79,11 +79,17 @@ def get_sink_db_entry(
     sink_uri: str, sink_mode: Optional[str], dd_version: Optional[str]
 ) -> DBEntry:
     while True:
+        changed = False
         try:
             sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
         except ImasCoreBackendException:
             sink_uri = increment_suffix(sink_uri)
+            changed = True
         else:
+            if changed:
+                logging.warning(
+                    f"Provided sink path already exists, wrote to {sink_uri} instead."
+                )
             break
     return sink_db_entry
 
