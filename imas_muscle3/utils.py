@@ -1,9 +1,27 @@
-from typing import List, Optional, TypeVar, cast
+import re
+from typing import List, Optional, TypeVar, cast, overload
+from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
 from ymmsl import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
+
+
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: None = None,
+) -> TSetting | None: ...
+
+
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: TSetting,
+) -> TSetting: ...
 
 
 # it may be a nice proposal for the m3 api
@@ -29,3 +47,25 @@ def get_port_list(instance: Instance, operator: Operator) -> List[str]:
         port for port in total_port_list if instance.is_connected(port)
     ]
     return port_list
+
+
+def increment_suffix(uri: str) -> str:
+    # parse uri
+    parsed = urlparse(uri)
+    query_dict = {}
+    for option in re.split("[&;?]", parsed.query):
+        name, _, value = option.partition("=")
+        query_dict[name] = value
+
+    # increment path
+    path = query_dict["path"]
+    if "_" in path and path.rsplit("_", 1)[-1].isdigit():
+        base, num = path.rsplit("_", 1)
+        query_dict["path"] = f"{base}_{int(num) + 1}"
+    else:
+        query_dict["path"] = f"{path}_1"
+
+    # rebuild uri
+    new_query = "&".join(f"{k}={v}" for k, v in query_dict.items())
+    parsed = parsed._replace(query=new_query)
+    return urlunparse(parsed)

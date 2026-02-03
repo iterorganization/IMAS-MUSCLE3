@@ -50,6 +50,7 @@ How to use in ymmsl file::
 
 import logging
 from typing import List, Optional, Tuple
+from urllib.parse import urlparse
 
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import (
@@ -58,16 +59,64 @@ from imas.ids_defs import (
     LINEAR_INTERP,
     PREVIOUS_INTERP,
 )
+from imas_core.exception import ImasCoreBackendException
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl import Operator
 
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import (
+    get_port_list,
+    get_setting_optional,
+    increment_suffix,
+)
+
+INCREMENT_MAX = 100
 
 # TODO: enable specifying time range
 # TODO: setting for full ids instead of separate time_slices
 # TODO: handle sanity checks for timestamps
 # TODO: make interp_method a setting
 # TODO: make fully flexible single component
+
+
+def get_sink_db_entry(
+    sink_uri: str,
+    sink_mode: str = "x",
+    avoid_name_collision: bool = True,
+    dd_version: Optional[str] = None,
+) -> DBEntry:
+    """Get DBEntry object for sink. Puts incremental suffix at end if
+    already exists, but only if sink_mode is 'x' and avoid_name_collission
+    setting is enabled. Suffix incrementing does not work for non-path based
+    uri's. Works for both HDF5 and MDSPLUS backend."""
+    for i in range(INCREMENT_MAX):
+        changed = False
+        try:
+            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
+        except ImasCoreBackendException as e:
+            if (
+                sink_mode != "x"
+                or not avoid_name_collision
+                or (
+                    "already exists" not in str(e.message)
+                    and "exists already" not in str(e.message)
+                )
+                or "path=" not in urlparse(sink_uri).query
+            ):
+                raise e
+            else:
+                sink_uri = increment_suffix(sink_uri)
+                changed = True
+        else:
+            if changed:
+                logging.warning(
+                    f"Provided sink path already exists, wrote to {sink_uri} "
+                    "instead."
+                )
+            return sink_db_entry
+    raise ValueError(
+        "Did not manage to open DBEntry. A DBEntry already exists at given "
+        "path, as well as *path*_1 up to *path*_99."
+    )
 
 
 def muscled_sink() -> None:
@@ -82,8 +131,16 @@ def muscled_sink() -> None:
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
-            sink_uri = instance.get_setting("sink_uri")
-            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
+            sink_uri = instance.get_setting("sink_uri", "str")
+            avoid_name_collision = get_setting_optional(
+                instance, "avoid_name_collision", True
+            )
+            sink_db_entry = get_sink_db_entry(
+                sink_uri,
+                sink_mode=sink_mode,
+                avoid_name_collision=avoid_name_collision,
+                dd_version=dd_version,
+            )
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
             first_run = False
@@ -182,9 +239,15 @@ def muscled_sink_source() -> None:
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
-            if sink_uri is not None:
-                sink_db_entry = DBEntry(
-                    sink_uri, sink_mode, dd_version=dd_version
+            avoid_name_collision = get_setting_optional(
+                instance, "avoid_name_collision", True
+            )
+            if isinstance(sink_uri, str):
+                sink_db_entry = get_sink_db_entry(
+                    sink_uri,
+                    sink_mode=sink_mode,
+                    avoid_name_collision=avoid_name_collision,
+                    dd_version=dd_version,
                 )
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)

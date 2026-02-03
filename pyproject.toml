@@ -123,6 +123,7 @@ module = [
     "imas.*",
     "numpy.*",
     "rich.*",
+    "imas_core.*",
     "imas_validator.*",
     "libmuscle.*",
     "ymmsl.*",

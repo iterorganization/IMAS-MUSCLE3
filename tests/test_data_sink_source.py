@@ -356,3 +356,68 @@ checkpoints:
         assert data_sink_path.exists()
         with DBEntry(sink_uri, "r") as entry:
             assert all(entry.get("pf_active").time == expected_time)
+
+
+def test_increment_existing_sink(tmp_path, core_profiles):
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    source_uri = f"imas:hdf5?path={data_source_path}"
+    with DBEntry(source_uri, "w") as entry:
+        entry.put(core_profiles)
+    # make config
+    ymmsl_text = f"""
+ymmsl_version: v0.1
+model:
+  name: test_model
+  components:
+    source_component:
+      implementation: source_component
+      ports:
+        o_i: [core_profiles_out]
+    sink_component:
+      implementation: sink_component
+      ports:
+        f_init: [core_profiles_in]
+  conduits:
+    source_component.core_profiles_out: sink_component.core_profiles_in
+settings:
+  source_component.source_uri: {source_uri}
+  sink_component.sink_uri: {source_uri}
+  sink_component.sink_mode: x
+implementations:
+  sink_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.sink_component
+  source_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
+resources:
+  source_component:
+    threads: 1
+  sink_component:
+    threads: 1
+"""
+
+    config = ymmsl.load(ymmsl_text)
+
+    # set up
+    run_dir = RunDir(tmp_path / "run")
+
+    # launch MUSCLE Manager with simulation
+    manager = Manager(config, run_dir)
+    manager.start_instances()
+    success = manager.wait()
+
+    # check that all went well
+    assert success
+
+    assert data_source_path.exists()
+    with DBEntry(source_uri, "r") as entry:
+        assert all(entry.get("core_profiles").time == core_profiles.time)
+
+    new_sink_path = data_source_path.with_name(
+      f"{data_source_path.stem}_1{data_source_path.suffix}"
+    )
+    assert new_sink_path.exists()
+    new_sink_uri = f"imas:hdf5?path={new_sink_path}"
+    with DBEntry(new_sink_uri, "r") as entry:
+        assert all(entry.get("core_profiles").time == core_profiles.time)

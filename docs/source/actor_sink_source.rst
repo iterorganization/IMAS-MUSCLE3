@@ -53,6 +53,9 @@ Available Settings
   - **interpolation_method**: (string) Which `IMAS interpolation method <https://imas-python.readthedocs.io/en/stable/generated/imas.db_entry.DBEntry.html#imas.db_entry.DBEntry.get_sample.interpolation_method>`_ to use for source.
     Can choose from "closest", "previous", "linear". Defaults to "closest".
   - **sink_mode**: (string) Mode argument for `DBEntry <https://imas-python.readthedocs.io/en/stable/generated/imas.db_entry.DBEntry.html#imas.db_entry.DBEntry.__init__.mode>`_. 'w' means you always overwrite your full data entry. 'x' means you are not allowed to overwrite old data. Defaults to 'x'.
+  - **avoid_name_collision**: (bool) True means that if a given DBEntry uri is already found and you are on sink_mode 'x',
+    it creates a new numbered path. False means it raises an error. Defaults to True.
+    (i.e. "imas:hdf5?path=my/path" is converted to "imas:hdf5?path=my/path_1")
   - **iterative**: (bool) True loops over all timeslices, False sends them all at once. Defaults to True.
 
 Available Ports
