@@ -50,6 +50,7 @@ How to use in ymmsl file::
 
 import logging
 from typing import List, Optional, Tuple
+from urllib.parse import urlparse
 
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import (
@@ -68,6 +69,8 @@ from imas_muscle3.utils import (
     increment_suffix,
 )
 
+INCREMENT_MAX = 100
+
 # TODO: enable specifying time range
 # TODO: setting for full ids instead of separate time_slices
 # TODO: handle sanity checks for timestamps
@@ -76,23 +79,43 @@ from imas_muscle3.utils import (
 
 
 def get_sink_db_entry(
-    sink_uri: str, sink_mode: Optional[str], dd_version: Optional[str]
+    sink_uri: str,
+    sink_mode: str = "x",
+    avoid_name_collision: bool = True,
+    dd_version: Optional[str] = None,
 ) -> DBEntry:
-    while True:
+    """Get DBEntry object for sink. Puts incremental suffix at end if
+    already exists, but only if sink_mode i 'x' and ... setting is enabled.
+    Suffix incrementing does not work for non-path based uri's.
+    Works for both HDF5 and MDSPLUS backend."""
+    for i in range(INCREMENT_MAX):
         changed = False
         try:
             sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
-        except ImasCoreBackendException:
-            sink_uri = increment_suffix(sink_uri)
-            changed = True
+        except ImasCoreBackendException as e:
+            if any(
+                [
+                    sink_mode != "x",
+                    "already exists" not in str(e.message)
+                    and "exists already" not in str(e.message),
+                    "path=" not in urlparse(sink_uri).query,
+                    not avoid_name_collision,
+                ]
+            ):
+                raise e
+            else:
+                sink_uri = increment_suffix(sink_uri)
+                changed = True
+        except Exception as e:
+            raise e
         else:
             if changed:
                 logging.warning(
                     f"Provided sink path already exists, wrote to {sink_uri} "
                     "instead."
                 )
-            break
-    return sink_db_entry
+            return sink_db_entry
+    raise ValueError("Did not manage to over DBEntry")
 
 
 def muscled_sink() -> None:
@@ -107,9 +130,16 @@ def muscled_sink() -> None:
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
-            sink_uri = instance.get_setting("sink_uri")
-            assert isinstance(sink_uri, str)
-            sink_db_entry = get_sink_db_entry(sink_uri, sink_mode, dd_version)
+            sink_uri = instance.get_setting("sink_uri", "str")
+            avoid_name_collision = get_setting_optional(
+                instance, "avoid_name_collision", True
+            )
+            sink_db_entry = get_sink_db_entry(
+                sink_uri,
+                sink_mode=sink_mode,
+                avoid_name_collision=avoid_name_collision,
+                dd_version=dd_version,
+            )
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
             first_run = False
@@ -208,9 +238,15 @@ def muscled_sink_source() -> None:
             sink_mode = get_setting_optional(instance, "sink_mode", "x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
+            avoid_name_collision = get_setting_optional(
+                instance, "avoid_name_collision", True
+            )
             if isinstance(sink_uri, str):
                 sink_db_entry = get_sink_db_entry(
-                    sink_uri, sink_mode, dd_version
+                    sink_uri,
+                    sink_mode=sink_mode,
+                    avoid_name_collision=avoid_name_collision,
+                    dd_version=dd_version,
                 )
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_in = get_port_list(instance, Operator.F_INIT)

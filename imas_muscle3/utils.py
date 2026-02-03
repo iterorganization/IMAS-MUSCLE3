@@ -1,9 +1,27 @@
-from typing import List, Optional, TypeVar, cast
+import re
+from typing import List, Optional, TypeVar, cast, overload
+from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
 from ymmsl import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
+
+
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: None = None,
+) -> None: ...
+
+
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: TSetting,
+) -> TSetting: ...
 
 
 # it may be a nice proposal for the m3 api
@@ -31,8 +49,33 @@ def get_port_list(instance: Instance, operator: Operator) -> List[str]:
     return port_list
 
 
-def increment_suffix(my_string: str) -> str:
-    if "_" in my_string and my_string.rsplit("_", 1)[-1].isdigit():
-        base, num = my_string.rsplit("_", 1)
-        return f"{base}_{int(num) + 1}"
-    return f"{my_string}_1"
+def increment_suffix(uri: str) -> str:
+    # parse uri
+    parsed = urlparse(uri)
+    query_dict = {}
+    for option in re.split("[&;?]", parsed.query):
+        name, _, value = option.partition("=")
+        query_dict[name] = value
+
+    # increment path
+    path = query_dict["path"]
+    if "_" in path and path.rsplit("_", 1)[-1].isdigit():
+        base, num = path.rsplit("_", 1)
+        query_dict["path"] = f"{base}_{int(num) + 1}"
+    else:
+        query_dict["path"] = f"{path}_1"
+
+    # rebuild uri
+    new_query = "&".join(f"{k}={v}" for k, v in query_dict.items())
+    new_uri = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment,
+        )
+    )
+
+    return new_uri
