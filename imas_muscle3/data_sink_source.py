@@ -85,9 +85,9 @@ def get_sink_db_entry(
     dd_version: Optional[str] = None,
 ) -> DBEntry:
     """Get DBEntry object for sink. Puts incremental suffix at end if
-    already exists, but only if sink_mode is 'x' and avoid_name_collission setting is
-    enabled. Suffix incrementing does not work for non-path based uri's.
-    Works for both HDF5 and MDSPLUS backend."""
+    already exists, but only if sink_mode is 'x' and avoid_name_collission
+    setting is enabled. Suffix incrementing does not work for non-path based
+    uri's. Works for both HDF5 and MDSPLUS backend."""
     for i in range(INCREMENT_MAX):
         changed = False
         try:
@@ -114,8 +114,8 @@ def get_sink_db_entry(
                 )
             return sink_db_entry
     raise ValueError(
-        "Did not manage to open DBEntry. A DBEntry already exists at given path, "
-        "as well as *path*_1 up to *path*_99."
+        "Did not manage to open DBEntry. A DBEntry already exists at given "
+        "path, as well as *path*_1 up to *path*_99."
     )
 
 
