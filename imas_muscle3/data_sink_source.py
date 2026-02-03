@@ -85,29 +85,27 @@ def get_sink_db_entry(
     dd_version: Optional[str] = None,
 ) -> DBEntry:
     """Get DBEntry object for sink. Puts incremental suffix at end if
-    already exists, but only if sink_mode i 'x' and ... setting is enabled.
-    Suffix incrementing does not work for non-path based uri's.
+    already exists, but only if sink_mode is 'x' and avoid_name_collission setting is
+    enabled. Suffix incrementing does not work for non-path based uri's.
     Works for both HDF5 and MDSPLUS backend."""
     for i in range(INCREMENT_MAX):
         changed = False
         try:
             sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
         except ImasCoreBackendException as e:
-            if any(
-                [
-                    sink_mode != "x",
+            if (
+                sink_mode != "x"
+                or not avoid_name_collision
+                or (
                     "already exists" not in str(e.message)
-                    and "exists already" not in str(e.message),
-                    "path=" not in urlparse(sink_uri).query,
-                    not avoid_name_collision,
-                ]
+                    and "exists already" not in str(e.message)
+                )
+                or "path=" not in urlparse(sink_uri).query
             ):
                 raise e
             else:
                 sink_uri = increment_suffix(sink_uri)
                 changed = True
-        except Exception as e:
-            raise e
         else:
             if changed:
                 logging.warning(
@@ -115,7 +113,10 @@ def get_sink_db_entry(
                     "instead."
                 )
             return sink_db_entry
-    raise ValueError("Did not manage to over DBEntry")
+    raise ValueError(
+        "Did not manage to open DBEntry. A DBEntry already exists at given path, "
+        "as well as *path*_1 up to *path*_99."
+    )
 
 
 def muscled_sink() -> None:

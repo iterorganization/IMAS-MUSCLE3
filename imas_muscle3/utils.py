@@ -13,7 +13,7 @@ def get_setting_optional(
     instance: Instance,
     setting_name: str,
     default: None = None,
-) -> None: ...
+) -> TSetting | None: ...
 
 
 @overload
@@ -67,15 +67,5 @@ def increment_suffix(uri: str) -> str:
 
     # rebuild uri
     new_query = "&".join(f"{k}={v}" for k, v in query_dict.items())
-    new_uri = urlunparse(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment,
-        )
-    )
-
-    return new_uri
+    parsed = parsed._replace(query=new_query)
+    return urlunparse(parsed)
