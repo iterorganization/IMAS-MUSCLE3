@@ -3,8 +3,8 @@
 Sink/source actor
 =================
 
-Actors for loading and saving generic IMAS data in a simulation. Useful for debugging and testing purposes
-when creating simulation workflows, as well as providing starting conditions and saving results for simulations.
+Actors for loading and saving generic IMAS data in a simulation to disk. Useful for providing starting conditions
+and saving results for simulations when creating simulation workflows, as well as debugging and testing purposes.
 
 Available Operational Modes
 ---------------------------
