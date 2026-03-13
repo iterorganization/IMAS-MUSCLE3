@@ -220,17 +220,7 @@ def muscled_sink_source() -> None:
     """Implementation of hybrid sink source component"""
     sink_db_entry = None
     source_db_entry = None
-    instance = Instance(
-        {
-            Operator.F_INIT: [
-                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
-            ],
-            Operator.O_F: [
-                f"{ids_name}_out" for ids_name in IDSFactory().ids_names()
-            ],
-        },
-        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
-    )
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
     sink_db_entry = None
     first_run = True
     while instance.reuse_instance():
