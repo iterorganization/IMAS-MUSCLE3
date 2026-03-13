@@ -27,14 +27,7 @@ logger = logging.getLogger()
 def main() -> None:
     """Create instance and enter submodel execution loop"""
     logger.info("Starting OLC Actor")
-    instance = Instance(
-        {
-            Operator.F_INIT: [
-                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
-            ],
-        },
-        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
-    )
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
 
     # enter re-use loop
     while instance.reuse_instance():
