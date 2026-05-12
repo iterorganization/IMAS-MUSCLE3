@@ -54,7 +54,7 @@ dependencies = [
     "imas-python",
     "imas-core",
     "imas-validator",
-    "muscle3",
+    "muscle3==0.8.0",
     "panel",
     "holoviews",
     "hvplot",
