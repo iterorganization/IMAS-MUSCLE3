@@ -34,6 +34,7 @@ class VisualizationActor(param.Parameterized):
         super().__init__()
         self.port = port
         self.server = None
+        self.stopped = False
         self.open_browser_on_start = open_browser_on_start
 
         run_path = runpy.run_path(plot_file_path)
@@ -72,7 +73,8 @@ class VisualizationActor(param.Parameterized):
 
     def stop_server(self) -> None:
         """Stop the Panel server if running."""
-        if self.server:
+        if self.server and not self.stopped:
+            self.stopped = True
             self.server.stop()
             logger.info("Panel server stopped.")
 
@@ -95,3 +97,6 @@ class VisualizationActor(param.Parameterized):
             threaded=True,
             start=True,
         )
+    
+    def __exit__(self, exc_type, ext, tb):
+        self.stop_server()
