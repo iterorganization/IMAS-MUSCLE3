@@ -1,6 +1,7 @@
 import logging
 import runpy
-from typing import Dict
+from types import TracebackType
+from typing import Dict, Optional, Type
 
 import panel as pn
 import param
@@ -97,6 +98,11 @@ class VisualizationActor(param.Parameterized):
             threaded=True,
             start=True,
         )
-    
-    def __exit__(self, exc_type, ext, tb):
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> None:
         self.stop_server()

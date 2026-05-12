@@ -1,9 +1,14 @@
 import re
-from typing import List, Optional, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, List, Optional, TypeVar, cast, overload
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
-from ymmsl import Operator, SettingValue
+from ymmsl import Operator
+
+if TYPE_CHECKING:
+    from libmuscle.instance import SettingValue
+else:
+    SettingValue = Any
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
 
