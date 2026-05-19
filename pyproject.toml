@@ -95,6 +95,9 @@ linting = [
 [project.urls]
 homepage = "https://github.com/iterorganization/IMAS-MUSCLE3"
 
+[project.entry-points."ymmsl.module"]
+imas_muscle3 = "imas_muscle3.actors:ACTORS"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["imas_muscle3*"]
