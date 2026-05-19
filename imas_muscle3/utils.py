@@ -3,7 +3,12 @@ from typing import List, Optional, TypeVar, cast, overload
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
-from ymmsl import Operator, SettingValue
+from ymmsl import Operator
+
+try:
+    from ymmsl import SettingValue
+except ImportError:
+    from ymmsl.v0_2 import SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
 
