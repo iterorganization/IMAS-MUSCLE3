@@ -1,5 +1,6 @@
 import logging
 import runpy
+import socket
 from typing import Dict
 
 import panel as pn
@@ -88,10 +89,23 @@ class VisualizationActor(param.Parameterized):
 
     def _start_server(self) -> None:
         """Start the Panel server for visualization."""
+        # Resolve port 0 to a concrete port up front so we can log it:
+        # with threaded=True, pn.serve returns a thread, not the server.
+        if not self.port:
+            with socket.socket() as s:
+                s.bind(("", 0))
+                self.port = s.getsockname()[1]
         self.server = pn.serve(  # type: ignore[no-untyped-call]
             self.dynamic_panel,
             port=self.port,
             show=self.open_browser_on_start,
             threaded=True,
             start=True,
+            # accept connections by hostname or via a reverse proxy
+            websocket_origin="*",
+        )
+        logger.info(
+            "Visualization server available at http://%s:%d",
+            socket.getfqdn(),
+            self.port,
         )
