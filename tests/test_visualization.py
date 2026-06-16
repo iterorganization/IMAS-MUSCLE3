@@ -118,8 +118,16 @@ def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error)
 
 
 def test_visualization_actor_no_plot_file(tmpdir, equilibrium):
+    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
+    source_uri = f"imas:hdf5?path={data_source_path}"
+    port = get_free_port()
     settings = {
-        "visualization_component.plot_file_path": "/path/to/non/existent/file.py"
+        "source_component.source_uri": source_uri,
+        "visualization_component.plot_file_path": "/path/to/non/existent/file.py",
+        "visualization_component.port": port,
+        "visualization_component.throttle_interval": 0,
+        "visualization_component.keep_alive": False,
+        "visualization_component.open_browser": False,
     }
     run_and_check_for_error(tmpdir, equilibrium, settings, "FileNotFoundError")
 

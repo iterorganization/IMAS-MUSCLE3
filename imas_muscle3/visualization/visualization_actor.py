@@ -32,7 +32,7 @@ class VisualizationActor(param.Parameterized):
         Loads a State and Plotter class from the given file path, sets up the
         Panel layout, and starts the server.
         """
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
         self.port = port
         self.server = None
         self.stopped = False

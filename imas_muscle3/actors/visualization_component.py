@@ -155,8 +155,8 @@ def main() -> None:
             else:
                 visualization_actor.stop_server()
 
-        except Exception as e:
-            logging.error(e)
+        except RuntimeError as e:
+            logging.error(f"{type(e).__name__}: {e}")
         finally:
             if visualization_actor is not None:
                 visualization_actor.stop_server()

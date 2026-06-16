@@ -64,7 +64,7 @@ class BaseState(param.Parameterized):
         auto: bool = False,
         extract_all: bool = False,
     ) -> None:
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
         self.extract_all = extract_all
         self.auto = auto
         self.md = md_dict
