@@ -109,7 +109,8 @@ def get_sink_db_entry(
         else:
             if changed:
                 logging.warning(
-                    f"Provided sink path already exists, wrote to {sink_uri} instead."
+                    "Provided sink path already exists, "
+                    f"wrote to {sink_uri} instead."
                 )
             return sink_db_entry
     raise ValueError(
