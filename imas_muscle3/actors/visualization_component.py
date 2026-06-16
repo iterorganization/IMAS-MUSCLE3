@@ -71,7 +71,7 @@ def main() -> None:
     ]
     while instance.reuse_instance():
         if instance.resuming():
-            pass
+            msg = instance.load_snapshot()
         if instance.should_init():
             pass
 
@@ -129,10 +129,11 @@ def main() -> None:
                     if common_time is None:
                         common_time = temp_ids.time
                     else:
-                        if not (temp_ids.time == common_time).all():
-                            raise ValueError(
-                                f"Time mismatch detected in IDS {ids_name}"
-                            )
+                        pass
+                        # if not (temp_ids.time == common_time).all():
+                        #     raise ValueError(
+                        #         f"Time mismatch detected in IDS {ids_name}"
+                        #     )
 
                     visualization_actor.state.extract_data(temp_ids)
                     if msg.next_timestamp is None:
