@@ -7,7 +7,7 @@ from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
 
-@pytest.mark.parametrize('use_t_next', [True, False])
+@pytest.mark.parametrize("use_t_next", [True, False])
 def test_accumulator(tmpdir, core_profiles, use_t_next):
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     data_sink_path = (Path(tmpdir) / "sink_component_data").absolute()
@@ -18,11 +18,11 @@ def test_accumulator(tmpdir, core_profiles, use_t_next):
     tmppath = Path(str(tmpdir))
     # whether or not optional override port is used for t_next
     if use_t_next:
-        ports = '[core_profiles_in, t_next]'
-        conduit = 'source_component.core_profiles_out: accumulator_component.t_next'
+        ports = "[core_profiles_in, t_next]"
+        conduit = "source_component.core_profiles_out: accumulator_component.t_next"
     else:
-        ports = '[core_profiles_in]'
-        conduit = ''
+        ports = "[core_profiles_in]"
+        conduit = ""
     # make config
     ymmsl_text = f"""
 ymmsl_version: v0.1
