@@ -54,7 +54,7 @@ dependencies = [
     "imas-python",
     "imas-core",
     "imas-validator",
-    "muscle3==0.8.0",
+    "muscle3==0.8.0", # fix version for PDS compatibility for now
     "panel",
     "holoviews",
     "hvplot",
