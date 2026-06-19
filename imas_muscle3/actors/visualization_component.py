@@ -120,7 +120,6 @@ def main() -> None:
                         first_run = False
 
                     assert visualization_actor is not None
-                    common_time = None
                     for port_name in ports_in:
                         msg = instance.receive(port_name)
                         t_cur = msg.timestamp
@@ -128,16 +127,6 @@ def main() -> None:
 
                         temp_ids = IDSFactory().new(ids_name)
                         temp_ids.deserialize(msg.data)
-
-                        # Ensure the IDSs have the same time basis
-                        if common_time is None:
-                            common_time = temp_ids.time
-                        else:
-                            pass
-                            # if not (temp_ids.time == common_time).all():
-                            #     raise ValueError(
-                            #         f"Time mismatch detected in IDS {ids_name}"
-                            #     )
 
                         visualization_actor.state.extract_data(temp_ids)
                         if msg.next_timestamp is None:
