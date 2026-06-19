@@ -26,6 +26,7 @@ class VisualizationActor(param.Parameterized):
         open_browser_on_start: bool,
         extract_all: bool = False,
         automatic_mode: bool = False,
+        keep_alive: bool = False,
     ):
         """Initialize the visualization actor.
 
@@ -36,6 +37,7 @@ class VisualizationActor(param.Parameterized):
         self.port = port
         self.server = None
         self.stopped = False
+        self.keep_alive = keep_alive
         self.open_browser_on_start = open_browser_on_start
 
         run_path = runpy.run_path(plot_file_path)
@@ -99,10 +101,16 @@ class VisualizationActor(param.Parameterized):
             start=True,
         )
 
+    def __enter__(self) -> "VisualizationActor":
+        return self
+
     def __exit__(
         self,
         exc_type: Optional[Type[BaseException]],
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> None:
-        self.stop_server()
+        if exc_type is not None or not self.keep_alive:
+            self.stop_server()
+        else:
+            self.notify_done()
