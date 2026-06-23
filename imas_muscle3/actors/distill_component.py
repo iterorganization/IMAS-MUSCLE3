@@ -24,18 +24,13 @@ Settings (all optional):
   before recording.
 - ``monitor_interval`` / ``saturation_warn``: backpressure logging knobs.
 
-.. important::
-   A recorder tapping **more than one port** drains them with one thread each,
-   so the instance is legitimately blocked in ``receive`` on several ports at
-   once. The MUSCLE3 manager's deadlock detector assumes a single pending
-   receive per instance and aborts with an ``AssertionError`` otherwise — but
-   it only learns of a pending receive when the instance self-reports after
-   ``muscle_deadlock_receive_timeout`` (default 10 s). Set that setting to a
-   negative value for the recorder so no timeout handler is installed and it is
-   simply excluded from deadlock detection (safe: a terminal observer cannot be
-   part of a deadlock cycle). Without it, a multi-port recorder blocked >10 s
-   (e.g. behind a slow solver) crashes the manager. In-process ``Manager`` tests
-   never hit the timeout, so this only bites under the real ``muscle_manager``.
+The recorder drains its ports **single-threaded** (round-robin, one outstanding
+``receive``); see :mod:`imas_muscle3.actors._tap_base`. This keeps it compatible
+with the MUSCLE3 manager, which assumes one pending receive per instance and
+whose per-port message accounting is not concurrency-safe — a thread-per-port
+tap corrupts message numbering and trips the deadlock detector under the real
+``muscle_manager`` (the in-process ``Manager`` in tests exercises neither, so it
+only bites in production).
 
 Example yMMSL (yMMSL v0.2)::
 
@@ -46,7 +41,6 @@ Example yMMSL (yMMSL v0.2)::
           s: [equilibrium_in, core_profiles_in]
     settings:
       distill.store_path: /scratch/distill_store
-      distill.muscle_deadlock_receive_timeout: -1.0  # multi-port recorder
     implementations:
       distill_component:
         executable: python

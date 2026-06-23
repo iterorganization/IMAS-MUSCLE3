@@ -1,18 +1,22 @@
 """Shared machinery for terminal *tap*-style actors.
 
 A tap is a sink-only MUSCLE3 actor that drains an arbitrary number of
-independent *timelines* (one per connected ``S`` port) concurrently and does
-something with each received message. The :mod:`tap_component` records the raw
-IDS per message; the :mod:`distill_component` extracts distilled scalars /
-profiles and appends them to a Zarr store. Everything they share lives here:
+independent *timelines* (one per connected ``S`` port) and does something with
+each received message. The :mod:`tap_component` records the raw IDS per message;
+the :mod:`distill_component` extracts distilled scalars / profiles and writes
+them to a Zarr store. Everything they share lives here:
 
 - **Dynamic ports** (MUSCLE3 0.10): the :class:`~libmuscle.Instance` is created
   without a port description, so the ports come from the yMMSL configuration.
   Any connected ``S`` port whose name maps to a valid IDS name (an optional
   ``_in`` suffix is stripped) is drained; see :func:`ids_name_from_port`.
-- **One thread per timeline**: each connected ``S`` port is drained by its own
-  thread so an idle timeline cannot head-of-line block a busy one. A timeline
-  ends when its peer sends ``next_timestamp is None``.
+- **Single-threaded, round-robin draining**: the ports are polled one at a time
+  (one outstanding ``receive`` per instance). This is required, not just tidy —
+  libmuscle's manager assumes one pending receive per instance and its per-port
+  message accounting is not concurrency-safe, so a thread-per-port tap corrupts
+  message numbering / trips the deadlock detector under the real
+  ``muscle_manager`` (see :func:`serve_timelines`). A timeline ends when its
+  peer sends ``next_timestamp is None``.
 - **Backpressure monitoring**: a monitor thread periodically logs, per timeline,
   the time spent blocked in ``receive`` (``t_wait``) versus the time spent
   handling the message (``t_write``), and a *saturation ratio*
@@ -205,48 +209,6 @@ class BackpressureMonitor(threading.Thread):
                 )
 
 
-def _worker(
-    instance: Instance,
-    port: str,
-    handler: TimelineHandler,
-    metric: PortMetrics,
-    errors: Dict[str, BaseException],
-) -> None:
-    """Drain one timeline: receive, hand off and time each message until the
-    peer signals the end of the timeline (``next_timestamp is None``).
-
-    Handling runs fully in parallel across timelines; this is safe because
-    :func:`precompute_ids_metadata` has warmed the imas-python metadata cache
-    before any worker starts. Any exception is captured in ``errors`` keyed by
-    port so the main loop can surface it; a dead worker would otherwise be
-    invisible to ``join()``. The handler is always closed, even on error.
-    """
-    seq = 0
-    try:
-        while True:
-            t0 = perf_counter()
-            msg = instance.receive(port)
-            t1 = perf_counter()
-            detail = handler.handle(seq, msg)
-            t2 = perf_counter()
-            metric.update(msg.timestamp, t1 - t0, t2 - t1)
-            logger.info("handled %s t=%.4e -> %s", port, msg.timestamp, detail)
-            seq += 1
-            if msg.next_timestamp is None:
-                break
-    except BaseException as exc:  # noqa: B036  -- re-raised from main
-        errors[port] = exc
-        logger.exception("timeline '%s' failed after %d messages", port, seq)
-    finally:
-        try:
-            handler.close()
-        except BaseException as exc:  # noqa: B036
-            errors.setdefault(port, exc)
-            logger.exception("closing handler for timeline '%s' failed", port)
-    if port not in errors:
-        logger.info("timeline '%s' finished after %d messages", port, seq)
-
-
 def connected_s_ports(instance: Instance) -> List[str]:
     """Sorted, connected ``S`` ports of a terminal tap, validated.
 
@@ -272,38 +234,74 @@ def serve_timelines(
     monitor_interval: float,
     saturation_warn: float,
 ) -> Dict[str, BaseException]:
-    """Drain every timeline concurrently with a handler per port.
+    """Drain every timeline with a single thread, round-robin over the ports.
 
-    Warms the imas-python metadata cache, starts the backpressure monitor,
-    runs one worker thread per port (each owning a freshly built handler), and
-    joins them. Returns a mapping of port -> exception for any failed timeline
-    (empty on success); the caller decides how to surface it.
+    One receive is outstanding at a time. This is deliberate: libmuscle's
+    manager assumes an instance has at most one pending receive (its deadlock
+    detector asserts otherwise) and its per-port message accounting is not safe
+    against concurrent receives from one instance — a thread-per-port tap trips
+    both under the real ``muscle_manager`` (it only "worked" against the
+    in-process ``Manager`` in tests, which exercises neither path). So we poll
+    each still-open timeline in turn, handing each message to its handler, until
+    every timeline has ended (``next_timestamp is None``).
+
+    The cost is that an idle timeline can head-of-line block a busy one; for the
+    couplings we tap (one whole-trace message per reuse, or lock-step streamed
+    slices) the ports advance together, so this does not bite. The backpressure
+    monitor still runs in its own thread (it only reads metrics, never receives).
+
+    Returns a mapping of port -> exception for any failed timeline (empty on
+    success); the caller decides how to surface it. Handlers are always closed.
     """
     precompute_ids_metadata(ids_names.values())
 
     metrics = {p: PortMetrics(p) for p in s_ports}
+    handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
     errors: Dict[str, BaseException] = {}
     monitor = BackpressureMonitor(metrics, monitor_interval, saturation_warn)
     monitor.start()
 
-    threads = [
-        threading.Thread(
-            target=_worker,
-            args=(
-                instance,
-                p,
-                handler_factory(p, ids_names[p]),
-                metrics[p],
-                errors,
-            ),
-            name=f"tap-{p}",
-        )
-        for p in s_ports
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    active = list(s_ports)
+    seq = {p: 0 for p in s_ports}
+    try:
+        while active:
+            for port in list(active):
+                try:
+                    t0 = perf_counter()
+                    msg = instance.receive(port)
+                    t1 = perf_counter()
+                    detail = handlers[port].handle(seq[port], msg)
+                    t2 = perf_counter()
+                except BaseException as exc:  # noqa: B036  -- surfaced to main
+                    errors[port] = exc
+                    logger.exception(
+                        "timeline '%s' failed after %d messages",
+                        port,
+                        seq[port],
+                    )
+                    active.remove(port)
+                    continue
+                metrics[port].update(msg.timestamp, t1 - t0, t2 - t1)
+                logger.info(
+                    "handled %s t=%.4e -> %s", port, msg.timestamp, detail
+                )
+                seq[port] += 1
+                if msg.next_timestamp is None:
+                    active.remove(port)
+                    logger.info(
+                        "timeline '%s' finished after %d messages",
+                        port,
+                        seq[port],
+                    )
+    finally:
+        for port, handler in handlers.items():
+            try:
+                handler.close()
+            except BaseException as exc:  # noqa: B036
+                errors.setdefault(port, exc)
+                logger.exception(
+                    "closing handler for timeline '%s' failed", port
+                )
 
     monitor.stop()
     return errors
