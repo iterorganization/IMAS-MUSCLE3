@@ -38,6 +38,7 @@ import imas
 import xarray as xr
 from imas.ids_base import IDSBase
 from imas.ids_data_type import IDSDataType
+from imas.ids_defs import IDS_TIME_MODE_HOMOGENEOUS
 from imas.ids_metadata import IDSType
 from imas.ids_primitive import IDSPrimitive
 from imas.ids_structure import IDSStructure
@@ -57,7 +58,7 @@ _TIME = "time"
 
 
 def _normalize_time(ds: xr.Dataset) -> xr.Dataset:
-    """Rename a dataset's time-like dimension to a uniform ``time``.
+    """Rename a dataset's primary time-like dimension to a uniform ``time``.
 
     :func:`imas.util.to_xarray` names the time axis ``time`` for a
     homogeneous-time IDS but ``<aos>.time`` (e.g. ``time_slice.time``) for a
@@ -65,6 +66,11 @@ def _normalize_time(ds: xr.Dataset) -> xr.Dataset:
     a whole trace — we want one ``time`` dimension so a sink can append along it
     and a viewer can find it. A dataset with no time-like axis is returned
     unchanged.
+
+    A heterogeneous IDS can carry *several* time axes (e.g. equilibrium has both
+    ``time_slice.time`` and ``grids_ggd.time``); only one can become ``time``, so
+    we pick the axis the most data variables actually use (the dominant one),
+    leaving the minor axes as-is. If ``time`` already exists, keep it.
     """
     if _TIME in ds.dims:
         return ds
@@ -72,9 +78,15 @@ def _normalize_time(ds: xr.Dataset) -> xr.Dataset:
     if not timelike:
         return ds
     if len(timelike) > 1:
-        chosen = max(timelike, key=lambda d: ds.sizes[d])
-        logger.warning(
-            "multiple time axes %s; using the longest (%s)", timelike, chosen
+        usage = {
+            d: sum(1 for v in ds.data_vars if d in ds[v].dims) for d in timelike
+        }
+        chosen = max(timelike, key=lambda d: (usage[d], ds.sizes[d]))
+        logger.info(
+            "multiple time axes %s (usage %s); using '%s' as time",
+            timelike,
+            usage,
+            chosen,
         )
         timelike = [chosen]
     return ds.rename({timelike[0]: _TIME})
@@ -119,6 +131,7 @@ class Distiller:
         if self._auto:
             ids_name = ids.metadata.name
             if ids_name not in self._paths:
+                self._warn_if_inhomogeneous(ids)
                 self._paths[ids_name] = self._discover(ids)
             paths = self._paths[ids_name]
             if paths:
@@ -130,6 +143,29 @@ class Distiller:
     def paths(self, ids_name: str) -> List[str]:
         """DD paths discovered so far for an IDS name (after ``distill``)."""
         return list(self._paths.get(ids_name, []))
+
+    @staticmethod
+    def _warn_if_inhomogeneous(ids: IDSToplevel) -> None:
+        """Warn (once per IDS, at discovery) on inhomogeneous-time input.
+
+        A homogeneous IDS tensorizes to a single clean ``time`` axis. A
+        heterogeneous one yields a per-structure time axis (``time_slice.time``,
+        and possibly several, e.g. ``grids_ggd.time`` too); the distiller keys
+        each quantity on the dominant axis (see :func:`_normalize_time`), but
+        those axes need not align across quantities. We record it anyway — NICE,
+        for one, emits heterogeneous equilibria — but flag it so the source can
+        switch to homogeneous_time for unambiguous recording.
+        """
+        htm = ids.ids_properties.homogeneous_time
+        if htm != IDS_TIME_MODE_HOMOGENEOUS:
+            logger.warning(
+                "IDS '%s' has inhomogeneous time (homogeneous_time=%s); "
+                "distilling onto each quantity's dominant per-structure time "
+                "axis, which may not align across quantities. Prefer "
+                "homogeneous_time output for unambiguous recording.",
+                ids.metadata.name,
+                int(htm),
+            )
 
     # --- auto-discovery -----------------------------------------------------
 

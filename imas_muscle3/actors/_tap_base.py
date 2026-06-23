@@ -169,16 +169,29 @@ class BackpressureMonitor(threading.Thread):
         self._log(final=True)
 
     def _log(self, final: bool = False) -> None:
+        saturations = {p: m.saturation for p, m in self._metrics.items()}
+        hot = {
+            p: s for p, s in saturations.items() if s >= self._saturation_warn
+        }
+        # Stay quiet on the periodic tick unless a timeline is recording-bound;
+        # the final summary is always emitted (one line at shutdown).
+        if not final and not hot:
+            return
+
         total = sum(m.messages for m in self._metrics.values())
         prefix = "tap final summary" if final else "tap backpressure"
         logger.info(
-            "%s: %d timelines, %d messages handled",
+            "%s: %d timelines, %d messages handled, %d recording-bound",
             prefix,
             len(self._metrics),
             total,
+            len(hot),
         )
-        for metric in self._metrics.values():
-            saturation = metric.saturation
+        # On the final summary report every timeline; on a periodic tick only
+        # the ones that tripped the threshold (that is the point of logging).
+        report = self._metrics if final else {p: self._metrics[p] for p in hot}
+        for port, metric in report.items():
+            saturation = saturations[port]
             logger.info(
                 "  %s saturation=%.0f%%", metric.snapshot(), saturation * 100
             )
@@ -186,7 +199,7 @@ class BackpressureMonitor(threading.Thread):
                 logger.warning(
                     "  timeline '%s' is handling-bound (saturation %.0f%% "
                     ">= %.0f%%): senders may be stalling on the tap.",
-                    metric.port,
+                    port,
                     saturation * 100,
                     self._saturation_warn * 100,
                 )

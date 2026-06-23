@@ -64,6 +64,36 @@ def test_distiller_discovers_scalar():
     assert float(ip.values[0]) == pytest.approx(1e6)
 
 
+def test_distiller_warns_on_inhomogeneous_time(equilibrium, caplog):
+    import logging
+
+    # The conftest equilibrium is heterogeneous (homogeneous_time=0).
+    with caplog.at_level(logging.WARNING):
+        Distiller(auto=True).distill(equilibrium)
+    assert any("inhomogeneous time" in r.message for r in caplog.records)
+
+
+def test_normalize_time_picks_dominant_axis():
+    # A heterogeneous IDS (like equilibrium) can carry several *.time axes; the
+    # one most variables use must become 'time' so the viewer finds them.
+    from imas_muscle3.distill.distiller import _normalize_time
+
+    ds = xr.Dataset(
+        {
+            "ip": ("time_slice.time", [1.0, 2.0]),
+            "psi": (("time_slice.time", "x"), np.ones((2, 3))),
+            "grid_meta": ("grids_ggd.time", [0.0, 0.0]),
+        },
+        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [0.0, 1.0]},
+    )
+    out = _normalize_time(ds)
+    assert "time" in out.dims
+    assert out["ip"].dims == ("time",)
+    assert out["psi"].dims == ("time", "x")
+    # the minor axis is left untouched
+    assert out["grid_meta"].dims == ("grids_ggd.time",)
+
+
 def test_distiller_accepts_whole_trace():
     # A multi-slice IDS is tensorized as one dataset with a full time axis,
     # and the time-like dim is normalized to 'time'.
@@ -133,6 +163,19 @@ def test_zarr_sink_appends_along_time(tmp_path):
     assert list(ds.time.values) == [0.0, 1.0]
     assert ds["value"].shape == (2, 8)
     assert ds.attrs["full_path"] == "x/y"
+
+
+def test_zarr_sink_writes_whole_trace(tmp_path):
+    # A single message carrying a whole trace (time>1) is written in one go.
+    store = tmp_path / "equilibrium_in.zarr"
+    ds = xr.Dataset(
+        {"value": (("time", "dim0"), np.ones((49, 8)))},
+        coords={"time": np.arange(49.0)},
+        attrs={"full_path": "x/y"},
+    )
+    ZarrSink(store).append("x/y", ds)
+    out = xr.open_zarr(store, group=group_name("x/y"), consolidated=False)
+    assert out["value"].shape == (49, 8)
 
 
 def test_zarr_sink_pads_ragged_profiles(tmp_path):

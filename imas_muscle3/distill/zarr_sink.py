@@ -70,11 +70,18 @@ class ZarrSink:
         self._widths: Dict[str, Dict[str, int]] = {}
 
     def append(self, name: str, ds: xr.Dataset) -> None:
-        """Append a single-time dataset to its group (``name``)."""
-        if ds.sizes.get(_TIME) != 1:
+        """Append a dataset to its group (``name``), extending the time axis.
+
+        ``ds`` must carry a ``time`` dimension; its length is free — a single
+        slice (streamed recording) or a whole trace (one occurrence written in
+        one go) both work. The first write for a group fixes the non-time dim
+        sizes; later writes are reconciled (NaN-pad/truncate) and concatenated
+        along time.
+        """
+        if _TIME not in ds.dims:
             raise ValueError(
-                f"{name}: expected a single-time dataset, got "
-                f"{_TIME}={ds.sizes.get(_TIME)}"
+                f"{name}: distilled dataset has no '{_TIME}' dimension to "
+                f"append along (dims={dict(ds.sizes)})"
             )
         group = group_name(name)
         if group not in self._widths:
