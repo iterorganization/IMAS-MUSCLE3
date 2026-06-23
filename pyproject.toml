@@ -89,6 +89,11 @@ linting = [
 [project.urls]
 homepage = "https://github.com/iterorganization/IMAS-MUSCLE3"
 
+# Surface the distilled-plots viewer to muscle3-dashboard as a run panel. The
+# dashboard discovers this group and renders make_panel(run_dir) for each run.
+[project.entry-points."muscle3_dashboard.run_panels"]
+distill = "imas_muscle3.viewer.panel_app:make_panel"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["imas_muscle3*"]
