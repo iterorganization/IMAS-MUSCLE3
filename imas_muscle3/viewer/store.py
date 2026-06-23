@@ -12,15 +12,27 @@ tested directly; plotting lives in :mod:`imas_muscle3.viewer.plots`.
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import xarray as xr
 import zarr
+
+from imas_muscle3.distill.zarr_sink import read_root_attrs
 
 logger = logging.getLogger(__name__)
 
 #: The append/time dimension shared by every distilled variable.
 TIME = "time"
+
+
+def store_profile(store: Path) -> Optional[str]:
+    """Path of the visualization profile that produced this store, if any.
+
+    The distill recorder stamps it into the store's root attrs when run with a
+    ``config``; ``None`` means a plain auto-distilled store (generic view).
+    """
+    profile = read_root_attrs(store).get("distill_profile")
+    return str(profile) if profile else None
 
 
 def find_stores(run_dir: Path) -> List[Path]:

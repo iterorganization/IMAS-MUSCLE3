@@ -15,15 +15,39 @@ fixed-grid case exact and never crashes on the rest.
 
 import logging
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Mapping
 
 import numpy as np
 import xarray as xr
+import zarr
 
 logger = logging.getLogger()
 
 #: The append dimension; every distilled dataset carries it (see :mod:`.distiller`).
 _TIME = "time"
+
+
+def write_root_attrs(store_path: Path, attrs: Mapping[str, object]) -> None:
+    """Stamp metadata onto a store's root group (e.g. the profile reference).
+
+    Lets a reader discover, for instance, which visualization profile produced
+    a store. A no-op if the store does not exist (an empty timeline writes no
+    store).
+    """
+    store_path = Path(store_path)
+    if not store_path.exists():
+        return
+    root = zarr.open_group(str(store_path), mode="a")
+    root.attrs.update(dict(attrs))
+
+
+def read_root_attrs(store_path: Path) -> Dict[str, object]:
+    """Read a store's root-group metadata (empty dict if unreadable)."""
+    try:
+        return dict(zarr.open_group(str(store_path), mode="r").attrs)
+    except Exception:
+        logger.warning("could not read root attrs of %s", store_path, exc_info=True)
+        return {}
 
 
 def group_name(full_path: str) -> str:

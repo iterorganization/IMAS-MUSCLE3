@@ -29,6 +29,7 @@ from panel.viewable import Viewable, Viewer
 
 from imas_muscle3.viewer import store as store_mod
 from imas_muscle3.viewer.plots import plot_variable
+from imas_muscle3.viewer.profile import ProfileData, load_profile
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +147,94 @@ class DistillViewer(Viewer):
         )
 
 
+class ProfileView(Viewer):
+    """Render a workflow's bespoke profile ``plot`` with a time slider/live tail.
+
+    The profile author writes a pure ``plot(data, time_index)``; this view owns
+    the interactivity: a time slider, a live-follow toggle, and a poll that
+    re-reads the stores so the bespoke plot grows with the run.
+    """
+
+    time_index = param.Integer(default=0, bounds=(0, 0))
+    live = param.Boolean(default=True, label="Live (follow latest)")
+    _tick = param.Integer(default=0)
+
+    def __init__(self, run_dir: Path, profile_path: str, **params: object):
+        super().__init__(**params)
+        self.run_dir = Path(run_dir)
+        self._profile = load_profile(profile_path)
+        stores = {p.stem: p for p in store_mod.find_stores(self.run_dir)}
+        self._data = ProfileData(stores)
+        self._update_time_bounds()
+
+    def _update_time_bounds(self) -> None:
+        n = self._data.n_times()
+        self.param.time_index.bounds = (0, max(0, n - 1))
+        if self.live and n:
+            self.time_index = n - 1
+
+    def refresh(self) -> None:
+        self._data.reset()
+        self._update_time_bounds()
+        self._tick += 1  # force a re-render even if time_index is unchanged
+
+    @param.depends("time_index", "_tick")
+    def _view(self) -> Viewable:
+        if self._profile.plot is None:
+            return pn.pane.Markdown("### Profile defines no `plot`.")
+        try:
+            return pn.panel(self._profile.plot(self._data, self.time_index))
+        except Exception:
+            logger.warning("profile plot failed", exc_info=True)
+            return pn.pane.Markdown("### Profile `plot` raised; see logs.")
+
+    def __panel__(self) -> Viewable:
+        controls = pn.Row(
+            pn.widgets.IntSlider.from_param(
+                self.param.time_index, name="Time index"
+            ),
+            pn.widgets.Checkbox.from_param(self.param.live),
+        )
+        return pn.Column(controls, self._view, sizing_mode="stretch_width")
+
+
+def _profiles_for(run_dir: Path) -> list[str]:
+    """Distinct visualization profiles stamped across a run's stores."""
+    seen: list[str] = []
+    for store in store_mod.find_stores(run_dir):
+        profile = store_mod.store_profile(store)
+        if profile and profile not in seen:
+            seen.append(profile)
+    return seen
+
+
 def _mounted_view(run_dir: Path) -> Viewable:
-    """Build a viewer and, inside a live session, start its live-tail poll."""
-    viewer = DistillViewer(run_dir)
-    if pn.state.curdoc is not None:
-        pn.state.add_periodic_callback(viewer.refresh, REFRESH_MS)
-    return viewer
+    """Build the run's view and, in a live session, start its live-tail polls.
+
+    A profile-stamped run shows a tab per profile (its bespoke plots) plus a
+    generic "Browse" tab; a plain run shows just the generic browser.
+    """
+    run_dir = Path(run_dir)
+    live = pn.state.curdoc is not None
+
+    def mount(view: object) -> object:
+        if live and hasattr(view, "refresh"):
+            pn.state.add_periodic_callback(view.refresh, REFRESH_MS)
+        return view
+
+    profiles = _profiles_for(run_dir)
+    browser = mount(DistillViewer(run_dir))
+    if not profiles:
+        return browser
+
+    tabs = pn.Tabs(sizing_mode="stretch_width")
+    for path in profiles:
+        try:
+            tabs.append((Path(path).stem, mount(ProfileView(run_dir, path))))
+        except Exception:
+            logger.warning("could not load profile %s", path, exc_info=True)
+    tabs.append(("Browse", browser))
+    return tabs
 
 
 def make_panel(run_dir: Path) -> Optional[RunPanel]:

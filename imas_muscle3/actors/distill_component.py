@@ -55,6 +55,7 @@ from imas_muscle3.actors._tap_base import (
 )
 from imas_muscle3.distill import Distiller, ZarrSink
 from imas_muscle3.distill.distiller import ExtractFn
+from imas_muscle3.distill.zarr_sink import write_root_attrs
 from imas_muscle3.utils import get_setting_optional
 
 logger = logging.getLogger()
@@ -160,6 +161,15 @@ def main() -> None:
             monitor_interval,
             saturation_warn,
         )
+
+        # Record which profile produced each store so the viewer can load the
+        # matching bespoke plots; absolute so it resolves from the viewer.
+        if config:
+            for port in s_ports:
+                write_root_attrs(
+                    store_path / f"{port}.zarr",
+                    {"distill_profile": str(Path(config).resolve())},
+                )
 
         if errors:
             msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
