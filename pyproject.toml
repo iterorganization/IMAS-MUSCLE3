@@ -11,7 +11,7 @@ authors = [
 ]
 description = "IMAS MUSCLE3 tools"
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 license = {file = "LICENSE.md"}
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -34,8 +34,10 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Unix Shell",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
@@ -55,9 +57,13 @@ dependencies = [
     "imas-validator",
     "muscle3>=0.10",
     "ymmsl>=0.17",
-    "panel",
-    "holoviews",
-    "hvplot",
+    # panel/param/holoviews/hvplot are pinned: they ship py.typed stubs that
+    # mypy enforces, so unpinned upgrades silently break the lint CI. Bump
+    # these deliberately (and re-run mypy) rather than letting them float.
+    "panel==1.9.3",
+    "param==2.4.1",
+    "holoviews==1.22.1",
+    "hvplot==0.12.2",
     "xarray"
 ]
 
@@ -78,11 +84,13 @@ test = [
     "pytest-xdist",
     "pytest-randomly",
 ]
+# Lint toolchain is exact-pinned so CI results depend on the diff, not on
+# whatever black/flake8/mypy/isort happened to release. Bump intentionally.
 linting = [
-    "black>=24,<25",
-    "flake8",
-    "mypy",
-    "isort",
+    "black==24.10.0",
+    "flake8==7.3.0",
+    "mypy==2.1.0",
+    "isort==8.0.1",
 ]
 
 [project.urls]

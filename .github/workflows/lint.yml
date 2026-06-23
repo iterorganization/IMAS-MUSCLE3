@@ -7,7 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10"]
+        # Lint tools are pinned and version-independent; check once on the
+        # minimum supported Python (also mypy's default target).
+        python-version: ["3.10"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
