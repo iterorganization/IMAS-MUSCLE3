@@ -64,13 +64,40 @@ def test_distiller_discovers_scalar():
     assert float(ip.values[0]) == pytest.approx(1e6)
 
 
-def test_distiller_warns_on_inhomogeneous_time(equilibrium, caplog):
+def test_divergent_time_axes_flags_only_real_divergence():
+    from imas_muscle3.distill.distiller import _divergent_time_axes
+
+    # Coincident axes (same grid, like equilibrium's time_slice/grids_ggd) are
+    # harmless and not flagged.
+    coincident = xr.Dataset(
+        {
+            "ip": ("time_slice.time", [1.0, 2.0]),
+            "g": ("grids_ggd.time", [0.0, 0.0]),
+        },
+        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [0.0, 1.0]},
+    )
+    assert _divergent_time_axes(coincident) == []
+
+    # Genuinely different grids -> the non-dominant axis is flagged.
+    divergent = xr.Dataset(
+        {
+            "ip": ("time_slice.time", [1.0, 2.0]),
+            "q": ("time_slice.time", [3.0, 4.0]),
+            "g": ("grids_ggd.time", [0.0, 0.0]),
+        },
+        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [5.0, 9.0]},
+    )
+    assert _divergent_time_axes(divergent) == ["grids_ggd.time"]
+
+
+def test_distiller_quiet_on_coincident_time(equilibrium, caplog):
     import logging
 
-    # The conftest equilibrium is heterogeneous (homogeneous_time=0).
+    # The conftest equilibrium is heterogeneous but has a single time axis, so
+    # there is nothing genuinely inhomogeneous to warn about.
     with caplog.at_level(logging.WARNING):
         Distiller(auto=True).distill(equilibrium)
-    assert any("inhomogeneous time" in r.message for r in caplog.records)
+    assert not any("inhomogeneous time" in r.message for r in caplog.records)
 
 
 def test_normalize_time_picks_dominant_axis():
