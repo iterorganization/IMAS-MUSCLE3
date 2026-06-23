@@ -66,7 +66,10 @@ class DistillViewer(Viewer):
     # --- store/group/variable cascade --------------------------------------
 
     def _discover_stores(self) -> None:
-        self._stores = {p.stem: p for p in store_mod.find_stores(self.run_dir)}
+        self._stores = {
+            store_mod.store_label(p): p
+            for p in store_mod.find_stores(self.run_dir)
+        }
         labels = sorted(self._stores)
         self.param.store.objects = labels
         if labels and self.store not in self._stores:
@@ -148,13 +151,16 @@ class DistillViewer(Viewer):
 
 
 class ProfileView(Viewer):
-    """Render a workflow's bespoke profile ``plot`` with a time slider/live tail.
+    """Render a workflow's bespoke profile ``plot`` for one F_INIT loop.
 
     The profile author writes a pure ``plot(data, time_index)``; this view owns
-    the interactivity: a time slider, a live-follow toggle, and a poll that
-    re-reads the stores so the bespoke plot grows with the run.
+    the interactivity: an *occurrence* selector (which F_INIT loop / Picard
+    iteration to show), a time slider over that occurrence's trace, a
+    live-follow toggle, and a poll that re-reads the stores so new occurrences
+    appear and the latest one's trace grows with the run.
     """
 
+    occurrence = param.Selector(objects=[], doc="F_INIT loop / iteration.")
     time_index = param.Integer(default=0, bounds=(0, 0))
     live = param.Boolean(default=True, label="Live (follow latest)")
     _tick = param.Integer(default=0)
@@ -163,8 +169,22 @@ class ProfileView(Viewer):
         super().__init__(**params)
         self.run_dir = Path(run_dir)
         self._profile = load_profile(profile_path)
-        stores = {p.stem: p for p in store_mod.find_stores(self.run_dir)}
-        self._data = ProfileData(stores)
+        self._data = ProfileData({})
+        self._discover_occurrences()
+
+    def _discover_occurrences(self) -> None:
+        self._occurrences = store_mod.occurrences(self.run_dir)
+        labels = list(self._occurrences)
+        self.param.occurrence.objects = labels
+        if labels and self.occurrence not in self._occurrences:
+            # Default to the latest occurrence (most recent iteration).
+            self.occurrence = labels[-1]
+        else:
+            self._rebuild_data()
+
+    @param.depends("occurrence", watch=True)
+    def _rebuild_data(self) -> None:
+        self._data = ProfileData(self._occurrences.get(self.occurrence, {}))
         self._update_time_bounds()
 
     def _update_time_bounds(self) -> None:
@@ -174,11 +194,19 @@ class ProfileView(Viewer):
             self.time_index = n - 1
 
     def refresh(self) -> None:
+        was_latest = (
+            not self._occurrences
+            or self.occurrence == list(self._occurrences)[-1]
+        )
+        self._discover_occurrences()
+        # While live, follow the newest occurrence as iterations complete.
+        if self.live and was_latest and self._occurrences:
+            self.occurrence = list(self._occurrences)[-1]
         self._data.reset()
         self._update_time_bounds()
-        self._tick += 1  # force a re-render even if time_index is unchanged
+        self._tick += 1  # force a re-render even if nothing else changed
 
-    @param.depends("time_index", "_tick")
+    @param.depends("occurrence", "time_index", "_tick")
     def _view(self) -> Viewable:
         if self._profile.plot is None:
             return pn.pane.Markdown("### Profile defines no `plot`.")
@@ -190,6 +218,9 @@ class ProfileView(Viewer):
 
     def __panel__(self) -> Viewable:
         controls = pn.Row(
+            pn.widgets.Select.from_param(
+                self.param.occurrence, name="F_INIT loop"
+            ),
             pn.widgets.IntSlider.from_param(
                 self.param.time_index, name="Time index"
             ),

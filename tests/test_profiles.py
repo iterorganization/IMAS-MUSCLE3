@@ -41,14 +41,15 @@ def _equilibrium(times):
 
 def _write_profile_store(workdir, times=(0.0, 1.0, 2.0)):
     """Distill via the profile's extract into a store, as the actor would."""
-    workdir.mkdir(parents=True, exist_ok=True)
-    sink = ZarrSink(workdir / "equilibrium_in.zarr")
+    store = workdir / "equilibrium_in" / "0000.zarr"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    sink = ZarrSink(store)
     distiller = Distiller(auto=False, extract=profile.extract)
     for t in times:
         eq = _equilibrium([t])
-        for name, ds in distiller.distill(eq, time=t).items():
+        for name, ds in distiller.distill(eq).items():
             sink.append(name, ds)
-    return workdir / "equilibrium_in.zarr"
+    return store
 
 
 # --- the reference profile's extract ---------------------------------------
@@ -75,7 +76,7 @@ def test_load_profile_exposes_extract_and_plot():
 
 def test_profile_data_reads_by_logical_name(tmp_path):
     store = _write_profile_store(tmp_path / "instances" / "eq" / "workdir")
-    data = ProfileData({store.stem: store})
+    data = ProfileData({"equilibrium_in": store})
     # The logical key used when distilling resolves to the dotted on-disk group.
     sep = data.dataset("derived/separatrix")
     assert sep is not None
@@ -85,7 +86,7 @@ def test_profile_data_reads_by_logical_name(tmp_path):
 
 def test_profile_plot_builds_a_panel(tmp_path):
     store = _write_profile_store(tmp_path / "instances" / "eq" / "workdir")
-    data = ProfileData({store.stem: store})
+    data = ProfileData({"equilibrium_in": store})
     view = profile.plot(data, time_index=1)
     assert isinstance(view, pn.Row)
 
@@ -142,7 +143,7 @@ def test_actor_uses_profile_config(tmp_path):
     manager.start_instances()
     assert manager.wait()
 
-    store = store_path / "equilibrium_in.zarr"
+    store = store_path / "equilibrium_in" / "0000.zarr"
     # The profile's derived groups were written (auto was off).
     assert "derived.separatrix" in store_mod.list_groups(store)
     assert "derived.global" in store_mod.list_groups(store)

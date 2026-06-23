@@ -13,13 +13,14 @@ from imas_muscle3.viewer.plots import plot_variable
 # --- fixtures: a realistic distilled store written like the actor would -----
 
 
-def _write_equilibrium_store(run_dir):
-    """Distill a few equilibrium slices into <run>/instances/eq/workdir/eq.zarr."""
+def _write_equilibrium_store(run_dir, occurrence="0000"):
+    """Distill equilibrium slices into <run>/.../equilibrium_in/<occ>.zarr."""
     import imas
 
     workdir = run_dir / "instances" / "eq" / "workdir"
-    workdir.mkdir(parents=True)
-    sink = ZarrSink(workdir / "equilibrium_in.zarr")
+    store = workdir / "equilibrium_in" / f"{occurrence}.zarr"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    sink = ZarrSink(store)
     distiller = Distiller(auto=True)
     for t, ip in [(0.0, 1e6), (1.0, 1.1e6), (2.0, 1.2e6)]:
         eq = imas.IDSFactory("4.0.0").equilibrium()
@@ -29,9 +30,9 @@ def _write_equilibrium_store(run_dir):
         eq.time_slice[0].global_quantities.ip = ip
         eq.time_slice[0].profiles_1d.psi = np.linspace(0, 1, 8)
         eq.time_slice[0].profiles_1d.f_df_dpsi = np.ones(8) * ip
-        for name, ds in distiller.distill(eq, time=t).items():
+        for name, ds in distiller.distill(eq).items():
             sink.append(name, ds)
-    return workdir / "equilibrium_in.zarr"
+    return store
 
 
 # --- data layer -------------------------------------------------------------
@@ -42,6 +43,20 @@ def test_find_stores_and_groups(tmp_path):
     found = store_mod.find_stores(tmp_path)
     assert found == [store]
     assert store_mod.list_groups(store) == ["equilibrium"]
+    assert store_mod.store_port(store) == "equilibrium_in"
+    # The fixture writes under instances/eq/workdir, so the label is scoped by
+    # the instance name (disambiguating recorders that share a port name).
+    assert store_mod.store_instance(store) == "eq"
+    assert store_mod.store_label(store) == "eq/equilibrium_in/0000"
+
+
+def test_occurrences_group_by_reuse(tmp_path):
+    _write_equilibrium_store(tmp_path, occurrence="0000")
+    _write_equilibrium_store(tmp_path, occurrence="0001")
+    grouped = store_mod.occurrences(tmp_path)
+    assert list(grouped) == ["0000", "0001"]
+    assert set(grouped["0000"]) == {"equilibrium_in"}
+    assert grouped["0001"]["equilibrium_in"].stem == "0001"
 
 
 def test_plottable_variables_and_rank(tmp_path):

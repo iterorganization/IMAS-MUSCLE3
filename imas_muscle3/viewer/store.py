@@ -35,6 +35,58 @@ def store_profile(store: Path) -> Optional[str]:
     return str(profile) if profile else None
 
 
+def store_port(store: Path) -> str:
+    """The port (timeline) a store belongs to — its parent directory name.
+
+    Stores are laid out ``<base>/<port>/<NNNN>.zarr`` (one occurrence per reuse).
+    """
+    return store.parent.name
+
+
+def store_occurrence(store: Path) -> str:
+    """The occurrence label of a store (the reuse / F_INIT-loop index).
+
+    Read from the root attrs the recorder stamps, falling back to the file stem.
+    """
+    occ = read_root_attrs(store).get("occurrence")
+    return f"{int(occ):04d}" if occ is not None else store.stem
+
+
+def store_instance(store: Path) -> Optional[str]:
+    """The MUSCLE instance that wrote a store, from a run layout if present.
+
+    Stores under ``.../instances/<name>/workdir/...`` (where a recorder's
+    default ``store_path`` is its own working directory) yield ``<name>``; this
+    keeps stores from two recorders that share a port name distinct. ``None``
+    when the path doesn't follow that layout (e.g. an explicit ``store_path``).
+    """
+    parts = store.parts
+    if "instances" in parts:
+        i = parts.index("instances")
+        if i + 1 < len(parts):
+            return parts[i + 1]
+    return None
+
+
+def store_label(store: Path) -> str:
+    """A unique, readable label: ``[<instance>/]<port>/<occurrence>``."""
+    base = f"{store_port(store)}/{store_occurrence(store)}"
+    instance = store_instance(store)
+    return f"{instance}/{base}" if instance else base
+
+
+def occurrences(run_dir: Path) -> dict:
+    """Map each occurrence label to its ``{port: store path}`` across the run.
+
+    Lets a profile view scope to one F_INIT loop: all ports recorded at the same
+    occurrence, side by side.
+    """
+    grouped: dict = {}
+    for store in find_stores(run_dir):
+        grouped.setdefault(store_occurrence(store), {})[store_port(store)] = store
+    return dict(sorted(grouped.items()))
+
+
 def find_stores(run_dir: Path) -> List[Path]:
     """All distilled Zarr stores under ``run_dir`` (``*.zarr`` with a root node).
 

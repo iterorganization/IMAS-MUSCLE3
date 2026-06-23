@@ -64,6 +64,21 @@ def test_distiller_discovers_scalar():
     assert float(ip.values[0]) == pytest.approx(1e6)
 
 
+def test_distiller_accepts_whole_trace():
+    # A multi-slice IDS is tensorized as one dataset with a full time axis,
+    # and the time-like dim is normalized to 'time'.
+    eq = imas.IDSFactory("4.0.0").equilibrium()
+    eq.ids_properties.homogeneous_time = 1
+    eq.time = [0.0, 1.0, 2.0]
+    eq.time_slice.resize(3)
+    for i, t in enumerate(eq.time):
+        eq.time_slice[i].global_quantities.ip = 1e6 + i * 1e5
+    out = Distiller(auto=True).distill(eq)
+    ip = out["equilibrium"]["time_slice.global_quantities.ip"]
+    assert ip.dims == ("time",)
+    assert list(ip.values) == pytest.approx([1e6, 1.1e6, 1.2e6])
+
+
 def test_distiller_needs_auto_or_config():
     with pytest.raises(ValueError):
         Distiller(auto=False)
@@ -197,9 +212,10 @@ def test_distill_records_two_timelines(tmp_path, equilibrium, core_profiles):
     manager.start_instances()
     assert manager.wait()
 
-    # One zarr store per timeline, named after the port.
-    eq_store = store_path / "equilibrium_in.zarr"
-    cp_store = store_path / "core_profiles_in.zarr"
+    # One store per timeline per reuse: <port>/<occurrence>.zarr. The source
+    # streams the whole trace in a single reuse, so occurrence 0000.
+    eq_store = store_path / "equilibrium_in" / "0000.zarr"
+    cp_store = store_path / "core_profiles_in" / "0000.zarr"
     assert eq_store.is_dir()
     assert cp_store.is_dir()
 
