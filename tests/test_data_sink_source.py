@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import pytest
-import ymmsl
 from imas import DBEntry
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
+
+from tests.ymmsl_helpers import load_config
 
 
 def test_source_to_sink(tmp_path, core_profiles):
@@ -47,7 +46,7 @@ resources:
     threads: 1
 """
 
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
 
     # set up
     run_dir = RunDir(tmp_path / "run")
@@ -109,7 +108,7 @@ def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
       source_component.source_uri: {source_uri}
       sink_component.sink_uri: {sink_uri}
       hybrid_component.source_uri: {hybrid_source_uri}
-      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ''}
+      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ""}
     implementations:
       sink_component:
         executable: python
@@ -129,7 +128,7 @@ def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
         threads: 1
     """
 
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
 
     # set up
     run_dir = RunDir(tmp_path / "run")
@@ -195,7 +194,7 @@ resources:
     threads: 1
 """
 
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
 
     # set up
     run_dir = RunDir(tmp_path / "run")
@@ -260,7 +259,7 @@ resources:
     threads: 1
 """
 
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
 
     # set up
     run_dir = RunDir(tmp_path / "run")
@@ -336,7 +335,7 @@ checkpoints:
   - every: 0.5
 """
 
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
     run_dir = RunDir(tmp_path / "run")
     run_dir2 = RunDir(tmp_path / "run2")
     assert all(pf_active.time == [0, 1, 2])
@@ -348,7 +347,7 @@ checkpoints:
             manager = Manager(config, run_dir2)
             snapshots_ymmsl = ls_snapshots(run_dir)
             assert len(snapshots_ymmsl) == 3
-            config.update(ymmsl.load(snapshots_ymmsl[-1]))
+            config.update(load_config(snapshots_ymmsl[-1]))
             expected_time = [2]
         manager.start_instances()
         success = manager.wait()

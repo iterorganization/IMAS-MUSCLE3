@@ -4,12 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import ymmsl
 from imas import DBEntry, ids_defs
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
+from tests.ymmsl_helpers import load_config
 
 """Force 'spawn' start method to avoid deadlocks with pytest."""
 if multiprocessing.get_start_method(allow_none=True) != "spawn":
@@ -85,7 +85,7 @@ def test_visualization_actor(tmpdir, equilibrium):
     }
 
     ymmsl_text = create_ymmsl_config(settings)
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
     run_dir = RunDir(tmppath / "run")
     manager = Manager(config, run_dir)
     manager.start_instances()
@@ -94,7 +94,9 @@ def test_visualization_actor(tmpdir, equilibrium):
     assert success
 
 
-def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error):
+def run_and_check_for_error(
+    tmpdir, equilibrium, ymmsl_settings, expected_error
+):
     """Helper function to run a simulation and check for a specific error."""
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
@@ -103,7 +105,7 @@ def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error)
 
     tmppath = Path(str(tmpdir))
     ymmsl_text = create_ymmsl_config(ymmsl_settings)
-    config = ymmsl.load(ymmsl_text)
+    config = load_config(ymmsl_text)
     run_dir = RunDir(tmppath / "run")
     manager = Manager(config, run_dir)
     manager.start_instances()
@@ -132,7 +134,9 @@ def test_visualization_actor_missing_classes(tmpdir, equilibrium, tmp_path):
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_state_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_state_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -146,7 +150,9 @@ class Plotter(BasePlotter): pass
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_plotter_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_plotter_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -180,7 +186,9 @@ def test_state_data(equilibrium, monkeypatch):
     with DBEntry("imas:memory?path=/", "w") as db:
         db.put(equilibrium)
         for t in equilibrium.time:
-            single_slice_ids = db.get_slice("equilibrium", t, ids_defs.CLOSEST_INTERP)
+            single_slice_ids = db.get_slice(
+                "equilibrium", t, ids_defs.CLOSEST_INTERP
+            )
             actor.state.extract(single_slice_ids)
 
     state_data = actor.plotter._state.data["equilibrium"]

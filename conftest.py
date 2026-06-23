@@ -5,14 +5,12 @@ import pytest
 
 @pytest.fixture
 def core_profiles():
-    cp = imas.IDSFactory("3.40.1").core_profiles()
+    cp = imas.IDSFactory("4.0.0").core_profiles()
     # Fill some properties:
     cp.ids_properties.homogeneous_time = 0  # INT_0D
     cp.ids_properties.comment = "Comment"  # STR_0D
     cp.ids_properties.provenance.node.resize(1)
     cp.ids_properties.provenance.node[0].path = "profiles_1d"  # STR_0D
-    sources = ["First string", "Second string", "Third!"]
-    cp.ids_properties.provenance.node[0].sources = sources  # STR_1D
     # Fill some data
     cp.time = [0.0, 1.0, 2.0]
     cp.profiles_1d.resize(len(cp.time))
