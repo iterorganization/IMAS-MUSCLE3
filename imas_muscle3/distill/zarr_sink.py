@@ -1,21 +1,29 @@
-"""Append distilled single-time datasets to a Zarr store, one timeline per store.
+"""Combine distilled datasets for one timeline and write them to a Zarr store.
 
-Each distilled variable becomes a Zarr *group* inside one store; new time slices
-are appended along the ``time`` dimension. The store is the natural fit for this
-shape: appends are cheap, non-time dims are chunked, and a viewer can read the
-growing arrays while the run is still writing them.
+Each distilled IDS (and config group) becomes a Zarr *group* in one store. A
+recorder hands the sink one dataset per received message (a single slice, or a
+whole trace); the sink buffers them per group and, when the timeline ends,
+combines them along ``time`` and writes the group once.
 
-**Ragged non-time dims.** Zarr arrays have a fixed shape on their non-append
-dims, but a profile's length can vary between time slices (e.g. a re-gridded
-equilibrium). The first slice of a variable fixes that width; later slices are
-padded with ``NaN`` (shorter) or truncated (longer, with a warning) to match.
-A fully ragged representation is future work; pad/truncate keeps the common
-fixed-grid case exact and never crashes on the rest.
+Combining is done with :func:`xarray.concat` (outer join on the ``time``
+coordinate), which makes the store robust to the messy realities of real IDS
+streams:
+
+* **gaps / inhomogeneous time** — a quantity may be absent on some steps (e.g.
+  ``profiles_1d`` empty on TORAX's first solver steps, whose root ``time``
+  nonetheless advances). The union of time values is taken and missing entries
+  are ``NaN``-filled, so every quantity shares one consistent ``time`` axis.
+* **ragged non-time dims** — a profile's length can vary between steps (a
+  re-gridded equilibrium); non-time dims are padded with ``NaN`` to the max
+  width before concatenation.
+
+Buffering per occurrence trades intra-occurrence live-tailing for a correct,
+self-consistent store; occurrences (one per reuse) still appear incrementally.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, Mapping
+from typing import Dict, List, Mapping
 
 import numpy as np
 import xarray as xr
@@ -23,7 +31,7 @@ import zarr
 
 logger = logging.getLogger()
 
-#: The append dimension; every distilled dataset carries it (see :mod:`.distiller`).
+#: The time dimension every distilled dataset shares (see :mod:`.distiller`).
 _TIME = "time"
 
 
@@ -61,58 +69,71 @@ def group_name(full_path: str) -> str:
     return full_path.replace("/", ".")
 
 
+def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
+    """Concatenate one timeline's messages along ``time`` into one dataset.
+
+    Pads ragged non-time dims to their max width, then outer-joins on the
+    ``time`` coordinate so gaps become ``NaN`` and every quantity shares one
+    ``time``. Non-dimension coordinates are demoted before the concat (xarray
+    will not concat a coordinate that is absent from some parts) and restored
+    after.
+    """
+    if len(parts) == 1:
+        return parts[0]
+
+    widths: Dict[str, int] = {}
+    for part in parts:
+        for dim, size in part.sizes.items():
+            if dim != _TIME:
+                widths[dim] = max(widths.get(dim, 0), size)
+    padded = []
+    for part in parts:
+        pad = {
+            dim: (0, widths[dim] - part.sizes[dim])
+            for dim in widths
+            if dim in part.sizes and part.sizes[dim] < widths[dim]
+        }
+        padded.append(
+            part.pad(pad, constant_values=np.nan) if pad else part
+        )
+
+    coord_names = {
+        str(c) for part in padded for c in part.coords if str(c) != _TIME
+    }
+    reset = [part.reset_coords() for part in padded]
+    combined = xr.concat(
+        reset, dim=_TIME, join="outer", data_vars="all", coords="all"
+    )
+    return combined.set_coords([c for c in coord_names if c in combined])
+
+
 class ZarrSink:
-    """Append-along-time writer for one timeline's distilled variables."""
+    """Buffer one timeline's distilled datasets and write them combined."""
 
     def __init__(self, store_path: Path) -> None:
         self._store = str(store_path)
-        # Established non-time dim sizes per group, from its first slice.
-        self._widths: Dict[str, Dict[str, int]] = {}
+        self._buffers: Dict[str, List[xr.Dataset]] = {}
 
     def append(self, name: str, ds: xr.Dataset) -> None:
-        """Append a dataset to its group (``name``), extending the time axis.
+        """Buffer a dataset for group ``name``; written combined at :meth:`close`.
 
         ``ds`` must carry a ``time`` dimension; its length is free — a single
-        slice (streamed recording) or a whole trace (one occurrence written in
-        one go) both work. The first write for a group fixes the non-time dim
-        sizes; later writes are reconciled (NaN-pad/truncate) and concatenated
-        along time.
+        slice (streamed recording) or a whole trace both work.
         """
         if _TIME not in ds.dims:
             raise ValueError(
-                f"{name}: distilled dataset has no '{_TIME}' dimension to "
-                f"append along (dims={dict(ds.sizes)})"
+                f"{name}: distilled dataset has no '{_TIME}' dimension "
+                f"(dims={dict(ds.sizes)})"
             )
-        group = group_name(name)
-        if group not in self._widths:
-            self._widths[group] = {
-                dim: size for dim, size in ds.sizes.items() if dim != _TIME
-            }
-            ds.to_zarr(self._store, group=group, mode="w", consolidated=False)
-            return
-        ds = self._reconcile(group, name, ds)
-        ds.to_zarr(
-            self._store, group=group, append_dim=_TIME, consolidated=False
-        )
+        self._buffers.setdefault(group_name(name), []).append(ds)
 
-    def _reconcile(self, group: str, name: str, ds: xr.Dataset) -> xr.Dataset:
-        """Pad/truncate ``ds`` non-time dims to the group's established sizes."""
-        for dim, want in self._widths[group].items():
-            have = ds.sizes.get(dim)
-            if have is None or have == want:
-                continue
-            if have < want:
-                ds = ds.pad({dim: (0, want - have)}, constant_values=np.nan)
-            else:
-                logger.warning(
-                    "%s: slice %s=%d exceeds stored width %d; truncating",
-                    name,
-                    dim,
-                    have,
-                    want,
+    def close(self) -> None:
+        """Combine each group's buffered messages and write the store."""
+        for group, parts in self._buffers.items():
+            try:
+                _combine(parts).to_zarr(
+                    self._store, group=group, mode="w", consolidated=False
                 )
-                ds = ds.isel({dim: slice(0, want)})
-        return ds
-
-    def close(self) -> None:  # no open handles to release; appends are atomic
-        pass
+            except Exception:
+                logger.exception("failed writing group '%s'", group)
+        self._buffers.clear()

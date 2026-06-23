@@ -32,6 +32,7 @@ def _write_equilibrium_store(run_dir, occurrence="0000"):
         eq.time_slice[0].profiles_1d.f_df_dpsi = np.ones(8) * ip
         for name, ds in distiller.distill(eq).items():
             sink.append(name, ds)
+    sink.close()
     return store
 
 

@@ -64,61 +64,27 @@ def test_distiller_discovers_scalar():
     assert float(ip.values[0]) == pytest.approx(1e6)
 
 
-def test_divergent_time_axes_flags_only_real_divergence():
-    from imas_muscle3.distill.distiller import _divergent_time_axes
-
-    # Coincident axes (same grid, like equilibrium's time_slice/grids_ggd) are
-    # harmless and not flagged.
-    coincident = xr.Dataset(
-        {
-            "ip": ("time_slice.time", [1.0, 2.0]),
-            "g": ("grids_ggd.time", [0.0, 0.0]),
-        },
-        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [0.0, 1.0]},
-    )
-    assert _divergent_time_axes(coincident) == []
-
-    # Genuinely different grids -> the non-dominant axis is flagged.
-    divergent = xr.Dataset(
-        {
-            "ip": ("time_slice.time", [1.0, 2.0]),
-            "q": ("time_slice.time", [3.0, 4.0]),
-            "g": ("grids_ggd.time", [0.0, 0.0]),
-        },
-        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [5.0, 9.0]},
-    )
-    assert _divergent_time_axes(divergent) == ["grids_ggd.time"]
-
-
-def test_distiller_quiet_on_coincident_time(equilibrium, caplog):
-    import logging
-
-    # The conftest equilibrium is heterogeneous but has a single time axis, so
-    # there is nothing genuinely inhomogeneous to warn about.
-    with caplog.at_level(logging.WARNING):
-        Distiller(auto=True).distill(equilibrium)
-    assert not any("inhomogeneous time" in r.message for r in caplog.records)
-
-
-def test_normalize_time_picks_dominant_axis():
-    # A heterogeneous IDS (like equilibrium) can carry several *.time axes; the
-    # one most variables use must become 'time' so the viewer finds them.
+def test_normalize_time_combines_axes():
+    # A message can carry several coincident time axes (equilibrium's
+    # time_slice.time + grids_ggd.time; core_profiles' root time + profiles_1d).
+    # They must collapse onto one 'time' so every quantity shares it.
     from imas_muscle3.distill.distiller import _normalize_time
 
     ds = xr.Dataset(
         {
-            "ip": ("time_slice.time", [1.0, 2.0]),
-            "psi": (("time_slice.time", "x"), np.ones((2, 3))),
-            "grid_meta": ("grids_ggd.time", [0.0, 0.0]),
+            "ip": ("time_slice.time", [1.0]),
+            "psi": (("time_slice.time", "x"), np.ones((1, 3))),
+            "b0": ("grids_ggd.time", [7.0]),
         },
-        coords={"time_slice.time": [0.0, 1.0], "grids_ggd.time": [0.0, 1.0]},
+        coords={"time_slice.time": [2.5], "grids_ggd.time": [2.5]},
     )
     out = _normalize_time(ds)
-    assert "time" in out.dims
-    assert out["ip"].dims == ("time",)
-    assert out["psi"].dims == ("time", "x")
-    # the minor axis is left untouched
-    assert out["grid_meta"].dims == ("grids_ggd.time",)
+    assert set(out.dims) >= {"time", "x"}
+    assert "time_slice.time" not in out.dims
+    assert "grids_ggd.time" not in out.dims
+    for v in ("ip", "psi", "b0"):
+        assert "time" in out[v].dims
+    assert list(out["time"].values) == [2.5]
 
 
 def test_distiller_accepts_whole_trace():
@@ -180,11 +146,12 @@ def _single_1d(t, values):
     )
 
 
-def test_zarr_sink_appends_along_time(tmp_path):
+def test_zarr_sink_combines_along_time(tmp_path):
     store = tmp_path / "core_profiles_in.zarr"
     sink = ZarrSink(store)
     sink.append("x/y", _single_1d(0.0, np.ones(8)))
     sink.append("x/y", _single_1d(1.0, np.full(8, 2.0)))
+    sink.close()  # nothing is written until close
 
     ds = xr.open_zarr(store, group=group_name("x/y"), consolidated=False)
     assert list(ds.time.values) == [0.0, 1.0]
@@ -200,7 +167,9 @@ def test_zarr_sink_writes_whole_trace(tmp_path):
         coords={"time": np.arange(49.0)},
         attrs={"full_path": "x/y"},
     )
-    ZarrSink(store).append("x/y", ds)
+    sink = ZarrSink(store)
+    sink.append("x/y", ds)
+    sink.close()
     out = xr.open_zarr(store, group=group_name("x/y"), consolidated=False)
     assert out["value"].shape == (49, 8)
 
@@ -209,14 +178,35 @@ def test_zarr_sink_pads_ragged_profiles(tmp_path):
     store = tmp_path / "store.zarr"
     sink = ZarrSink(store)
     sink.append("x/y", _single_1d(0.0, np.ones(8)))
-    # A shorter later slice is NaN-padded up to the established width.
+    # A shorter later slice is NaN-padded up to the max width.
     sink.append("x/y", _single_1d(1.0, np.full(5, 3.0)))
+    sink.close()
 
     ds = xr.open_zarr(store, group=group_name("x/y"), consolidated=False)
     assert ds["value"].shape == (2, 8)
     second = ds["value"].values[1]
     assert list(second[:5]) == [3.0] * 5
     assert np.isnan(second[5:]).all()
+
+
+def test_zarr_sink_combines_gaps(tmp_path):
+    # The TORAX out_i case: some messages carry a var, others don't. The store
+    # must still open, with the union time axis and NaN where the var is absent.
+    store = tmp_path / "core_profiles_in.zarr"
+    sink = ZarrSink(store)
+    sink.append("x/y", _single_1d(0.0, np.ones(8)))  # has 'value'
+    sink.append(
+        "x/y",
+        xr.Dataset({"other": ("time", [9.0])}, coords={"time": [0.5]}),
+    )  # gap: no 'value'
+    sink.append("x/y", _single_1d(1.0, np.full(8, 2.0)))
+    sink.close()
+
+    ds = xr.open_zarr(store, group=group_name("x/y"), consolidated=False)
+    assert list(ds.time.values) == [0.0, 0.5, 1.0]
+    assert ds["value"].shape == (3, 8)
+    assert np.isnan(ds["value"].values[1]).all()  # gap NaN-filled
+    assert np.isnan(ds["other"].values[0]) and ds["other"].values[1] == 9.0
 
 
 # --- integration test: two timelines -> two zarr stores -------------------

@@ -49,6 +49,7 @@ def _write_profile_store(workdir, times=(0.0, 1.0, 2.0)):
         eq = _equilibrium([t])
         for name, ds in distiller.distill(eq).items():
             sink.append(name, ds)
+    sink.close()
     return store
 
 
