@@ -23,3 +23,4 @@ Using IMAS-MUSCLE3
     actor_olc
     actor_accumulator
     actor_visualization
+    actor_tap
