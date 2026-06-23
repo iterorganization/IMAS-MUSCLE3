@@ -4,7 +4,7 @@ MUSCLE3 actor for visualization
 
 import logging
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 import holoviews as hv
 import panel as pn
@@ -53,9 +53,10 @@ def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
-            # Optional driver trigger: when connected, the actor reuses once per
-            # received message (e.g. one per outer-loop iteration) and keeps the
-            # server alive across them. When unconnected it runs a single pass.
+            # Optional driver trigger: when connected, the actor reuses
+            # once per received message (e.g. one per outer-loop iteration)
+            # and keeps the server alive across them. When unconnected it
+            # runs a single pass.
             Operator.F_INIT: ["trigger_in"],
             Operator.S: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
@@ -73,7 +74,7 @@ def main() -> None:
         for p in get_port_list(instance, Operator.S)
         if not p.endswith("_md_in")
     ]
-    keep_alive = False
+    keep_alive: Optional[bool] = False
     while instance.reuse_instance():
         if instance.resuming():
             pass

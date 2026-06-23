@@ -19,8 +19,9 @@ Key properties:
 - **Per-message DBEntries**: each received message is written to its own
   ``imas:hdf5?path=<store_path>/<port>/<seq>`` DBEntry, queryable afterwards
   with IMAS-Python. ``store_path`` defaults to the instance's run folder.
-- **Backpressure monitoring**: a monitor thread periodically logs, per timeline,
-  the time spent blocked in ``receive`` (``t_wait``) versus the time spent
+- **Backpressure monitoring**: a monitor thread periodically logs, per
+  timeline, the time spent blocked in ``receive`` (``t_wait``) versus the
+  time spent
   recording (``t_write``), and a *saturation ratio* ``t_write / (t_wait +
   t_write)``. A ratio near 1 means recording is the bottleneck and the senders
   will stall on the tap.
