@@ -21,31 +21,35 @@ Muscled data sink and/or source actor.
     dd_version: which IMAS DD version should be used
     {port_name}_occ: occurrence number for loading and saving of given ids
 
-How to use in ymmsl file::
+How to use in ymmsl file (yMMSL v0.2)::
 
-    model:
-        name: example_model
-        components:
-            macro:
-                implementation: source_component
-                ports:
-                o_i: [core_profiles_out]
-            micro:
-                implementation: sink_component
-                ports:
-                f_init: [core_profiles_in]
-        conduits:
-            macro.core_profiles_out: micro.core_profiles_in
+    ymmsl_version: v0.2
+    models:
+        example_model:
+            description: minimal source -> sink example
+            components:
+                macro:
+                    description: data source
+                    implementation: source_component
+                    ports:
+                        o_i: [core_profiles_out]
+                micro:
+                    description: data sink
+                    implementation: sink_component
+                    ports:
+                        f_init: [core_profiles_in]
+            conduits:
+                macro.core_profiles_out: micro.core_profiles_in
     settings:
         macro.source_uri: source_uri
         micro.sink_uri: sink_uri
-    implementations:
+    programs:
         sink_component:
             executable: python
-            args: -u -m pds.utils.sink_component
+            args: -u -m imas_muscle3.actors.sink_component
         source_component:
             executable: python
-            args: -u -m pds.utils.source_component
+            args: -u -m imas_muscle3.actors.source_component
 """
 
 import logging
@@ -59,7 +63,7 @@ from imas.ids_defs import (
     PREVIOUS_INTERP,
 )
 from libmuscle import Instance, InstanceFlags, Message
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
 

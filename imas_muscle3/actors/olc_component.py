@@ -17,7 +17,7 @@ from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
 

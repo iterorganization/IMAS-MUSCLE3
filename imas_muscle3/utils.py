@@ -1,7 +1,9 @@
 from typing import List, Optional, TypeVar, cast
 
 from libmuscle import Instance
-from ymmsl import Operator, SettingValue
+
+# ymmsl 0.15+ split into versioned subpackages; import the v0.2 API explicitly.
+from ymmsl.v0_2 import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
 

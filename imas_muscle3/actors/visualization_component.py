@@ -11,7 +11,7 @@ import panel as pn
 from imas import IDSFactory
 from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_port_list, get_setting_optional
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
@@ -53,6 +53,10 @@ def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
+            # Optional driver trigger: when connected, the actor reuses once per
+            # received message (e.g. one per outer-loop iteration) and keeps the
+            # server alive across them. When unconnected it runs a single pass.
+            Operator.F_INIT: ["trigger_in"],
             Operator.S: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
             ]
@@ -69,11 +73,16 @@ def main() -> None:
         for p in get_port_list(instance, Operator.S)
         if not p.endswith("_md_in")
     ]
+    keep_alive = False
     while instance.reuse_instance():
         if instance.resuming():
             pass
         if instance.should_init():
             pass
+
+        # Consume the driver trigger (if any) that gates this reuse.
+        if instance.is_connected("trigger_in"):
+            instance.receive("trigger_in")
 
         plot_file_path = instance.get_setting("plot_file_path", "str")
         # If port is not specified, use a random available port
@@ -148,14 +157,18 @@ def main() -> None:
 
         assert visualization_actor is not None
         visualization_actor.state.param.trigger("data")
-        if keep_alive:
-            visualization_actor.notify_done()
-        else:
-            visualization_actor.stop_server()
 
         if instance.should_save_final_snapshot():
             msg = Message(t_cur)
             instance.save_final_snapshot(msg)
+
+    # Finalize once, after the last reuse, so the server survives across
+    # iterations when driven by trigger_in.
+    if visualization_actor is not None:
+        if keep_alive:
+            visualization_actor.notify_done()
+        else:
+            visualization_actor.stop_server()
 
 
 if __name__ == "__main__":

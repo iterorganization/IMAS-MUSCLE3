@@ -23,7 +23,7 @@ from typing import Dict, List
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, InstanceFlags, Message
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_port_list
 
