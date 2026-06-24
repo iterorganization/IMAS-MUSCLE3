@@ -294,3 +294,47 @@ def test_distill_records_two_timelines(tmp_path, equilibrium, core_profiles):
     assert list(cp.time.values) == list(core_profiles.time)
     assert density.shape == (len(core_profiles.time), 16)
     assert "profiles_1d.grid.rho_tor_norm" in cp.coords
+
+
+# --- occurrence labelling from the message stream -------------------------
+
+
+def _msg(t, nxt, data):
+    from libmuscle import Message
+
+    return Message(t, nxt, data=data)
+
+
+def test_distill_handler_splits_occurrences_on_restart(tmp_path, equilibrium):
+    """A backward time step / end-of-stream starts a new occurrence."""
+    from imas_muscle3.actors.distill_component import DistillHandler
+
+    data = equilibrium.serialize()
+    store_dir = tmp_path / "equilibrium_in"
+    handler = DistillHandler(store_dir, "equilibrium", Distiller(auto=True))
+    # iteration 0: t=0,1 (1 ends the stream); iteration 1: t=0,1 (time resets).
+    handler.handle(0, _msg(0.0, 1.0, data))
+    handler.handle(1, _msg(1.0, None, data))
+    handler.handle(2, _msg(0.0, 1.0, data))
+    handler.handle(3, _msg(1.0, None, data))
+    handler.close()
+
+    assert (store_dir / "0000.zarr").is_dir()
+    assert (store_dir / "0001.zarr").is_dir()
+    assert not (store_dir / "0002.zarr").exists()
+
+
+def test_distill_handler_one_occurrence_for_monotonic(tmp_path, equilibrium):
+    """A single monotonic trace stays one occurrence (no spurious split)."""
+    from imas_muscle3.actors.distill_component import DistillHandler
+
+    data = equilibrium.serialize()
+    store_dir = tmp_path / "equilibrium_in"
+    handler = DistillHandler(store_dir, "equilibrium", Distiller(auto=True))
+    handler.handle(0, _msg(0.0, 1.0, data))
+    handler.handle(1, _msg(1.0, 2.0, data))
+    handler.handle(2, _msg(2.0, None, data))
+    handler.close()
+
+    assert (store_dir / "0000.zarr").is_dir()
+    assert not (store_dir / "0001.zarr").exists()

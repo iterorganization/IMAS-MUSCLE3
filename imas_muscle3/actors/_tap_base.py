@@ -2,9 +2,10 @@
 
 A tap is a sink-only MUSCLE3 actor that drains an arbitrary number of
 independent *timelines* (one per connected ``S`` port) and does something with
-each received message. The :mod:`tap_component` records the raw IDS per message;
-the :mod:`distill_component` extracts distilled scalars / profiles and writes
-them to a Zarr store. Everything they share lives here:
+each received message. Two concrete taps build on this — :mod:`tap_component`
+(records one raw DBEntry per message) and :mod:`distill_component` (distills
+each message into compact scalars / profiles appended to a Zarr store) — and
+everything they share lives here:
 
 - **Dynamic ports** (MUSCLE3 0.10): the :class:`~libmuscle.Instance` is created
   without a port description, so the ports come from the yMMSL configuration.
@@ -15,8 +16,10 @@ them to a Zarr store. Everything they share lives here:
   libmuscle's manager assumes one pending receive per instance and its per-port
   message accounting is not concurrency-safe, so a thread-per-port tap corrupts
   message numbering / trips the deadlock detector under the real
-  ``muscle_manager`` (see :func:`serve_timelines`). A timeline ends when its
-  peer sends ``next_timestamp is None``.
+  ``muscle_manager`` (see :func:`serve_timelines`). A timeline ends only when
+  its peer's port *closes*; ``next_timestamp is None`` marks an intermediate
+  stream restart (one sender-reuse ending), not the end (see
+  ``reuse_and_close.md``).
 - **Backpressure monitoring**: a monitor thread periodically logs, per timeline,
   the time spent blocked in ``receive`` (``t_wait``) versus the time spent
   handling the message (``t_write``), and a *saturation ratio*
@@ -242,8 +245,10 @@ def serve_timelines(
     against concurrent receives from one instance — a thread-per-port tap trips
     both under the real ``muscle_manager`` (it only "worked" against the
     in-process ``Manager`` in tests, which exercises neither path). So we poll
-    each still-open timeline in turn, handing each message to its handler, until
-    every timeline has ended (``next_timestamp is None``).
+    each still-open timeline in turn, handing each message to its handler,
+    until every timeline's port closes — drained to the end. (A message's
+    ``next_timestamp is None`` only ends one sender-reuse's stream, so we do
+    not stop there; see ``reuse_and_close.md``.)
 
     The cost is that an idle timeline can head-of-line block a busy one; for the
     couplings we tap (one whole-trace message per reuse, or lock-step streamed
@@ -270,6 +275,42 @@ def serve_timelines(
                     t0 = perf_counter()
                     msg = instance.receive(port)
                     t1 = perf_counter()
+                except (RuntimeError, OSError) as exc:
+                    # End of the timeline: the peer's port has closed. We
+                    # drain to here rather than stopping at next_timestamp=
+                    # None, which only ends one sender-reuse's stream — a
+                    # reusing peer (an outer loop) keeps sending afterwards
+                    # (see reuse_and_close.md). libmuscle surfaces the close in
+                    # a few shapes (teardown-race dependent): a RuntimeError
+                    # whose message says the port "was closed" or the peer
+                    # connection "was lost", or an OSError (torn socket). All
+                    # mean end-of-data for a terminal tap. The two RuntimeError
+                    # shapes both end with "...the peer crash?", so we match
+                    # that; OSError covers the torn-socket case. Detecting the
+                    # close costs up to libmuscle's hardcoded 60s
+                    # RECONNECT_TIMEOUT retrying the gone peer; a real crash is
+                    # reported by the manager via exit codes, so treating these
+                    # as EOF here is safe.
+                    if (
+                        isinstance(exc, OSError)
+                        or "peer crash" in str(exc).lower()
+                    ):
+                        active.remove(port)
+                        logger.info(
+                            "timeline '%s' closed after %d messages",
+                            port,
+                            seq[port],
+                        )
+                        continue
+                    errors[port] = exc
+                    logger.exception(
+                        "timeline '%s' receive failed after %d messages",
+                        port,
+                        seq[port],
+                    )
+                    active.remove(port)
+                    continue
+                try:
                     detail = handlers[port].handle(seq[port], msg)
                     t2 = perf_counter()
                 except BaseException as exc:  # noqa: B036  -- surfaced to main
@@ -286,13 +327,6 @@ def serve_timelines(
                     "handled %s t=%.4e -> %s", port, msg.timestamp, detail
                 )
                 seq[port] += 1
-                if msg.next_timestamp is None:
-                    active.remove(port)
-                    logger.info(
-                        "timeline '%s' finished after %d messages",
-                        port,
-                        seq[port],
-                    )
     finally:
         for port, handler in handlers.items():
             try:
