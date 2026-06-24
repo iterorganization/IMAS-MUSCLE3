@@ -54,11 +54,13 @@ dependencies = [
     "imas-python",
     "imas-core",
     "imas-validator",
-    "muscle3",
+    "muscle3>=0.10",
+    "ymmsl>=0.17",
     "panel",
     "holoviews",
     "hvplot",
-    "xarray"
+    "xarray",
+    "zarr"
 ]
 
 [project.optional-dependencies]
@@ -130,7 +132,8 @@ module = [
     "imas_muscle3._version",
     "panel.*",
     "param.*",
-    "holoviews.*"
+    "holoviews.*",
+    "zarr.*"
 ]
 ignore_missing_imports = true
 

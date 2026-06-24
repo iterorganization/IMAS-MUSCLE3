@@ -20,6 +20,7 @@ Using IMAS-MUSCLE3
     :maxdepth: 1
 
     actor_sink_source
+    actor_tap
     actor_olc
     actor_accumulator
     actor_visualization
