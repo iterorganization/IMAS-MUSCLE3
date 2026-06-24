@@ -32,14 +32,18 @@ plumbing are provided here.
 """
 
 import logging
+import shutil
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from time import perf_counter
-from typing import Callable, Dict, Iterable, List, Protocol
+from typing import Callable, Dict, Iterable, List, Optional, Protocol
 
 from imas import IDSFactory
-from libmuscle import Instance, Message
+from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
+
+from imas_muscle3.utils import get_setting_optional
 
 logger = logging.getLogger()
 
@@ -339,3 +343,118 @@ def serve_timelines(
 
     monitor.stop()
     return errors
+
+
+@dataclass
+class RecorderSettings:
+    """Settings shared by every recorder component.
+
+    Read once (constant across reuses); a component reads any format-specific
+    settings itself, in its :data:`FactoryBuilder`.
+    """
+
+    store_path: Path
+    clean_on_start: bool
+    monitor_interval: float
+    saturation_warn: float
+
+
+def read_recorder_settings(instance: Instance) -> RecorderSettings:
+    """Read the settings common to all recorder components.
+
+    ``store_path`` defaults to the instance's run folder (its working directory
+    in the MUSCLE3 run).
+    """
+    store_path_setting = get_setting_optional(instance, "store_path")
+    store_path = (
+        Path(store_path_setting)
+        if store_path_setting is not None
+        else Path.cwd()
+    )
+    clean_on_start = get_setting_optional(instance, "clean_on_start", True)
+    monitor_interval = get_setting_optional(instance, "monitor_interval", 5.0)
+    saturation_warn = get_setting_optional(instance, "saturation_warn", 0.8)
+    assert clean_on_start is not None
+    assert monitor_interval is not None
+    assert saturation_warn is not None
+    return RecorderSettings(
+        store_path=store_path,
+        clean_on_start=clean_on_start,
+        monitor_interval=monitor_interval,
+        saturation_warn=saturation_warn,
+    )
+
+
+# Builds the per-timeline HandlerFactory once the ports and common settings are
+# known: (instance, settings, s_ports) -> HandlerFactory. This is where a
+# component reads any format-specific settings (e.g. distill's auto/config).
+FactoryBuilder = Callable[
+    [Instance, RecorderSettings, List[str]], HandlerFactory
+]
+
+
+def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
+    """Run the shared MUSCLE3 reuse loop for a terminal recorder component.
+
+    ``name`` labels log / error messages (e.g. ``"tap"``, ``"distill"``).
+    ``build_factory`` is called once, after the connected ``S`` ports are known
+    and the common settings read, as ``build_factory(instance, settings,
+    s_ports)``; it returns the :data:`HandlerFactory` used to make one
+    :class:`TimelineHandler` per timeline.
+
+    Every connected ``S`` port is drained to its real close (see
+    :func:`serve_timelines` and ``reuse_and_close.md``), so this loop runs
+    effectively once even when the peer keeps reusing; per-occurrence /
+    per-message bookkeeping lives in the handler, not here.
+    """
+    # Dynamic ports: no port description, ports come from the yMMSL config.
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
+
+    settings: Optional[RecorderSettings] = None
+    factory: Optional[HandlerFactory] = None
+    while instance.reuse_instance():
+        s_ports = connected_s_ports(instance)
+        if not s_ports:
+            # A recorder with nothing wired to it is a no-op, not an error.
+            logger.warning(
+                "%s recorder has no connected S ports; nothing to record.",
+                name,
+            )
+            break
+        # Validate all port -> IDS mappings up front so a bad config fails
+        # fast, before any handler is built.
+        ids_names = {p: ids_name_from_port(p) for p in s_ports}
+
+        if settings is None:
+            settings = read_recorder_settings(instance)
+            settings.store_path.mkdir(parents=True, exist_ok=True)
+            if settings.clean_on_start:
+                # Clear only this recorder's own per-port dirs, up front; never
+                # store_path itself (it may be the instance's run folder).
+                for port in s_ports:
+                    shutil.rmtree(
+                        settings.store_path / port, ignore_errors=True
+                    )
+            factory = build_factory(instance, settings, s_ports)
+
+        logger.info(
+            "%s recording %d timeline(s) %s to %s",
+            name,
+            len(s_ports),
+            s_ports,
+            settings.store_path,
+        )
+
+        errors = serve_timelines(
+            s_ports,
+            ids_names,
+            factory,
+            instance,
+            settings.monitor_interval,
+            settings.saturation_warn,
+        )
+
+        if errors:
+            msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
+            instance.error_shutdown(f"{name} timeline(s) failed: {msg}")
+            raise RuntimeError(f"{name} timeline(s) failed: {msg}")
