@@ -50,13 +50,13 @@ import runpy
 from pathlib import Path
 from typing import List, Optional
 
-from imas import IDSFactory
 from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
     HandlerFactory,
     RecorderSettings,
-    run_recorder,
+    ids_from_message,
+    recorder_main,
 )
 from imas_muscle3.distill import Distiller, ZarrSink
 from imas_muscle3.distill.distiller import ExtractFn
@@ -131,8 +131,7 @@ class DistillHandler:
             self._occurrence += 1
         if self._sink is None:
             self._sink = ZarrSink(self._store())
-        ids = IDSFactory().new(self._ids_name)
-        ids.deserialize(msg.data)
+        ids = ids_from_message(self._ids_name, msg.data)
         datasets = self._distiller.distill(ids)
         for full_path, ds in datasets.items():
             self._sink.append(full_path, ds)
@@ -164,22 +163,5 @@ def _build_factory(
     )
 
 
-def main() -> None:
-    """MUSCLE3 execution loop for the distill recorder.
-
-    Each timeline is drained to its end and split into occurrences
-    (``<store_path>/<port>/<NNNN>.zarr``) at every stream restart — a
-    ``next_timestamp is None`` boundary or a backward time step — so a workflow
-    that re-runs the same grid per outer-loop iteration lands each iteration in
-    its own occurrence, derived entirely from the message stream with no extra
-    wiring (see ``reuse_and_close.md``).
-    """
-    run_recorder("distill", _build_factory)
-
-
 if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
-    main()
+    recorder_main("distill", _build_factory)

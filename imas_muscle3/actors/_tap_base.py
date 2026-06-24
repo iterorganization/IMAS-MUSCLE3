@@ -40,6 +40,7 @@ from time import perf_counter
 from typing import Callable, Dict, Iterable, List, Optional, Protocol
 
 from imas import IDSFactory
+from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
@@ -81,6 +82,13 @@ def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
     factory = IDSFactory()
     for ids_name in set(ids_names):
         factory.new(ids_name)
+
+
+def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
+    """Deserialize a received message's payload into a fresh IDS."""
+    ids = IDSFactory().new(ids_name)
+    ids.deserialize(data)
+    return ids
 
 
 class TimelineHandler(Protocol):
@@ -436,6 +444,9 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
                         settings.store_path / port, ignore_errors=True
                     )
             factory = build_factory(instance, settings, s_ports)
+        # settings and factory are set together on the first reuse, so both are
+        # non-None here for every iteration.
+        assert factory is not None
 
         logger.info(
             "%s recording %d timeline(s) %s to %s",
@@ -458,3 +469,12 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
             msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
             instance.error_shutdown(f"{name} timeline(s) failed: {msg}")
             raise RuntimeError(f"{name} timeline(s) failed: {msg}")
+
+
+def recorder_main(name: str, build_factory: FactoryBuilder) -> None:
+    """Module entry point for a recorder: set up logging, then run the loop."""
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+    )
+    run_recorder(name, build_factory)

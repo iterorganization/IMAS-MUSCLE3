@@ -26,11 +26,10 @@ Example yMMSL (yMMSL v0.2)::
         args: -u -m imas_muscle3.actors.tap_component
 """
 
-import logging
 from pathlib import Path
 from typing import List
 
-from imas import DBEntry, IDSFactory
+from imas import DBEntry
 from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, Message
 
@@ -39,9 +38,10 @@ from imas_muscle3.actors._tap_base import (
     HandlerFactory,
     PortMetrics,
     RecorderSettings,
+    ids_from_message,
     ids_name_from_port,
     precompute_ids_metadata,
-    run_recorder,
+    recorder_main,
 )
 
 # Re-exported for backwards compatibility / tests; they now live in _tap_base.
@@ -52,8 +52,6 @@ __all__ = [
     "precompute_ids_metadata",
     "record_message",
 ]
-
-logger = logging.getLogger()
 
 
 def record_message(
@@ -71,8 +69,7 @@ def record_message(
     Returns the IMAS URI the message was written to, so it can be logged for
     easy reopening.
     """
-    ids = IDSFactory().new(ids_name)
-    ids.deserialize(data)
+    ids = ids_from_message(ids_name, data)
     uri = f"imas:hdf5?path={store_path / port / f'{seq:08d}'}"
     with DBEntry(uri, "w") as entry:
         if (
@@ -112,18 +109,5 @@ def _build_factory(
     )
 
 
-def main() -> None:
-    """MUSCLE3 execution loop for the tap recorder.
-
-    Each timeline is drained to its real port close, writing one DBEntry per
-    message (``<store_path>/<port>/<seq>``); see ``reuse_and_close.md``.
-    """
-    run_recorder("tap", _build_factory)
-
-
 if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
-    main()
+    recorder_main("tap", _build_factory)
