@@ -118,9 +118,17 @@ def test_plot_2d_is_quadmesh():
     assert isinstance(el, hv.QuadMesh)
 
 
-def test_overlay_single_variable_falls_through():
-    el = plot_overlay(_ds_0d(), ["v"], time_index=0)
+def test_overlay_single_rank1_falls_through():
+    # A single profile (rank 1) is just its plot_variable curve, no marker.
+    el = plot_overlay(_ds_1d(), ["v"], time_index=1)
     assert isinstance(el, hv.Curve)
+
+
+def test_overlay_rank0_has_time_marker():
+    # Over-time plots get a dashed playhead at the current time.
+    el = plot_overlay(_ds_0d(), ["v"], time_index=2)
+    assert isinstance(el, hv.Overlay)
+    assert any(isinstance(e, hv.VLine) for e in el)
 
 
 def test_overlay_multiple_variables_is_overlay():
@@ -133,7 +141,9 @@ def test_overlay_multiple_variables_is_overlay():
     )
     el = plot_overlay(ds, ["a", "b"], time_index=1)
     assert isinstance(el, hv.Overlay)
-    assert len(el) == 2  # two curves share the plot
+    # two curves plus the time-marker playhead
+    assert sum(isinstance(e, hv.Curve) for e in el) == 2
+    assert any(isinstance(e, hv.VLine) for e in el)
 
 
 def test_plot_clamps_time_index():

@@ -1,7 +1,7 @@
 """Equilibrium overview profile — a worked example of the profile contract.
 
-Port of the live ``pds.py`` equilibrium dashboard to the record-then-view model:
-``extract`` distills the quantities once per slice, ``plot`` draws the bespoke
+Port of the live ``pds.py`` equilibrium dashboard to the record-then-view
+model: ``extract`` distills the quantities once per slice, ``plot`` draws the
 overview the generic browser cannot (the poloidal cross-section overlays the
 separatrix and flux contours; profiles and global quantities sit alongside).
 
@@ -34,14 +34,24 @@ logger = logging.getLogger(__name__)
 
 hv.extension("bokeh")
 
+# Shared R-Z plasma diagram, so the recorded equilibrium renders the same
+# poloidal cross-section as the waveform editor's shape editor. Optional dep:
+# degrade to a plain separatrix curve when it isn't installed.
+try:
+    from waveform_editor.shape_editor import rz_plot
+except Exception:  # pragma: no cover - waveform_editor is optional
+    rz_plot = None
+
 
 # --- custom distiller -------------------------------------------------------
 
 
 def _curve_dataset(t, r, z):
     return xr.Dataset(
-        {"r": (("time", "pt"), np.asarray(r, float)[None, :]),
-         "z": (("time", "pt"), np.asarray(z, float)[None, :])},
+        {
+            "r": (("time", "pt"), np.asarray(r, float)[None, :]),
+            "z": (("time", "pt"), np.asarray(z, float)[None, :]),
+        },
         coords={"time": [t]},
         attrs={"kind": "curve_rz"},
     )
@@ -60,30 +70,70 @@ def extract(ids):
     gq = ts.global_quantities
     globals_ = {}
     if gq.ip != 0.0 or gq.beta_tor != 0.0:
-        globals_ = {"ip": ("time", [float(gq.ip)]),
-                    "beta_tor": ("time", [float(gq.beta_tor)])}
+        globals_ = {
+            "ip": ("time", [float(gq.ip)]),
+            "beta_tor": ("time", [float(gq.beta_tor)]),
+        }
     if globals_:
         out["derived/global"] = xr.Dataset(globals_, coords={"time": [t]})
 
     p1d = ts.profiles_1d
     if len(p1d.psi) and len(p1d.f_df_dpsi):
         out["derived/profiles_1d"] = xr.Dataset(
-            {"f_df_dpsi": (("time", "psi"), np.asarray(p1d.f_df_dpsi)[None, :]),
-             "dpressure_dpsi": (
-                 ("time", "psi"),
-                 np.asarray(p1d.dpressure_dpsi)[None, :],
-             )},
-            coords={"time": [t], "psi": (("time", "psi"),
-                                         np.asarray(p1d.psi)[None, :])},
+            {
+                "f_df_dpsi": (
+                    ("time", "psi"),
+                    np.asarray(p1d.f_df_dpsi)[None, :],
+                ),
+                "dpressure_dpsi": (
+                    ("time", "psi"),
+                    np.asarray(p1d.dpressure_dpsi)[None, :],
+                ),
+            },
+            coords={
+                "time": [t],
+                "psi": (("time", "psi"), np.asarray(p1d.psi)[None, :]),
+            },
         )
 
     if len(ts.ggd) and len(ts.ggd[0].r) and len(ts.ggd[0].r[0].values):
         ggd = ts.ggd[0]
         out["derived/psi_grid"] = xr.Dataset(
-            {"r": (("time", "node"), np.asarray(ggd.r[0].values)[None, :]),
-             "z": (("time", "node"), np.asarray(ggd.z[0].values)[None, :]),
-             "psi": (("time", "node"),
-                     np.asarray(ggd.psi[0].values)[None, :])},
+            {
+                "r": (("time", "node"), np.asarray(ggd.r[0].values)[None, :]),
+                "z": (("time", "node"), np.asarray(ggd.z[0].values)[None, :]),
+                "psi": (
+                    ("time", "node"),
+                    np.asarray(ggd.psi[0].values)[None, :],
+                ),
+            },
+            coords={"time": [t]},
+        )
+
+    # Critical points (X-points / O-points) for the cross-section overlay; the
+    # solver may leave contour_tree empty (e.g. inverse mode) — then skip them.
+    try:
+        nodes = ts.contour_tree.node
+    except Exception:
+        nodes = []
+    if len(nodes):
+        out["derived/xo_points"] = xr.Dataset(
+            {
+                "r": (
+                    ("time", "pt"),
+                    np.asarray([n.r for n in nodes], float)[None, :],
+                ),
+                "z": (
+                    ("time", "pt"),
+                    np.asarray([n.z for n in nodes], float)[None, :],
+                ),
+                "critical_type": (
+                    ("time", "pt"),
+                    np.asarray([n.critical_type for n in nodes], float)[
+                        None, :
+                    ],
+                ),
+            },
             coords={"time": [t]},
         )
 
@@ -93,44 +143,52 @@ def extract(ids):
 # --- bespoke view -----------------------------------------------------------
 
 
-def _contours(grid_ds, time_index, levels=20):
-    """Flux contours from the unstructured psi grid (optional, needs mpl)."""
-    try:
-        import matplotlib.pyplot as plt
-    except Exception:
-        return hv.Overlay([])
-    r = grid_ds["r"].isel(time=time_index).values
-    z = grid_ds["z"].isel(time=time_index).values
-    psi = grid_ds["psi"].isel(time=time_index).values
-    tric = plt.tricontour(r, z, psi, levels=levels)
-    segs = []
-    for i, level in enumerate(tric.levels):
-        for seg in tric.allsegs[i]:
-            if len(seg) > 1:
-                segs.append({"x": seg[:, 0], "y": seg[:, 1], "psi": level})
-    plt.close("all")
-    return hv.Contours(segs, vdims="psi").opts(
-        cmap="viridis", colorbar=True, show_legend=False
-    )
-
-
 def _cross_section(data, time_index):
-    sep = data.dataset("derived/separatrix")
-    grid = data.dataset("derived/psi_grid")
+    """Poloidal cross-section: flux contours + separatrix + X/O-points.
+
+    Renders via the shared shape-editor R-Z helpers (so it matches the waveform
+    editor's diagram), degrading to a plain separatrix curve when those helpers
+    are unavailable. Contours need the GGD psi grid; X/O-points need a filled
+    contour_tree — both come from this profile's ``extract`` when present.
+    """
     elements = []
-    if grid is not None:
-        elements.append(_contours(grid, time_index))
+    grid = data.dataset("derived/psi_grid")
+    if grid is not None and rz_plot is not None:
+        r = grid["r"].isel(time=time_index).values
+        z = grid["z"].isel(time=time_index).values
+        psi = grid["psi"].isel(time=time_index).values
+        if len(r) and len(z) and len(psi):
+            elements.append(rz_plot.contours(r, z, psi))
+
+    sep = data.dataset("derived/separatrix")
     if sep is not None:
         r = sep["r"].isel(time=time_index).values
         z = sep["z"].isel(time=time_index).values
-        elements.append(
-            hv.Curve((r, z)).opts(color="red", line_width=3)
-        )
+        if rz_plot is not None:
+            elements.append(rz_plot.separatrix(r, z))
+        else:
+            elements.append(hv.Curve((r, z)).opts(color="red", line_width=3))
+
+    xo = data.dataset("derived/xo_points")
+    if xo is not None and rz_plot is not None:
+        r = xo["r"].isel(time=time_index).values
+        z = xo["z"].isel(time=time_index).values
+        ctype = xo["critical_type"].isel(time=time_index).values
+        x_pts = [(rr, zz) for rr, zz, c in zip(r, z, ctype) if c == 1]
+        o_pts = [(rr, zz) for rr, zz, c in zip(r, z, ctype) if c in (0, 2)]
+        elements.append(rz_plot.xo_points(x_pts, o_pts))
+
     if not elements:
         return hv.Curve(([], [])).opts(title="No equilibrium geometry")
+    if rz_plot is not None:
+        return rz_plot.plasma_overlay(elements).opts(responsive=True)
     return hv.Overlay(elements).opts(
-        title="Poloidal flux", xlabel="r [m]", ylabel="z [m]",
-        aspect="equal", responsive=True, show_legend=False,
+        title="Poloidal flux",
+        xlabel="r [m]",
+        ylabel="z [m]",
+        aspect="equal",
+        responsive=True,
+        show_legend=False,
     )
 
 
@@ -157,7 +215,7 @@ def _profile(data, time_index, var, label):
 
 
 def plot(data, time_index):
-    """Bespoke equilibrium overview at ``time_index`` (see module docstring)."""
+    """Bespoke equilibrium overview at ``time_index`` (see module doc)."""
     import panel as pn
 
     return pn.Row(

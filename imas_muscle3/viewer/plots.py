@@ -32,18 +32,20 @@ def _axis(
 ) -> tuple[str, np.ndarray]:
     """The label and values of ``dim``'s axis at a time index.
 
-    Distilled coordinates are stored per time step (dims ``(time, <dim>)``), so
-    we select the current time; a dimension with no named coordinate falls back
-    to integer positions labelled by the dimension name.
+    Distilled coordinates are usually stored per time step (dims
+    ``(time, <dim>)``), so we select the current time; a static coordinate
+    (dims ``(<dim>,)``, e.g. a coil index) is used as-is. A dimension with no
+    named coordinate falls back to integer positions labelled by the dim name.
     """
     da = ds[var]
     for cname, cvar in da.coords.items():
         if str(cname) == TIME:
             continue
         if [str(d) for d in cvar.dims if d != TIME] == [dim]:
-            return str(cname), np.asarray(
-                ds[cname].isel({TIME: time_index}).values
-            )
+            coord = ds[cname]
+            if TIME in coord.dims:
+                coord = coord.isel({TIME: time_index})
+            return str(cname), np.asarray(coord.values)
     return dim, np.arange(ds.sizes[dim])
 
 
@@ -97,11 +99,13 @@ def plot_overlay(
     through to :func:`plot_variable`; rank-2 maps are never grouped (a group is
     always one map), so they take that path too.
     """
-    if len(variables) == 1:
-        return plot_variable(ds, variables[0], time_index)
     n_time = ds.sizes[TIME]
     time_index = max(0, min(time_index, n_time - 1))
     rank = variable_rank(ds[variables[0]])
+    if len(variables) == 1:
+        return _with_time_marker(
+            plot_variable(ds, variables[0], time_index), ds, rank, time_index
+        )
     units = next(
         (
             ds[v].attrs.get("units")
@@ -128,6 +132,23 @@ def plot_overlay(
         )
     t = float(ds[TIME].values[time_index])
     title = "over time" if rank == 0 else f"t={t:.3f}s"
-    return hv.Overlay(curves).opts(
+    overlay = hv.Overlay(curves).opts(
         title=title, legend_position="right", show_legend=True
     )
+    return _with_time_marker(overlay, ds, rank, time_index)
+
+
+def _with_time_marker(
+    element: hv.Element, ds: xr.Dataset, rank: int, time_index: int
+) -> hv.Element:
+    """Add a dashed vertical playhead at the current time to over-time plots.
+
+    Rank-0 plots show the whole trace against time, so the selected time is a
+    moving marker rather than a slice; rank-1/2 plots already *are* the slice,
+    so they are returned unchanged.
+    """
+    if rank != 0:
+        return element
+    t = float(ds[TIME].values[time_index])
+    marker = hv.VLine(t).opts(color="gray", line_dash="dashed", line_width=1)
+    return element * marker

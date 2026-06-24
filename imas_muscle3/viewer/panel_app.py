@@ -50,6 +50,30 @@ PLAY_MS = 200
 #: player may loop instead of holding at the latest frame).
 _FINISHED_AFTER_STALE_POLLS = 2
 
+#: Variables preselected per IDS on first load, to land on the quantities the
+#: old inline visualization actor showed. Matched as substrings of the
+#: distilled (dotted DD path) variable names; missing ones are skipped.
+_DEFAULT_VARS = {
+    "equilibrium": [
+        "global_quantities.ip",
+        "global_quantities.beta_tor",
+        "boundary.outline",
+        "profiles_1d.q",
+        "profiles_1d.pressure",
+        "profiles_1d.f_df_dpsi",
+        "profiles_1d.dpressure_dpsi",
+    ],
+    "core_profiles": [
+        "electrons.density",
+        "electrons.temperature",
+        "t_i_average",
+        "j_total",
+        "q",
+        "zeff",
+    ],
+    "pf_active": ["coil.current.data"],
+}
+
 
 @dataclass
 class RunPanel:
@@ -62,26 +86,25 @@ class RunPanel:
 class ImasPlotsViewer(Viewer):
     """Browse and plot recorded IMAS data under one run directory.
 
-    The store identity is split across three cascading selectors —
-    **Component** (the MUSCLE instance that recorded), **Timeline** (the port /
-    IDS stream) and **Outer loop** (the F_INIT occurrence / Picard iteration) —
-    which resolve one Zarr store. Within it an IDS group and a multi-select of
-    variables drive a responsive grid of plots; variables that share units
-    (and, for profiles, a coordinate) overlay into a single plot. A time
-    player auto-advances, holding at the latest step while the run is still
-    writing and only looping once it stops.
+    The store identity is split across cascading selectors — **Component** (the
+    MUSCLE instance that recorded), **IDS** (the recorded stream) and **Outer
+    loop** (the F_INIT occurrence / Picard iteration) — which resolve one Zarr
+    store. (There is no separate "timeline" selector: a recorder writes one IDS
+    per port, so the port name just duplicated the IDS.) A multi-select of
+    variables drives a responsive grid of plots; variables that share units
+    (and, for profiles, a coordinate) overlay into a single plot. A time player
+    auto-advances, holding at the latest step while the run is still writing
+    and only looping once it stops; over-time plots get a moving time marker
+    and share one time axis.
     """
 
     component = param.Selector(
         objects=[], doc="MUSCLE instance that recorded."
     )
-    timeline = param.Selector(
-        objects=[], doc="Port / IDS stream (one timeline)."
-    )
+    ids = param.Selector(objects=[], doc="Recorded IDS stream.")
     outer_loop = param.Selector(
         objects=[], doc="F_INIT loop / Picard iteration."
     )
-    ids = param.Selector(objects=[], doc="Recorded IDS within the store.")
     variables = param.ListSelector(
         default=[], objects=[], doc="Quantities to plot (overlaid by units)."
     )
@@ -96,7 +119,7 @@ class ImasPlotsViewer(Viewer):
         super().__init__(**params)
         self.run_dir = Path(run_dir)
         self._ds: Optional["xr.Dataset"] = None  # open store/group dataset
-        # component -> timeline -> outer_loop -> store path
+        # component -> ids (group) -> outer_loop (occurrence) -> store path
         self._index: dict = {}
         self._writing = True  # assume live until polls show no new steps
         self._stale_polls = 0
@@ -109,9 +132,11 @@ class ImasPlotsViewer(Viewer):
         index: dict = {}
         for store in store_mod.find_stores(self.run_dir):
             comp = store_mod.store_instance(store) or self._NO_COMPONENT
-            port = store_mod.store_port(store)
             occ = store_mod.store_occurrence(store)
-            index.setdefault(comp, {}).setdefault(port, {})[occ] = store
+            # Index by IDS (the on-disk group name); a recorder writes one IDS
+            # per port, so the group name is the natural stream identifier.
+            for group in store_mod.list_groups(store):
+                index.setdefault(comp, {}).setdefault(group, {})[occ] = store
         return index
 
     def _discover(self) -> None:
@@ -127,25 +152,23 @@ class ImasPlotsViewer(Viewer):
         """Poll-time rescan: surface new occurrences/stores in the dropdowns
         without disturbing the current (still-valid) selection."""
         self._index = self._build_index()
-        timelines = self._index.get(self.component, {})
+        ids_streams = self._index.get(self.component, {})
         self.param.component.objects = sorted(self._index)
-        self.param.timeline.objects = sorted(timelines)
-        self.param.outer_loop.objects = sorted(
-            timelines.get(self.timeline, {})
-        )
+        self.param.ids.objects = sorted(ids_streams)
+        self.param.outer_loop.objects = sorted(ids_streams.get(self.ids, {}))
 
     @param.depends("component", watch=True)
     def _on_component(self) -> None:
-        timelines = self._index.get(self.component, {})
-        self.param.timeline.objects = sorted(timelines)
-        if timelines and self.timeline not in timelines:
-            self.timeline = sorted(timelines)[0]
+        ids_streams = self._index.get(self.component, {})
+        self.param.ids.objects = sorted(ids_streams)
+        if ids_streams and self.ids not in ids_streams:
+            self.ids = sorted(ids_streams)[0]
         else:
-            self._on_timeline()
+            self._on_ids()
 
-    @param.depends("timeline", watch=True)
-    def _on_timeline(self) -> None:
-        occ = self._index.get(self.component, {}).get(self.timeline, {})
+    @param.depends("ids", watch=True)
+    def _on_ids(self) -> None:
+        occ = self._index.get(self.component, {}).get(self.ids, {})
         labels = sorted(occ)
         self.param.outer_loop.objects = labels
         # Default to the latest occurrence (most recent iteration).
@@ -156,22 +179,12 @@ class ImasPlotsViewer(Viewer):
 
     @param.depends("outer_loop", watch=True)
     def _on_outer_loop(self) -> None:
-        store = self._store()
-        groups = store_mod.list_groups(store) if store else []
-        self.param.ids.objects = groups
-        if groups and self.ids not in groups:
-            self.ids = groups[0]
-        else:
-            self._reload()
-
-    @param.depends("ids", watch=True)
-    def _on_ids(self) -> None:
         self._reload()
 
     def _store(self) -> Optional[Path]:
         return (
             self._index.get(self.component, {})
-            .get(self.timeline, {})
+            .get(self.ids, {})
             .get(self.outer_loop)
         )
 
@@ -194,8 +207,18 @@ class ImasPlotsViewer(Viewer):
         options = store_mod.plottable_variables(self._ds)
         self.param.variables.objects = options
         kept = [v for v in self.variables if v in options]
-        # Default to the first variable so the grid isn't empty on first load.
-        self.variables = kept or (options[:1] if options else [])
+        # Preselect this IDS's default quantities (reproducing the old inline
+        # visualization actor); fall back to the first variable so the grid is
+        # never empty on first load.
+        patterns = _DEFAULT_VARS.get(self.ids, [])
+        preselected = [
+            v
+            for v in options
+            if "_error" not in v and any(p in v for p in patterns)
+        ]
+        self.variables = (
+            kept or preselected or (options[:1] if options else [])
+        )
         self._last_n = 0
         self._stale_polls = 0
         self._writing = True
@@ -300,13 +323,17 @@ class ImasPlotsViewer(Viewer):
     def _grid(self) -> Viewable:
         if self._ds is None:
             return pn.pane.Markdown(
-                "### Waiting for data — pick a Component / Timeline / IDS."
+                "### Waiting for data — pick a Component / IDS."
             )
         if not self.variables:
             return pn.pane.Markdown(
                 "### Select one or more variables to plot."
             )
-        tiles = []
+        # Over-time plots (rank 0) all share the time x-axis, so collect them
+        # in one linked column; slice plots (profiles/maps, rank 1-2) — where
+        # the time slider picks the slice — are independent tiles.
+        time_maps = []
+        slice_tiles = []
         for group in self._groups(self.variables):
             dmap = hv.DynamicMap(
                 param.bind(
@@ -314,14 +341,36 @@ class ImasPlotsViewer(Viewer):
                     time_index=self.param.time_index,
                 )
             ).opts(framewise=True)
+            if store_mod.variable_rank(self._ds[group[0]]) == 0:
+                time_maps.append(dmap)
+            else:
+                slice_tiles.append(
+                    pn.pane.HoloViews(
+                        dmap,
+                        sizing_mode="stretch_both",
+                        min_height=340,
+                        min_width=360,
+                    )
+                )
+        tiles = []
+        if time_maps:
+            # Stack the over-time plots with a single, shared time axis: link
+            # their ranges (pan/zoom together) and draw the x-axis only on the
+            # bottom panel instead of repeating it on each.
+            last = len(time_maps) - 1
+            stacked = [
+                dmap if i == last else dmap.opts(xaxis=None)
+                for i, dmap in enumerate(time_maps)
+            ]
+            linked = hv.Layout(stacked).cols(1).opts(shared_axes=True)
             tiles.append(
                 pn.pane.HoloViews(
-                    dmap,
-                    sizing_mode="stretch_both",
-                    min_height=340,
-                    min_width=360,
+                    linked,
+                    sizing_mode="stretch_width",
+                    min_height=140 * len(stacked),
                 )
             )
+        tiles.extend(slice_tiles)
         return pn.FlexBox(*tiles, sizing_mode="stretch_width")
 
     @param.depends("time_index")
@@ -341,11 +390,10 @@ class ImasPlotsViewer(Viewer):
             pn.widgets.Select.from_param(
                 self.param.component, name="Component"
             ),
-            pn.widgets.Select.from_param(self.param.timeline, name="Timeline"),
+            pn.widgets.Select.from_param(self.param.ids, name="IDS"),
             pn.widgets.Select.from_param(
                 self.param.outer_loop, name="Outer loop"
             ),
-            pn.widgets.Select.from_param(self.param.ids, name="IDS"),
         )
         variables = pn.widgets.MultiChoice.from_param(
             self.param.variables, name="Variables", sizing_mode="stretch_width"
