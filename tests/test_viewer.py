@@ -7,8 +7,7 @@ import xarray as xr
 from imas_muscle3.distill import Distiller, ZarrSink
 from imas_muscle3.viewer import store as store_mod
 from imas_muscle3.viewer.panel_app import RunPanel, make_panel
-from imas_muscle3.viewer.plots import plot_variable
-
+from imas_muscle3.viewer.plots import plot_overlay, plot_variable
 
 # --- fixtures: a realistic distilled store written like the actor would -----
 
@@ -119,6 +118,24 @@ def test_plot_2d_is_quadmesh():
     assert isinstance(el, hv.QuadMesh)
 
 
+def test_overlay_single_variable_falls_through():
+    el = plot_overlay(_ds_0d(), ["v"], time_index=0)
+    assert isinstance(el, hv.Curve)
+
+
+def test_overlay_multiple_variables_is_overlay():
+    ds = xr.Dataset(
+        {
+            "a": ("time", [1.0, 2.0]),
+            "b": ("time", [3.0, 4.0]),
+        },
+        coords={"time": [0.0, 1.0]},
+    )
+    el = plot_overlay(ds, ["a", "b"], time_index=1)
+    assert isinstance(el, hv.Overlay)
+    assert len(el) == 2  # two curves share the plot
+
+
 def test_plot_clamps_time_index():
     # Out-of-range index must not raise.
     el = plot_variable(_ds_1d(), "v", time_index=99)
@@ -136,6 +153,6 @@ def test_make_panel_returns_panel_with_stores(tmp_path):
     _write_equilibrium_store(tmp_path)
     panel = make_panel(tmp_path)
     assert isinstance(panel, RunPanel)
-    assert panel.title == "Distilled plots"
+    assert panel.title == "IMAS plots"
     # The view builds without a live session.
     assert panel.view() is not None

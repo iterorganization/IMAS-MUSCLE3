@@ -83,3 +83,51 @@ def plot_variable(ds: xr.Dataset, var: str, time_index: int) -> hv.Element:
         cmap="viridis",
         responsive=True,
     )
+
+
+def plot_overlay(
+    ds: xr.Dataset, variables: list, time_index: int
+) -> hv.Element:
+    """Overlay several variables of equal rank and shared units in one plot.
+
+    The multiplot groups its selected variables by units (and, for profiles, by
+    coordinate) and calls this per group: rank-0 variables become curves over
+    time, rank-1 variables profiles at ``time_index``, each labelled for the
+    legend and sharing one y-axis (the common units). A single variable falls
+    through to :func:`plot_variable`; rank-2 maps are never grouped (a group is
+    always one map), so they take that path too.
+    """
+    if len(variables) == 1:
+        return plot_variable(ds, variables[0], time_index)
+    n_time = ds.sizes[TIME]
+    time_index = max(0, min(time_index, n_time - 1))
+    rank = variable_rank(ds[variables[0]])
+    units = next(
+        (
+            ds[v].attrs.get("units")
+            for v in variables
+            if ds[v].attrs.get("units")
+        ),
+        None,
+    )
+    curves = []
+    xlabel = "time [s]"
+    for var in variables:
+        da = ds[var]
+        if rank == 0:
+            x = np.asarray(ds[TIME].values)
+            y = np.asarray(da.values)
+        else:
+            (dim,) = [str(d) for d in da.dims if d != TIME]
+            xlabel, x = _axis(ds, var, dim, time_index)
+            y = np.asarray(da.isel({TIME: time_index}).values)
+        curves.append(
+            hv.Curve((x, y), kdims=[xlabel], vdims=["value"], label=var).opts(
+                ylabel=_label("value", units), framewise=True, responsive=True
+            )
+        )
+    t = float(ds[TIME].values[time_index])
+    title = "over time" if rank == 0 else f"t={t:.3f}s"
+    return hv.Overlay(curves).opts(
+        title=title, legend_position="right", show_legend=True
+    )
