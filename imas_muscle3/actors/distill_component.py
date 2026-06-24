@@ -12,9 +12,10 @@ The output is split into one *occurrence* per outer-loop iteration —
 that re-runs the same time grid each iteration lands each iteration in its own
 occurrence with no extra wiring.
 
-All the dynamic-port / single-threaded-drain / backpressure machinery is shared
-with the tap recorder via :mod:`imas_muscle3.actors._tap_base`; this module
-only supplies the distill-and-append handler.
+The dynamic-port / single-threaded-drain / backpressure machinery and the
+shared reuse loop live in :mod:`imas_muscle3.actors._tap_base`
+(:func:`~imas_muscle3.actors._tap_base.run_recorder`); this module only
+supplies the distill-and-append handler and the distill-specific settings.
 
 Settings (all optional):
 
@@ -28,10 +29,6 @@ Settings (all optional):
 - ``clean_on_start`` (default ``true``): remove this tap's own per-port output
   before recording.
 - ``monitor_interval`` / ``saturation_warn``: backpressure logging knobs.
-
-The recorder drains its ports **single-threaded** (round-robin, one outstanding
-``receive``) and to the real port close; see
-:mod:`imas_muscle3.actors._tap_base` and ``reuse_and_close.md``.
 
 Example yMMSL (yMMSL v0.2)::
 
@@ -50,18 +47,16 @@ Example yMMSL (yMMSL v0.2)::
 
 import logging
 import runpy
-import shutil
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Optional
+from typing import List, Optional
 
 from imas import IDSFactory
-from libmuscle import Instance, InstanceFlags, Message
+from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
-    connected_s_ports,
-    ids_name_from_port,
-    serve_timelines,
+    HandlerFactory,
+    RecorderSettings,
+    run_recorder,
 )
 from imas_muscle3.distill import Distiller, ZarrSink
 from imas_muscle3.distill.distiller import ExtractFn
@@ -149,37 +144,23 @@ class DistillHandler:
         self._close_current()
 
 
-def _make_distiller(auto: bool, extract: Optional[ExtractFn]) -> Distiller:
-    # A fresh Distiller per timeline keeps its discovery cache thread-local,
-    # so the per-port workers never share mutable state.
-    return Distiller(auto=auto, extract=extract)
-
-
-def _read_settings(instance: Instance) -> SimpleNamespace:
-    """Read the actor's settings once (they are constant across reuses)."""
-    store_path_setting = get_setting_optional(instance, "store_path")
-    store_path = (
-        Path(store_path_setting)
-        if store_path_setting is not None
-        else Path.cwd()
-    )
+def _build_factory(
+    instance: Instance, settings: RecorderSettings, s_ports: List[str]
+) -> HandlerFactory:
+    """Read distill-specific settings and build the per-timeline factory."""
     auto = get_setting_optional(instance, "auto", True)
     config = get_setting_optional(instance, "config")
-    clean_on_start = get_setting_optional(instance, "clean_on_start", True)
-    monitor_interval = get_setting_optional(instance, "monitor_interval", 5.0)
-    saturation_warn = get_setting_optional(instance, "saturation_warn", 0.8)
     assert auto is not None
-    assert clean_on_start is not None
-    assert monitor_interval is not None
-    assert saturation_warn is not None
-    return SimpleNamespace(
-        store_path=store_path,
-        auto=auto,
-        config=config,
-        extract=load_extract_config(config) if config else None,
-        clean_on_start=clean_on_start,
-        monitor_interval=monitor_interval,
-        saturation_warn=saturation_warn,
+    extract = load_extract_config(config) if config else None
+    logger.info("distilling with auto=%s, config=%s", auto, config or "-")
+
+    # A fresh Distiller per timeline keeps its discovery cache thread-local, so
+    # the per-port workers never share mutable state.
+    return lambda port, ids_name: DistillHandler(
+        settings.store_path / port,
+        ids_name,
+        Distiller(auto=auto, extract=extract),
+        config,
     )
 
 
@@ -190,58 +171,10 @@ def main() -> None:
     (``<store_path>/<port>/<NNNN>.zarr``) at every stream restart — a
     ``next_timestamp is None`` boundary or a backward time step — so a workflow
     that re-runs the same grid per outer-loop iteration lands each iteration in
-    its own occurrence. The occurrence index is derived entirely from the
-    message stream, with no extra wiring (see ``reuse_and_close.md``).
+    its own occurrence, derived entirely from the message stream with no extra
+    wiring (see ``reuse_and_close.md``).
     """
-    # Dynamic ports: no port description, ports come from the yMMSL config.
-    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
-
-    setup: Optional[SimpleNamespace] = None
-    while instance.reuse_instance():
-        s_ports = connected_s_ports(instance)
-        if not s_ports:
-            logger.warning(
-                "distill recorder has no connected S ports; nothing to record."
-            )
-            break
-        ids_names = {p: ids_name_from_port(p) for p in s_ports}
-
-        if setup is None:
-            setup = _read_settings(instance)
-            setup.store_path.mkdir(parents=True, exist_ok=True)
-            if setup.clean_on_start:
-                # Clear this tap's own per-port dirs once, up front; never
-                # store_path itself (it may be the instance's run folder).
-                for port in s_ports:
-                    shutil.rmtree(setup.store_path / port, ignore_errors=True)
-
-        logger.info(
-            "distilling %d timeline(s) %s to %s (auto=%s, config=%s)",
-            len(s_ports),
-            s_ports,
-            setup.store_path,
-            setup.auto,
-            setup.config or "-",
-        )
-
-        errors = serve_timelines(
-            s_ports,
-            ids_names,
-            lambda port, ids_name: DistillHandler(
-                setup.store_path / port,
-                ids_name,
-                _make_distiller(setup.auto, setup.extract),
-                setup.config,
-            ),
-            instance,
-            setup.monitor_interval,
-            setup.saturation_warn,
-        )
-
-        if errors:
-            msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
-            instance.error_shutdown(f"distill timeline(s) failed: {msg}")
-            raise RuntimeError(f"distill timeline(s) failed: {msg}")
+    run_recorder("distill", _build_factory)
 
 
 if __name__ == "__main__":
