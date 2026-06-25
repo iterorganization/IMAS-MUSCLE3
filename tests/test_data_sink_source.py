@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 import ymmsl
 from imas import DBEntry
@@ -109,7 +107,7 @@ def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
       source_component.source_uri: {source_uri}
       sink_component.sink_uri: {sink_uri}
       hybrid_component.source_uri: {hybrid_source_uri}
-      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ''}
+      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ""}
     implementations:
       sink_component:
         executable: python

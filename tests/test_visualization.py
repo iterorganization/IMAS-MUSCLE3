@@ -70,7 +70,8 @@ def test_visualization_actor(tmpdir, equilibrium):
     current_dir = Path(__file__).parent
     plot_script_path = (
         current_dir
-        / "../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py"
+        / "../imas_muscle3/visualization/examples/simple_1d_plot"
+        / "simple_1d_plot.py"
     ).resolve()
     if not plot_script_path.exists():
         pytest.fail(f"Example plot script not found at: {plot_script_path}")
@@ -94,7 +95,9 @@ def test_visualization_actor(tmpdir, equilibrium):
     assert success
 
 
-def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error):
+def run_and_check_for_error(
+    tmpdir, equilibrium, ymmsl_settings, expected_error
+):
     """Helper function to run a simulation and check for a specific error."""
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
@@ -118,9 +121,8 @@ def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error)
 
 
 def test_visualization_actor_no_plot_file(tmpdir, equilibrium):
-    settings = {
-        "visualization_component.plot_file_path": "/path/to/non/existent/file.py"
-    }
+    val = "/path/to/non/existent/file.py"
+    settings = {"visualization_component.plot_file_path": val}
     run_and_check_for_error(tmpdir, equilibrium, settings, "FileNotFoundError")
 
 
@@ -132,7 +134,9 @@ def test_visualization_actor_missing_classes(tmpdir, equilibrium, tmp_path):
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_state_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_state_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -146,7 +150,9 @@ class Plotter(BasePlotter): pass
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_plotter_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_plotter_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -165,7 +171,8 @@ def test_state_data(equilibrium, monkeypatch):
     current_dir = Path(__file__).parent
     plot_script_path = (
         current_dir
-        / "../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py"
+        / "../imas_muscle3/visualization/examples/simple_1d_plot"
+        / "simple_1d_plot.py"
     ).resolve()
     if not plot_script_path.exists():
         pytest.fail(f"Example plot script not found at: {plot_script_path}")
@@ -180,7 +187,9 @@ def test_state_data(equilibrium, monkeypatch):
     with DBEntry("imas:memory?path=/", "w") as db:
         db.put(equilibrium)
         for t in equilibrium.time:
-            single_slice_ids = db.get_slice("equilibrium", t, ids_defs.CLOSEST_INTERP)
+            single_slice_ids = db.get_slice(
+                "equilibrium", t, ids_defs.CLOSEST_INTERP
+            )
             actor.state.extract(single_slice_ids)
 
     state_data = actor.plotter._state.data["equilibrium"]
