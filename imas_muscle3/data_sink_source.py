@@ -311,7 +311,7 @@ def sanity_check_ports(instance: Instance) -> None:
 
 
 def fix_interpolation_method(instance: Instance) -> int:
-    setting = instance.get_setting("interpolation_method", default='closest')
+    setting = instance.get_setting("interpolation_method", default="closest")
     if setting == "closest":
         interp = CLOSEST_INTERP
     elif setting == "previous":

@@ -65,12 +65,8 @@ def main() -> None:
                 for ids in ids_data.values():
                     db.put(ids)
 
-            rulesets = instance.get_setting(
-                "rulesets", default="PDS-OLC"
-            )
-            ruledirs = instance.get_setting(
-                "extra_rule_dirs", default=""
-            )
+            rulesets = instance.get_setting("rulesets", default="PDS-OLC")
+            ruledirs = instance.get_setting("extra_rule_dirs", default="")
             assert isinstance(rulesets, str)
             assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
@@ -92,9 +88,7 @@ def main() -> None:
                 summary_generator = SummaryReportGenerator([result], today)
                 summary_generator.save_html(f"{t_cur}_report.html")
 
-                if instance.get_setting(
-                    "halt_on_error", default=False
-                ):
+                if instance.get_setting("halt_on_error", default=False):
                     logger.critical("Check failed!")
                     sys.exit(1)
                 else:

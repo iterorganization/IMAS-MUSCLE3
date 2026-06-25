@@ -96,9 +96,7 @@ def main() -> None:
         )
         keep_alive = instance.get_setting("keep_alive", default=False)
         open_browser = instance.get_setting("open_browser", default=True)
-        automatic_mode = instance.get_setting(
-            "automatic_mode", default=False
-        )
+        automatic_mode = instance.get_setting("automatic_mode", default=False)
         extract_all = instance.get_setting(
             "automatic_extract_all", default=False
         )
