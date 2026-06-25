@@ -11,24 +11,20 @@ everything they share lives here:
   without a port description, so the ports come from the yMMSL configuration.
   Any connected ``S`` port whose name maps to a valid IDS name (an optional
   ``_in`` suffix is stripped) is drained; see :func:`ids_name_from_port`.
-- **Single-threaded, round-robin draining**: the ports are polled one at a time
-  (one outstanding ``receive`` per instance). This is required, not just tidy —
-  libmuscle's manager assumes one pending receive per instance and its per-port
-  message accounting is not concurrency-safe, so a thread-per-port tap corrupts
-  message numbering / trips the deadlock detector under the real
-  ``muscle_manager`` (see :func:`serve_timelines`). A timeline ends only when
-  its peer's port *closes*; ``next_timestamp is None`` marks an intermediate
-  stream restart (one sender-reuse ending), not the end (see
-  ``reuse_and_close.md``).
-- **Backpressure monitoring**: one drain thread serves every timeline, so
-  backpressure is a property of *that thread*, not a single port — under
-  round-robin a port's own ``receive`` rarely blocks (its next message is
-  already buffered while the loop services the others), so a per-port wait
-  would measure scheduling, not the sender. A monitor thread logs the drain's
-  *saturation*: the fraction of loop time spent handling (``t_write``) versus
-  blocked waiting for any port (``t_wait``); near 1 the drain never idles and
-  senders stall on the tap. Per-port counts and handler costs are reported as
-  diagnostics only (see :class:`DrainMetrics`).
+- **Concurrent draining, one thread per sender**: each timeline is drained by
+  its own worker thread, so a slow timeline never head-of-line blocks a busy
+  one (ports from the same sender share a thread — they share one libmuscle
+  ``MPPClient``, which is not concurrency-safe). Receives go through the
+  communicator, not ``instance.receive`` (which would shut the whole instance
+  down on the first port's close), and the deadlock detector is disabled for
+  the tap; see :func:`serve_timelines`. A timeline ends when its peer's port
+  *closes*; ``next_timestamp is None`` marks an intermediate stream restart,
+  not the end (see ``reuse_and_close.md``).
+- **Backpressure monitoring**: a monitor thread logs the drain's aggregate
+  *saturation* across the worker threads — the fraction of time spent handling
+  (``t_write``) versus blocked waiting (``t_wait``); near 1 recording is the
+  bottleneck and senders stall on the tap. Per-port message counts and handler
+  costs are reported as diagnostics (see :class:`DrainMetrics`).
 
 A concrete tap supplies a :class:`TimelineHandler` factory to
 :func:`serve_timelines`; the per-timeline loop, timing, monitoring and error
@@ -285,104 +281,67 @@ def serve_timelines(
     handler_factory: HandlerFactory,
     instance: Instance,
 ) -> Dict[str, BaseException]:
-    """Drain every timeline with a single thread, round-robin over the ports.
+    """Drain every timeline concurrently, one worker thread per sender.
 
-    One receive is outstanding at a time. This is deliberate: libmuscle's
-    manager assumes an instance has at most one pending receive (its deadlock
-    detector asserts otherwise) and its per-port message accounting is not safe
-    against concurrent receives from one instance — a thread-per-port tap trips
-    both under the real ``muscle_manager`` (it only "worked" against the
-    in-process ``Manager`` in tests, which exercises neither path). So we poll
-    each still-open timeline in turn, handing each message to its handler,
-    until every timeline's port closes — drained to the end. Each ``receive``
-    goes through the communicator, not ``instance.receive`` — the latter calls
-    ``Instance.__shutdown()`` on the first port's close, severing this
-    instance's connections to *all* peers; we detect each port's ``ClosePort``
-    ourselves so one timeline ending doesn't cut off the others. (A message's
-    ``next_timestamp is None`` only ends one sender-reuse's stream and arrives
-    as a normal message, so we do not stop there; see ``reuse_and_close.md``.)
+    Each connected ``S`` port is a timeline. Ports fed by *distinct* senders
+    are drained in parallel threads, each blocking on its own ``receive``, so a
+    slow timeline never head-of-line blocks a busy one. Ports that share a
+    sender are drained by one thread (see :func:`_group_ports_by_peer`): they
+    share a single libmuscle ``MPPClient`` whose ``receive`` is not
+    concurrency-safe.
 
-    The cost is that an idle/slow timeline can head-of-line block a busy one
-    (the blocking receive holds the loop), so a fast peer keeps buffering into
-    its unbounded libmuscle send outbox -- memory pressure in that sender,
-    never a deadlock or dropped message. For the couplings we tap (one
-    whole-trace message per reuse, or lock-step streamed slices) the ports
-    advance together, so this does not bite. The backpressure monitor runs in
-    its own thread (it only reads metrics, never receives).
+    Each ``receive`` goes through the communicator, not ``instance.receive`` —
+    the latter calls ``Instance.__shutdown()`` on the first port's close,
+    severing this instance's connections to *every* peer; we detect each port's
+    ``ClosePort`` ourselves so one timeline ending doesn't cut off the others
+    (this also bypasses the MMSF sequence validator, which a terminal tap has
+    no submodel loop to satisfy). Concurrent receives additionally need
+    libmuscle's deadlock detector off — it asserts a single waiting receive per
+    instance, so concurrent waits would crash the manager (see
+    :func:`_disable_deadlock_detector`). A ``next_timestamp is None`` is an
+    intermediate close that arrives as a normal message, so a worker does not
+    stop there (see ``reuse_and_close.md``).
 
     Returns a mapping of port -> exception for any failed timeline (empty on
     success); the caller decides how to surface it. Handlers are always closed.
     """
+    # Build every IDS type's metadata once, on the main thread: imas-python
+    # caches it lazily on first construction and that is not thread-safe, so
+    # the per-sender workers must only read it (see precompute_ids_metadata).
     precompute_ids_metadata(ids_names.values())
+    _disable_deadlock_detector(instance)
 
     metrics = {p: PortMetrics(p) for p in s_ports}
     drain = DrainMetrics()
     handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
     errors: Dict[str, BaseException] = {}
+    errors_lock = threading.Lock()
     monitor = BackpressureMonitor(
         metrics, drain, _MONITOR_INTERVAL, _SATURATION_WARN
     )
     monitor.start()
 
-    active = list(s_ports)
-    seq = {p: 0 for p in s_ports}
-    # We receive at the communicator level rather than via instance.receive():
-    # the latter calls Instance.__shutdown() the moment any one input gets a
-    # ClosePort (libmuscle treats a closed input as "the run is over"), which
-    # tears down this instance's connections to *every* peer. A multi-timeline
-    # tap must drain each port to its own close without severing the others, so
-    # we receive here and detect the ClosePort ourselves; the instance shuts
-    # down only once we return and reuse_instance() reports done.
     try:
-        while active:
-            for port in list(active):
-                try:
-                    t0 = perf_counter()
-                    msg, _ = instance._communicator.receive_message(port)
-                    t1 = perf_counter()
-                except (RuntimeError, OSError) as exc:
-                    # A genuine mid-stream failure (peer crashed without a
-                    # ClosePort, or a torn socket). For a terminal tap the data
-                    # so far is on disk and a real crash is reported by the
-                    # manager via exit codes, so we end this timeline and carry
-                    # on with the others.
-                    active.remove(port)
-                    logger.warning(
-                        "timeline '%s' ended after %d messages: %r",
-                        port,
-                        seq[port],
-                        exc,
-                    )
-                    continue
-                if isinstance(msg.data, ClosePort):
-                    # The real end of this timeline (a next_timestamp=None
-                    # intermediate close arrives as a normal message instead;
-                    # see reuse_and_close.md).
-                    active.remove(port)
-                    logger.info(
-                        "timeline '%s' closed after %d messages",
-                        port,
-                        seq[port],
-                    )
-                    continue
-                try:
-                    detail = handlers[port].handle(seq[port], msg)
-                    t2 = perf_counter()
-                except BaseException as exc:  # noqa: B036  -- surfaced to main
-                    errors[port] = exc
-                    logger.exception(
-                        "timeline '%s' failed after %d messages",
-                        port,
-                        seq[port],
-                    )
-                    active.remove(port)
-                    continue
-                metrics[port].update(msg.timestamp, t2 - t1)
-                drain.update(t1 - t0, t2 - t1)
-                logger.info(
-                    "handled %s t=%.4e -> %s", port, msg.timestamp, detail
-                )
-                seq[port] += 1
+        workers = [
+            threading.Thread(
+                target=_drain_ports,
+                args=(
+                    ports,
+                    handlers,
+                    metrics,
+                    drain,
+                    instance,
+                    errors,
+                    errors_lock,
+                ),
+                name=f"tap-{ports[0]}",
+            )
+            for ports in _group_ports_by_peer(instance, s_ports)
+        ]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
     finally:
         for port, handler in handlers.items():
             try:
@@ -395,6 +354,113 @@ def serve_timelines(
 
     monitor.stop()
     return errors
+
+
+def _disable_deadlock_detector(instance: Instance) -> None:
+    """Turn off libmuscle's receive-timeout deadlock detector for this tap.
+
+    The detector tracks a single waiting receive per instance (it asserts as
+    much in the manager), so the concurrent waits of the per-sender drain
+    threads would crash it. A terminal tap only receives, so it can never be
+    part of a deadlock cycle, so disabling it is safe. Best-effort: if a
+    libmuscle version no longer exposes the hook, set
+    ``<recorder>.muscle_deadlock_receive_timeout: -1.0`` in the workflow.
+    """
+    try:
+        instance._communicator.set_receive_timeout(-1.0)
+    except Exception:
+        logger.warning(
+            "could not disable the deadlock detector programmatically; set "
+            "<recorder>.muscle_deadlock_receive_timeout: -1.0 in the workflow."
+        )
+
+
+def _group_ports_by_peer(
+    instance: Instance, s_ports: List[str]
+) -> List[List[str]]:
+    """Group ports by the sender instance that feeds them.
+
+    Ports from the same sender share one libmuscle ``MPPClient`` (one TCP
+    connection, whose ``receive`` is not concurrency-safe), so they must drain
+    on one thread; ports from different senders drain concurrently. Falls back
+    to one group per port (assuming distinct senders) if libmuscle's peer info
+    cannot be read.
+    """
+    try:
+        from ymmsl.v0_2 import Identifier
+
+        peer_info = instance._communicator._peer_info
+        groups: Dict[str, List[str]] = {}
+        for port in s_ports:
+            endpoints = peer_info.get_peer_endpoints(Identifier(port), [])
+            groups.setdefault(str(endpoints[0].instance()), []).append(port)
+        return list(groups.values())
+    except Exception:
+        logger.warning(
+            "could not read peer info; draining one thread per port. If two "
+            "ports share a sender that is unsafe -- give each its recorder."
+        )
+        return [[p] for p in s_ports]
+
+
+def _drain_ports(
+    ports: List[str],
+    handlers: Dict[str, TimelineHandler],
+    metrics: Dict[str, PortMetrics],
+    drain: DrainMetrics,
+    instance: Instance,
+    errors: Dict[str, BaseException],
+    errors_lock: "threading.Lock",
+) -> None:
+    """One worker thread: round-robin ``ports`` (one sender) to their closes.
+
+    With a single port per sender (the usual case) this is just that port's
+    blocking receive loop; co-located ports take turns so the shared connection
+    is never used concurrently. Receives go through the communicator and the
+    ClosePort is detected here (see :func:`serve_timelines`).
+    """
+    active = list(ports)
+    seq = {p: 0 for p in ports}
+    while active:
+        for port in list(active):
+            try:
+                t0 = perf_counter()
+                msg, _ = instance._communicator.receive_message(port)
+                t1 = perf_counter()
+            except (RuntimeError, OSError) as exc:
+                # A genuine mid-stream failure (peer crashed without a
+                # ClosePort, or a torn socket). The data so far is on disk and
+                # a real crash is reported by the manager via exit codes, so we
+                # end this timeline and let the other workers carry on.
+                active.remove(port)
+                logger.warning(
+                    "timeline '%s' ended after %d messages: %r",
+                    port,
+                    seq[port],
+                    exc,
+                )
+                continue
+            if isinstance(msg.data, ClosePort):
+                active.remove(port)
+                logger.info(
+                    "timeline '%s' closed after %d messages", port, seq[port]
+                )
+                continue
+            try:
+                detail = handlers[port].handle(seq[port], msg)
+                t2 = perf_counter()
+            except BaseException as exc:  # noqa: B036  -- surfaced to main
+                with errors_lock:
+                    errors[port] = exc
+                logger.exception(
+                    "timeline '%s' failed after %d messages", port, seq[port]
+                )
+                active.remove(port)
+                continue
+            metrics[port].update(msg.timestamp, t2 - t1)
+            drain.update(t1 - t0, t2 - t1)
+            logger.info("handled %s t=%.4e -> %s", port, msg.timestamp, detail)
+            seq[port] += 1
 
 
 @dataclass
