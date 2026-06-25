@@ -10,35 +10,40 @@ A recorder reads an S port in a loop. Two signals look like "the end":
    an outer loop emits it, loops round, and sends again (usually with time reset
    to the start of the grid), so it marks an iteration boundary, not the end.
 
-2. **ClosePort** is the real end, sent once when the sender deregisters. There
-   is no ClosePort message; the next `receive()` raises instead, in one of a few
-   teardown-race shapes:
-   - `RuntimeError(... "was closed" ... peer crash?)` — a ClosePort arrived;
-   - `RuntimeError(... peer 'X' "was lost" ...)` — the connection dropped first;
-   - `OSError` (bad file descriptor) — the socket was already gone.
+2. **ClosePort** is the real end, sent once when the sender deregisters. It
+   arrives as an ordinary received message whose `data` is a `ClosePort`
+   instance, so we detect it with `isinstance(msg.data, ClosePort)`.
 
-   `serve_timelines` treats all three as end-of-data (matching `OSError` or
-   "peer crash"). The wording says crash, but for a terminal observer it is the
-   normal end; a real crash surfaces via the manager's exit codes.
+## Receive at the communicator level, not `instance.receive()`
+
+We call `instance._communicator.receive_message(port)` rather than
+`instance.receive(port)`. The latter, the moment *any one* input receives a
+`ClosePort`, calls `Instance.__shutdown()` — libmuscle treats a closed input as
+"the whole run is over" — which tears down this instance's connections to
+*every* peer. For a multi-timeline tap that drains each port to its own close,
+that means the first timeline to end would sever the still-draining others and
+drop their undelivered messages. Receiving at the communicator level returns the
+`ClosePort` as a normal message with no such side effect; the instance shuts
+down only once `serve_timelines` returns and `reuse_instance()` reports done.
+
+(This bypasses `instance.receive`'s MMSF sequence checks too, which is fine — a
+terminal tap has no submodel loop to validate.)
 
 ## Occurrences
 
 We want one occurrence per outer-loop iteration (`<store>/<port>/<NNNN>.zarr`).
 Delivery is not reuse-gated: a single-reuse, S-only tap keeps calling
-`receive()` and gets every message from all the sender's reuses. So the recorder
-drains to the real close (not to `next_timestamp=None`), and `DistillHandler`
-rolls a new occurrence at each restart (`next_timestamp=None`, or message time
-stepping backward). Stopping at the first `next_timestamp=None` caught only the
-first iteration — the original bug.
+`receive_message()` and gets every message from all the sender's reuses. So the
+recorder drains to the real `ClosePort` (not to `next_timestamp=None`), and
+`DistillHandler` rolls a new occurrence at each restart (`next_timestamp=None`,
+or message time stepping backward). Stopping at the first `next_timestamp=None`
+caught only the first iteration — the original bug.
 
-## Cost
+## Note
 
-The extra `receive()` after the last iteration hits the gone peer, and
-libmuscle's TCP client retries it for a hardcoded `RECONNECT_TIMEOUT = 60.0`s
-before raising, so shutdown stalls ~60s (the data is already written; only the
-exit is delayed). The clean alternative, `reuse_instance()` returning `False`,
-works only with a connected F_INIT port, so it would need an extra `trigger_in`
-pulsed per iteration by the driver. We took the no-wiring drain instead.
-
-A future muscle3 is expected to send a real ClosePort on O_I timelines, which
-would end the drain cleanly and drop the 60s stall.
+Because the sender's `wait_for_receivers` delivers the `ClosePort` before it
+closes its server, the recorder receives it cleanly — there is no stall, and no
+need for an `F_INIT` trigger or any extra wiring. The remaining libmuscle-side
+wart is that `instance.receive` shuts the whole instance down on a single
+input's close; until that's fixed upstream, receiving at the communicator level
+is the workaround.

@@ -46,6 +46,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Protocol
 from imas import IDSFactory
 from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
+from libmuscle.mpp_message import ClosePort
 from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_setting_optional
@@ -293,9 +294,13 @@ def serve_timelines(
     both under the real ``muscle_manager`` (it only "worked" against the
     in-process ``Manager`` in tests, which exercises neither path). So we poll
     each still-open timeline in turn, handing each message to its handler,
-    until every timeline's port closes — drained to the end. (A message's
-    ``next_timestamp is None`` only ends one sender-reuse's stream, so we do
-    not stop there; see ``reuse_and_close.md``.)
+    until every timeline's port closes — drained to the end. Each ``receive``
+    goes through the communicator, not ``instance.receive`` — the latter calls
+    ``Instance.__shutdown()`` on the first port's close, severing this
+    instance's connections to *all* peers; we detect each port's ``ClosePort``
+    ourselves so one timeline ending doesn't cut off the others. (A message's
+    ``next_timestamp is None`` only ends one sender-reuse's stream and arrives
+    as a normal message, so we do not stop there; see ``reuse_and_close.md``.)
 
     The cost is that an idle/slow timeline can head-of-line block a busy one
     (the blocking receive holds the loop), so a fast peer keeps buffering into
@@ -321,47 +326,44 @@ def serve_timelines(
 
     active = list(s_ports)
     seq = {p: 0 for p in s_ports}
+    # We receive at the communicator level rather than via instance.receive():
+    # the latter calls Instance.__shutdown() the moment any one input gets a
+    # ClosePort (libmuscle treats a closed input as "the run is over"), which
+    # tears down this instance's connections to *every* peer. A multi-timeline
+    # tap must drain each port to its own close without severing the others, so
+    # we receive here and detect the ClosePort ourselves; the instance shuts
+    # down only once we return and reuse_instance() reports done.
     try:
         while active:
             for port in list(active):
                 try:
                     t0 = perf_counter()
-                    msg = instance.receive(port)
+                    msg, _ = instance._communicator.receive_message(port)
                     t1 = perf_counter()
                 except (RuntimeError, OSError) as exc:
-                    # End of the timeline: the peer's port has closed. We
-                    # drain to here rather than stopping at next_timestamp=
-                    # None, which only ends one sender-reuse's stream — a
-                    # reusing peer (an outer loop) keeps sending afterwards
-                    # (see reuse_and_close.md). libmuscle surfaces the close in
-                    # a few shapes (teardown-race dependent): a RuntimeError
-                    # whose message says the port "was closed" or the peer
-                    # connection "was lost", or an OSError (torn socket). All
-                    # mean end-of-data for a terminal tap. The two RuntimeError
-                    # shapes both end with "...the peer crash?", so we match
-                    # that; OSError covers the torn-socket case. Detecting the
-                    # close costs up to libmuscle's hardcoded 60s
-                    # RECONNECT_TIMEOUT retrying the gone peer; a real crash is
-                    # reported by the manager via exit codes, so treating these
-                    # as EOF here is safe.
-                    if (
-                        isinstance(exc, OSError)
-                        or "peer crash" in str(exc).lower()
-                    ):
-                        active.remove(port)
-                        logger.info(
-                            "timeline '%s' closed after %d messages",
-                            port,
-                            seq[port],
-                        )
-                        continue
-                    errors[port] = exc
-                    logger.exception(
-                        "timeline '%s' receive failed after %d messages",
+                    # A genuine mid-stream failure (peer crashed without a
+                    # ClosePort, or a torn socket). For a terminal tap the data
+                    # so far is on disk and a real crash is reported by the
+                    # manager via exit codes, so we end this timeline and carry
+                    # on with the others.
+                    active.remove(port)
+                    logger.warning(
+                        "timeline '%s' ended after %d messages: %r",
+                        port,
+                        seq[port],
+                        exc,
+                    )
+                    continue
+                if isinstance(msg.data, ClosePort):
+                    # The real end of this timeline (a next_timestamp=None
+                    # intermediate close arrives as a normal message instead;
+                    # see reuse_and_close.md).
+                    active.remove(port)
+                    logger.info(
+                        "timeline '%s' closed after %d messages",
                         port,
                         seq[port],
                     )
-                    active.remove(port)
                     continue
                 try:
                     detail = handlers[port].handle(seq[port], msg)

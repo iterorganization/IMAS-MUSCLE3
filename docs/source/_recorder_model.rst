@@ -20,5 +20,8 @@ fast peer keeps buffering into its (unbounded) send outbox, drained only once
 per pass until the slow one closes. This is harmless for the lock-step couplings
 these recorders tap, but memory-heavy for a genuinely high-volume, uneven one --
 it backs up in the busy sender's memory, never deadlocks or drops messages.
-Detecting the final close currently costs up to libmuscle's ~60 s reconnect
-timeout at shutdown.
+
+Each timeline ends when its peer's ``ClosePort`` arrives (received as a normal
+message). The recorder reads at the communicator level rather than via
+``instance.receive``, which would otherwise shut the whole instance down on the
+first port's close and sever the other still-draining timelines.
