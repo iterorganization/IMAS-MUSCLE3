@@ -51,14 +51,17 @@ There is no storage cap: the tap records everything it receives.
 Backpressure monitoring
 -----------------------
 
-A background monitor thread periodically logs, per timeline, the time spent
-blocked in ``receive`` (waiting on the sender) versus the time spent recording,
-and a **saturation ratio** ``t_write / (t_wait + t_write)``. A ratio near 0
-means the tap is idle waiting for data; a ratio near 1 means recording is the
-bottleneck and the senders are likely stalling on the tap. The monitor emits a
-warning when any timeline crosses ``saturation_warn``. Recording runs in
-parallel across timelines: the imas-python metadata cache is warmed
-single-threaded at startup, which makes concurrent deserialization safe.
+A single thread drains all timelines round-robin, so backpressure is a property
+of *that* thread rather than any one port. A background monitor logs its
+**saturation ratio** ``t_write / (t_wait + t_write)`` — the fraction of loop
+time spent recording versus blocked waiting for any port to deliver. A ratio
+near 0 means the drain is idle waiting for data; a ratio near 1 means recording
+is the bottleneck and the senders are likely stalling on the tap. The monitor
+emits a warning when the drain crosses ``saturation_warn``. Per-port message
+counts and handler costs are logged too, but only as diagnostics (e.g. to spot
+one slow IDS): a per-port wait would just reflect round-robin scheduling, since
+a port's next message is usually already buffered by the time the loop returns
+to it.
 
 Available Settings
 ------------------
@@ -72,7 +75,7 @@ Available Settings
     ``true``.
   - **monitor_interval**: (float) Seconds between backpressure log lines.
     Defaults to ``5.0``.
-  - **saturation_warn**: (float) Saturation ratio above which a per-timeline
+  - **saturation_warn**: (float) Drain saturation ratio above which a
     backpressure warning is logged. Defaults to ``0.8``.
 
 Available Ports

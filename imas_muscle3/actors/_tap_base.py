@@ -20,11 +20,15 @@ everything they share lives here:
   its peer's port *closes*; ``next_timestamp is None`` marks an intermediate
   stream restart (one sender-reuse ending), not the end (see
   ``reuse_and_close.md``).
-- **Backpressure monitoring**: a monitor thread periodically logs, per
-  timeline, the time spent blocked in ``receive`` (``t_wait``) versus the
-  time spent handling the message (``t_write``), and a *saturation ratio*
-  ``t_write / (t_wait + t_write)``. A ratio near 1 means the handler is the
-  bottleneck and senders will stall on the tap.
+- **Backpressure monitoring**: one drain thread serves every timeline, so
+  backpressure is a property of *that thread*, not a single port — under
+  round-robin a port's own ``receive`` rarely blocks (its next message is
+  already buffered while the loop services the others), so a per-port wait
+  would measure scheduling, not the sender. A monitor thread logs the drain's
+  *saturation*: the fraction of loop time spent handling (``t_write``) versus
+  blocked waiting for any port (``t_wait``); near 1 the drain never idles and
+  senders stall on the tap. Per-port counts and handler costs are reported as
+  diagnostics only (see :class:`DrainMetrics`).
 
 A concrete tap supplies a :class:`TimelineHandler` factory to
 :func:`serve_timelines`; the per-timeline loop, timing, monitoring and error
@@ -119,20 +123,67 @@ HandlerFactory = Callable[[str, str], TimelineHandler]
 
 @dataclass
 class PortMetrics:
-    """Thread-safe rolling metrics for one timeline (one S port)."""
+    """Thread-safe per-timeline counters (one S port), for diagnostics.
+
+    Under the round-robin drain these are *not* a backpressure signal: a
+    port's own ``receive`` rarely blocks (its next message is already
+    buffered by the time the loop returns to it), so a per-port wait would
+    mostly reflect scheduling. We keep only the unambiguous per-port facts —
+    message count, last timestamp, and the mean time this port's handler
+    takes (``t_write``, to spot a slow IDS) — and measure backpressure
+    globally in :class:`DrainMetrics`.
+    """
 
     port: str
     messages: int = 0
     last_timestamp: float = 0.0
+    t_write_ewma: float = 0.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def update(self, timestamp: float, t_write: float) -> None:
+        """Record one message's timestamp and its handler's duration."""
+        with self._lock:
+            self.messages += 1
+            self.last_timestamp = timestamp
+            if self.messages == 1:
+                self.t_write_ewma = t_write
+            else:
+                a = _EWMA_ALPHA
+                self.t_write_ewma = a * t_write + (1 - a) * self.t_write_ewma
+
+    def snapshot(self) -> str:
+        """One-line human-readable summary for logging."""
+        with self._lock:
+            return (
+                f"{self.port}: msgs={self.messages} "
+                f"t_last={self.last_timestamp:.4e} "
+                f"write={self.t_write_ewma * 1e3:.1f}ms"
+            )
+
+
+@dataclass
+class DrainMetrics:
+    """Thread-safe global backpressure for the single round-robin drain thread.
+
+    That one thread is the shared resource, so backpressure is its property,
+    not any port's. Its *saturation* is the fraction of recent loop time spent
+    handling messages (``t_write``) versus blocked waiting for any port
+    (``t_wait``): near 1 the drain never idles and senders stall on the tap;
+    near 0 it mostly waits and exerts none. The global ``t_wait`` still
+    under-counts a bit (a blocked receive on one port says nothing about the
+    others' buffers), but "does the drain ever idle?" is the honest signal
+    round-robin per-port timings cannot give.
+    """
+
+    messages: int = 0
     t_wait_ewma: float = 0.0
     t_write_ewma: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def update(self, timestamp: float, t_wait: float, t_write: float) -> None:
-        """Record one message's wait/handle timings."""
+    def update(self, t_wait: float, t_write: float) -> None:
+        """Record one drained message's wait (receive) and handle timings."""
         with self._lock:
             self.messages += 1
-            self.last_timestamp = timestamp
             if self.messages == 1:
                 self.t_wait_ewma = t_wait
                 self.t_write_ewma = t_write
@@ -143,37 +194,25 @@ class PortMetrics:
 
     @property
     def saturation(self) -> float:
-        """Fraction of recent time spent handling rather than waiting.
-
-        Near 0: the tap waits on the sender (no backpressure caused).
-        Near 1: handling is the bottleneck and senders stall on the tap.
-        """
+        """Fraction of recent drain-loop time spent handling, not waiting."""
         with self._lock:
             denom = self.t_wait_ewma + self.t_write_ewma
             return self.t_write_ewma / denom if denom > 0 else 0.0
 
-    def snapshot(self) -> str:
-        """One-line human-readable summary for logging."""
-        with self._lock:
-            return (
-                f"{self.port}: msgs={self.messages} "
-                f"t_last={self.last_timestamp:.4e} "
-                f"wait={self.t_wait_ewma * 1e3:.1f}ms "
-                f"write={self.t_write_ewma * 1e3:.1f}ms"
-            )
-
 
 class BackpressureMonitor(threading.Thread):
-    """Background thread that periodically logs backpressure metrics."""
+    """Background thread that periodically logs drain backpressure."""
 
     def __init__(
         self,
-        metrics: Dict[str, PortMetrics],
+        port_metrics: Dict[str, PortMetrics],
+        drain: DrainMetrics,
         interval: float,
         saturation_warn: float,
     ) -> None:
         super().__init__(name="tap-monitor", daemon=True)
-        self._metrics = metrics
+        self._port_metrics = port_metrics
+        self._drain = drain
         self._interval = interval
         self._saturation_warn = saturation_warn
         self._stop = threading.Event()
@@ -188,40 +227,33 @@ class BackpressureMonitor(threading.Thread):
         self._log(final=True)
 
     def _log(self, final: bool = False) -> None:
-        saturations = {p: m.saturation for p, m in self._metrics.items()}
-        hot = {
-            p: s for p, s in saturations.items() if s >= self._saturation_warn
-        }
-        # Stay quiet on the periodic tick unless a timeline is recording-bound;
+        saturation = self._drain.saturation
+        hot = saturation >= self._saturation_warn
+        # Stay quiet on the periodic tick unless the drain is handling-bound;
         # the final summary is always emitted (one line at shutdown).
         if not final and not hot:
             return
 
-        total = sum(m.messages for m in self._metrics.values())
+        total = sum(m.messages for m in self._port_metrics.values())
         prefix = "tap final summary" if final else "tap backpressure"
         logger.info(
-            "%s: %d timelines, %d messages handled, %d recording-bound",
+            "%s: %d timelines, %d messages, drain saturation %.0f%%",
             prefix,
-            len(self._metrics),
+            len(self._port_metrics),
             total,
-            len(hot),
+            saturation * 100,
         )
-        # On the final summary report every timeline; on a periodic tick only
-        # the ones that tripped the threshold (that is the point of logging).
-        report = self._metrics if final else {p: self._metrics[p] for p in hot}
-        for port, metric in report.items():
-            saturation = saturations[port]
-            logger.info(
-                "  %s saturation=%.0f%%", metric.snapshot(), saturation * 100
+        if hot:
+            logger.warning(
+                "drain is handling-bound (saturation %.0f%% >= %.0f%%): "
+                "senders may be stalling on the tap.",
+                saturation * 100,
+                self._saturation_warn * 100,
             )
-            if saturation >= self._saturation_warn:
-                logger.warning(
-                    "  timeline '%s' is handling-bound (saturation %.0f%% "
-                    ">= %.0f%%): senders may be stalling on the tap.",
-                    port,
-                    saturation * 100,
-                    self._saturation_warn * 100,
-                )
+        # Per-port handler costs are diagnostics (which IDS is slow), shown on
+        # the final summary and whenever the drain is hot.
+        for metric in self._port_metrics.values():
+            logger.info("  %s", metric.snapshot())
 
 
 def connected_s_ports(instance: Instance) -> List[str]:
@@ -274,9 +306,12 @@ def serve_timelines(
     precompute_ids_metadata(ids_names.values())
 
     metrics = {p: PortMetrics(p) for p in s_ports}
+    drain = DrainMetrics()
     handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
     errors: Dict[str, BaseException] = {}
-    monitor = BackpressureMonitor(metrics, monitor_interval, saturation_warn)
+    monitor = BackpressureMonitor(
+        metrics, drain, monitor_interval, saturation_warn
+    )
     monitor.start()
 
     active = list(s_ports)
@@ -335,7 +370,8 @@ def serve_timelines(
                     )
                     active.remove(port)
                     continue
-                metrics[port].update(msg.timestamp, t1 - t0, t2 - t1)
+                metrics[port].update(msg.timestamp, t2 - t1)
+                drain.update(t1 - t0, t2 - t1)
                 logger.info(
                     "handled %s t=%.4e -> %s", port, msg.timestamp, detail
                 )
