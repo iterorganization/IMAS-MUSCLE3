@@ -297,11 +297,13 @@ def serve_timelines(
     ``next_timestamp is None`` only ends one sender-reuse's stream, so we do
     not stop there; see ``reuse_and_close.md``.)
 
-    The cost is that an idle timeline can head-of-line block a busy one; for
-    the couplings we tap (one whole-trace message per reuse, or lock-step
-    streamed slices) the ports advance together, so this does not bite. The
-    backpressure monitor still runs in its own thread (it only reads metrics,
-    never receives).
+    The cost is that an idle/slow timeline can head-of-line block a busy one
+    (the blocking receive holds the loop), so a fast peer keeps buffering into
+    its unbounded libmuscle send outbox -- memory pressure in that sender,
+    never a deadlock or dropped message. For the couplings we tap (one
+    whole-trace message per reuse, or lock-step streamed slices) the ports
+    advance together, so this does not bite. The backpressure monitor runs in
+    its own thread (it only reads metrics, never receives).
 
     Returns a mapping of port -> exception for any failed timeline (empty on
     success); the caller decides how to surface it. Handlers are always closed.

@@ -13,6 +13,12 @@ a time (libmuscle allows only one pending receive per instance). Each timeline i
 drained to its real port close, **not** stopped at the first message with no
 ``next_timestamp``: under an outer loop the sender ends one reuse with
 ``next_timestamp=None`` and then sends again, so every iteration is recorded.
-Timelines with different message counts are fine -- one that ends earlier simply
-drops out while the others keep draining. Detecting the final close currently
-costs up to libmuscle's ~60 s reconnect timeout at shutdown.
+Timelines with different message *counts* are fine -- one that ends earlier
+simply drops out while the others keep draining. Differing *rates* are the one
+caveat: because ``receive`` blocks, a slow timeline holds up the loop while a
+fast peer keeps buffering into its (unbounded) send outbox, drained only once
+per pass until the slow one closes. This is harmless for the lock-step couplings
+these recorders tap, but memory-heavy for a genuinely high-volume, uneven one --
+it backs up in the busy sender's memory, never deadlocks or drops messages.
+Detecting the final close currently costs up to libmuscle's ~60 s reconnect
+timeout at shutdown.
