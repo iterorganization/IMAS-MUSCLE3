@@ -53,9 +53,10 @@ def main() -> None:
     """MUSCLE3 execution loop."""
     instance = Instance(
         {
-            # Optional driver trigger: when connected, the actor reuses once per
-            # received message (e.g. one per outer-loop iteration) and keeps the
-            # server alive across them. When unconnected it runs a single pass.
+            # Optional driver trigger: when connected, the actor reuses once
+            # per received message (e.g. one per outer-loop iteration) and
+            # keeps theserver alive across them. When unconnected it runs
+            # a single pass.
             Operator.F_INIT: ["trigger_in"],
             Operator.S: [
                 f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
