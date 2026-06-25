@@ -116,9 +116,6 @@ force-sort-within-sections = false
 [tool.ty.src]
 include = ["imas_muscle3/**"]
 
-[tool.ty.environment]
-python = "venv"
-
 [tool.ty.rules]
 # mypy type: ignore comments in source are not ty ignore comments; suppress noise
 unused-type-ignore-comment = "ignore"
