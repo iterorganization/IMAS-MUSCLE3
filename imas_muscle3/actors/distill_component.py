@@ -26,9 +26,6 @@ Settings (all optional):
 - ``config``: path to a Python file defining ``extract(ids) -> dict[str,
   xarray.Dataset]`` for derived/geometric quantities; recorded in addition to
   (or, with ``auto: false``, instead of) the auto-discovered ones.
-- ``clean_on_start`` (default ``true``): remove this tap's own per-port output
-  before recording.
-- ``monitor_interval`` / ``saturation_warn``: backpressure logging knobs.
 
 Example yMMSL (yMMSL v0.2)::
 

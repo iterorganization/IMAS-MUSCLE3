@@ -89,7 +89,6 @@ settings:
   eq_source.source_uri: {eq_uri}
   pf_source.source_uri: {pf_uri}
   tap.store_path: {store_path}
-  tap.monitor_interval: 0.05
 implementations:
   tap_component:
     executable: python

@@ -55,6 +55,11 @@ logger = logging.getLogger()
 # Exponential-moving-average weight for the rolling receive/handle timings.
 _EWMA_ALPHA = 0.2
 
+# The backpressure monitor is a fixed internal diagnostic, not a knob: it stays
+# quiet unless the drain is saturated and emits one summary line at shutdown.
+_MONITOR_INTERVAL = 30.0  # seconds between (quiet-unless-saturated) checks
+_SATURATION_WARN = 0.8  # warn once the drain spends >=80% of its time handling
+
 
 def ids_name_from_port(port_name: str) -> str:
     """Map a port name to the IDS name to deserialize it as.
@@ -278,8 +283,6 @@ def serve_timelines(
     ids_names: Dict[str, str],
     handler_factory: HandlerFactory,
     instance: Instance,
-    monitor_interval: float,
-    saturation_warn: float,
 ) -> Dict[str, BaseException]:
     """Drain every timeline with a single thread, round-robin over the ports.
 
@@ -310,7 +313,7 @@ def serve_timelines(
     handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
     errors: Dict[str, BaseException] = {}
     monitor = BackpressureMonitor(
-        metrics, drain, monitor_interval, saturation_warn
+        metrics, drain, _MONITOR_INTERVAL, _SATURATION_WARN
     )
     monitor.start()
 
@@ -399,9 +402,6 @@ class RecorderSettings:
     """
 
     store_path: Path
-    clean_on_start: bool
-    monitor_interval: float
-    saturation_warn: float
 
 
 def read_recorder_settings(instance: Instance) -> RecorderSettings:
@@ -416,18 +416,7 @@ def read_recorder_settings(instance: Instance) -> RecorderSettings:
         if store_path_setting is not None
         else Path.cwd()
     )
-    clean_on_start = get_setting_optional(instance, "clean_on_start", True)
-    monitor_interval = get_setting_optional(instance, "monitor_interval", 5.0)
-    saturation_warn = get_setting_optional(instance, "saturation_warn", 0.8)
-    assert clean_on_start is not None
-    assert monitor_interval is not None
-    assert saturation_warn is not None
-    return RecorderSettings(
-        store_path=store_path,
-        clean_on_start=clean_on_start,
-        monitor_interval=monitor_interval,
-        saturation_warn=saturation_warn,
-    )
+    return RecorderSettings(store_path=store_path)
 
 
 # Builds the per-timeline HandlerFactory once the ports and common settings are
@@ -473,13 +462,12 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
         if settings is None:
             settings = read_recorder_settings(instance)
             settings.store_path.mkdir(parents=True, exist_ok=True)
-            if settings.clean_on_start:
-                # Clear only this recorder's own per-port dirs, up front; never
-                # store_path itself (it may be the instance's run folder).
-                for port in s_ports:
-                    shutil.rmtree(
-                        settings.store_path / port, ignore_errors=True
-                    )
+            # Clear this recorder's own per-port dirs up front (never
+            # store_path itself, which may be the instance's run folder), so a
+            # re-run into an explicit store_path can't leave stale occurrences
+            # behind. On the default fresh run folder this is a harmless no-op.
+            for port in s_ports:
+                shutil.rmtree(settings.store_path / port, ignore_errors=True)
             factory = build_factory(instance, settings, s_ports)
         # settings and factory are set together on the first reuse, so both are
         # non-None here for every iteration.
@@ -493,14 +481,7 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
             settings.store_path,
         )
 
-        errors = serve_timelines(
-            s_ports,
-            ids_names,
-            factory,
-            instance,
-            settings.monitor_interval,
-            settings.saturation_warn,
-        )
+        errors = serve_timelines(s_ports, ids_names, factory, instance)
 
         if errors:
             msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())

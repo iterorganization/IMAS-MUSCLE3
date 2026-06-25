@@ -237,7 +237,6 @@ settings:
   eq_source.source_uri: {eq_uri}
   cp_source.source_uri: {cp_uri}
   distill.store_path: {store_path}
-  distill.monitor_interval: 0.05
 implementations:
   distill_component:
     executable: python
