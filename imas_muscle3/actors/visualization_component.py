@@ -13,7 +13,7 @@ from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 logger = logging.getLogger()
@@ -87,20 +87,20 @@ def main() -> None:
 
         plot_file_path = instance.get_setting("plot_file_path", "str")
         # If port is not specified, use a random available port
-        port = get_setting_optional(instance, "port", 0)
+        port = instance.get_setting("port", default=0)
         # FIXME: there is an issue when the plotting takes much longer
         # than it takes for data to arrive from the MUSCLE actor. As a
         # remedy, set a plotting throttle interval.
-        throttle_interval = get_setting_optional(
-            instance, "throttle_interval", 0.1
+        throttle_interval = instance.get_setting(
+            "throttle_interval", default=0.1
         )
-        keep_alive = get_setting_optional(instance, "keep_alive", False)
-        open_browser = get_setting_optional(instance, "open_browser", True)
-        automatic_mode = get_setting_optional(
-            instance, "automatic_mode", False
+        keep_alive = instance.get_setting("keep_alive", default=False)
+        open_browser = instance.get_setting("open_browser", default=True)
+        automatic_mode = instance.get_setting(
+            "automatic_mode", default=False
         )
-        extract_all = get_setting_optional(
-            instance, "automatic_extract_all", False
+        extract_all = instance.get_setting(
+            "automatic_extract_all", default=False
         )
 
         # for mypy
