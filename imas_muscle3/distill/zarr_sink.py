@@ -1,13 +1,16 @@
-"""Combine distilled datasets for one timeline and write them to a Zarr store.
+"""Append distilled datasets for one timeline to a Zarr store, live.
 
 Each distilled IDS (and config group) becomes a Zarr *group* in one store. A
 recorder hands the sink one dataset per received message (a single slice, or a
-whole trace); the sink buffers them per group and, when the timeline ends,
-combines them along ``time`` and writes the group once.
+whole trace); the sink **writes it to disk immediately**, extending the group
+along ``time``, so the store is durable and live-tailable as the run
+progresses rather than only once the timeline ends.
 
-Combining is done with :func:`xarray.concat` (outer join on the ``time``
-coordinate), which makes the store robust to the messy realities of real IDS
-streams:
+A consistent stream (same quantities, same grid every step — the common case)
+is a plain ``time`` append. When a message doesn't fit the group's on-disk
+schema, the append is rebuilt with :func:`_combine` (:func:`xarray.concat`,
+outer join on ``time``) over the existing store plus the new message, which
+keeps the store robust to the messy realities of real IDS streams:
 
 * **gaps / inhomogeneous time** — a quantity may be absent on some steps (e.g.
   ``profiles_1d`` empty on TORAX's first solver steps, whose root ``time``
@@ -15,13 +18,11 @@ streams:
   are ``NaN``-filled, so every quantity shares one consistent ``time`` axis.
 * **ragged non-time dims** — a profile's length can vary between steps (a
   re-gridded equilibrium); non-time dims are padded with ``NaN`` to the max
-  width before concatenation.
-
-Buffering per occurrence trades intra-occurrence live-tailing for a correct,
-self-consistent store; occurrences (one per reuse) still appear incrementally.
+  width.
 """
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -71,6 +72,26 @@ def group_name(full_path: str) -> str:
     return full_path.replace("/", ".")
 
 
+def _signature(ds: xr.Dataset) -> tuple:
+    """Schema fingerprint: which quantities, on what non-time grid.
+
+    Two messages with the same signature can be appended along ``time``; a
+    different one (a missing quantity, a re-gridded or ragged profile) means
+    the group must be rebuilt, since :meth:`xarray.Dataset.to_zarr` does *not*
+    reject a mismatched append — it silently corrupts the store.
+    """
+    names = frozenset(map(str, ds.data_vars))
+    dims = tuple(
+        sorted((str(d), int(s)) for d, s in ds.sizes.items() if d != _TIME)
+    )
+    coords = tuple(
+        (c, np.asarray(ds[c].values).tobytes())
+        for c in sorted(map(str, ds.coords))
+        if c != _TIME
+    )
+    return (names, dims, coords)
+
+
 def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
     """Concatenate one timeline's messages along ``time`` into one dataset.
 
@@ -108,32 +129,61 @@ def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
 
 
 class ZarrSink:
-    """Buffer one timeline's distilled datasets and write them combined."""
+    """Append one timeline's distilled datasets to a Zarr store as they arrive.
+
+    Each group's messages are also kept in memory as the source for a rebuild
+    (see :meth:`append`); the on-disk store always reflects everything received
+    so far, so it is durable and live-tailable mid-run.
+    """
 
     def __init__(self, store_path: Path) -> None:
         self._store = str(store_path)
         self._buffers: Dict[str, List[xr.Dataset]] = {}
+        self._sig: Dict[str, tuple] = {}
 
     def append(self, name: str, ds: xr.Dataset) -> None:
-        """Buffer a dataset for group ``name``; written at :meth:`close`.
+        """Write a dataset for group ``name`` to disk now, along ``time``.
 
         ``ds`` must carry a ``time`` dimension; its length is free — a single
-        slice (streamed recording) or a whole trace both work.
+        slice (streamed recording) or a whole trace both work. The first
+        message for a group creates it; a later message with the same schema
+        (see :func:`_signature`) is appended along ``time`` (cheap, the common
+        streaming case); one with a different schema (a gap, a missing
+        quantity, a re-gridded/ragged profile) rebuilds the whole group from
+        all of its messages via :func:`_combine`.
         """
         if _TIME not in ds.dims:
             raise ValueError(
                 f"{name}: distilled dataset has no '{_TIME}' dimension "
                 f"(dims={dict(ds.sizes)})"
             )
-        self._buffers.setdefault(group_name(name), []).append(ds)
+        group = group_name(name)
+        parts = self._buffers.setdefault(group, [])
+        parts.append(ds)
+        sig = _signature(ds)
+        if len(parts) == 1:
+            ds.to_zarr(self._store, group=group, mode="w", consolidated=False)
+            self._sig[group] = sig
+            return
+        if sig == self._sig[group]:
+            ds.to_zarr(
+                self._store, group=group, append_dim=_TIME, consolidated=False
+            )
+            return
+        # Schema changed: rebuild from all of the group's messages (NaN-filling
+        # gaps, padding ragged dims) and rewrite. Clear the group dir first so
+        # no stale arrays from the old schema linger.
+        shutil.rmtree(Path(self._store) / group, ignore_errors=True)
+        try:
+            combined = _combine(parts)
+            combined.to_zarr(
+                self._store, group=group, mode="w", consolidated=False
+            )
+            self._sig[group] = _signature(combined)
+        except Exception:
+            logger.exception("failed writing group '%s'", group)
 
     def close(self) -> None:
-        """Combine each group's buffered messages and write the store."""
-        for group, parts in self._buffers.items():
-            try:
-                _combine(parts).to_zarr(
-                    self._store, group=group, mode="w", consolidated=False
-                )
-            except Exception:
-                logger.exception("failed writing group '%s'", group)
+        """Every message is already on disk; just drop the rebuild buffer."""
         self._buffers.clear()
+        self._sig.clear()
