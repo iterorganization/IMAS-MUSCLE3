@@ -1,4 +1,4 @@
-from typing import List, Optional, TypeVar, cast
+from typing import List, TypeVar
 
 from libmuscle import Instance
 
