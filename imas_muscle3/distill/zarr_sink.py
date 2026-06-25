@@ -23,7 +23,7 @@ self-consistent store; occurrences (one per reuse) still appear incrementally.
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Mapping
+from typing import Any, Dict, List, Mapping
 
 import numpy as np
 import xarray as xr
@@ -35,7 +35,7 @@ logger = logging.getLogger()
 _TIME = "time"
 
 
-def write_root_attrs(store_path: Path, attrs: Mapping[str, object]) -> None:
+def write_root_attrs(store_path: Path, attrs: Mapping[str, Any]) -> None:
     """Stamp metadata onto a store's root group (e.g. the profile reference).
 
     Lets a reader discover, for instance, which visualization profile produced
