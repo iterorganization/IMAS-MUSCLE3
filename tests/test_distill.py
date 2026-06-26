@@ -304,36 +304,44 @@ def _msg(t, nxt, data):
     return Message(t, nxt, data=data)
 
 
-def test_distill_handler_splits_occurrences_on_restart(tmp_path, equilibrium):
-    """A backward time step / end-of-stream starts a new occurrence."""
-    from imas_muscle3.actors.distill_component import DistillHandler
+def _distill_recorder(store_dir):
+    from imas_muscle3.actors._tap_base import OccurrenceRecorder
+    from imas_muscle3.actors.distill_component import DistillSink
 
+    distiller = Distiller(auto=True)
+    return OccurrenceRecorder(
+        store_dir,
+        "equilibrium",
+        lambda base, name: DistillSink(base, name, distiller),
+    )
+
+
+def test_recorder_splits_occurrences_on_restart(tmp_path, equilibrium):
+    """A backward time step / end-of-stream starts a new occurrence."""
     data = equilibrium.serialize()
     store_dir = tmp_path / "equilibrium_in"
-    handler = DistillHandler(store_dir, "equilibrium", Distiller(auto=True))
+    rec = _distill_recorder(store_dir)
     # iteration 0: t=0,1 (1 ends the stream); iteration 1: t=0,1 (time resets).
-    handler.handle(0, _msg(0.0, 1.0, data))
-    handler.handle(1, _msg(1.0, None, data))
-    handler.handle(2, _msg(0.0, 1.0, data))
-    handler.handle(3, _msg(1.0, None, data))
-    handler.close()
+    rec.handle(0, _msg(0.0, 1.0, data))
+    rec.handle(1, _msg(1.0, None, data))
+    rec.handle(2, _msg(0.0, 1.0, data))
+    rec.handle(3, _msg(1.0, None, data))
+    rec.close()
 
     assert (store_dir / "0000.zarr").is_dir()
     assert (store_dir / "0001.zarr").is_dir()
     assert not (store_dir / "0002.zarr").exists()
 
 
-def test_distill_handler_one_occurrence_for_monotonic(tmp_path, equilibrium):
+def test_recorder_one_occurrence_for_monotonic(tmp_path, equilibrium):
     """A single monotonic trace stays one occurrence (no spurious split)."""
-    from imas_muscle3.actors.distill_component import DistillHandler
-
     data = equilibrium.serialize()
     store_dir = tmp_path / "equilibrium_in"
-    handler = DistillHandler(store_dir, "equilibrium", Distiller(auto=True))
-    handler.handle(0, _msg(0.0, 1.0, data))
-    handler.handle(1, _msg(1.0, 2.0, data))
-    handler.handle(2, _msg(2.0, None, data))
-    handler.close()
+    rec = _distill_recorder(store_dir)
+    rec.handle(0, _msg(0.0, 1.0, data))
+    rec.handle(1, _msg(1.0, 2.0, data))
+    rec.handle(2, _msg(2.0, None, data))
+    rec.close()
 
     assert (store_dir / "0000.zarr").is_dir()
     assert not (store_dir / "0001.zarr").exists()

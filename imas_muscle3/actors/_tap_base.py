@@ -105,6 +105,67 @@ class TimelineHandler(Protocol):
 HandlerFactory = Callable[[str, str], TimelineHandler]
 
 
+class Sink(Protocol):
+    """Writes one occurrence's messages to disk in a given format.
+
+    Built per occurrence by a :data:`SinkFactory`; each decodes a message only
+    as far as its format needs (raw bytes, an IDS, distilled arrays). Used by
+    one thread, so it need not be thread-safe.
+    """
+
+    def write(self, msg: Message) -> str:
+        """Write one message; return a short detail to log."""
+        ...
+
+    def close(self) -> None:
+        """Finalize this occurrence's store."""
+        ...
+
+
+#: Builds a :class:`Sink` for one occurrence, given its store base path (no
+#: suffix) and the IDS name carried by the timeline.
+SinkFactory = Callable[[Path, str], Sink]
+
+
+class OccurrenceRecorder:
+    """A :class:`TimelineHandler` that writes each outer-loop iteration to its
+    own occurrence store ``<store_dir>/<NNNN>``, rolling on a stream restart (a
+    message with no ``next_timestamp``, or time stepping backwards).
+    All format-specific work lives in the injected :data:`SinkFactory`.
+    """
+
+    def __init__(
+        self, store_dir: Path, ids_name: str, make_sink: SinkFactory
+    ) -> None:
+        self._store_dir = store_dir
+        self._ids_name = ids_name
+        self._make_sink = make_sink
+        self._occurrence = 0
+        self._sink: Optional[Sink] = None
+        self._last_time: Optional[float] = None
+        self._prev_ended = False
+
+    def handle(self, seq: int, msg: Message) -> str:
+        restarted = self._prev_ended or (
+            self._last_time is not None and msg.timestamp < self._last_time
+        )
+        if self._sink is not None and restarted:
+            self._sink.close()
+            self._occurrence += 1
+            self._sink = None
+        if self._sink is None:
+            base = self._store_dir / f"{self._occurrence:04d}"
+            self._sink = self._make_sink(base, self._ids_name)
+        detail = self._sink.write(msg)
+        self._last_time = msg.timestamp
+        self._prev_ended = msg.next_timestamp is None
+        return detail
+
+    def close(self) -> None:
+        if self._sink is not None:
+            self._sink.close()
+
+
 def connected_s_ports(instance: Instance) -> List[str]:
     """Sorted, connected ``S`` ports of a terminal tap, validated.
 

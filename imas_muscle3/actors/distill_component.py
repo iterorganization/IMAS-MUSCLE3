@@ -1,21 +1,16 @@
 """Distill recorder actor for MUSCLE3.
 
-A terminal (sink-only) tap that, instead of recording each raw IDS (see
+A terminal (sink-only) actor that, instead of storing each raw IDS (see
 :mod:`tap_component`), *distills* every message into compact scalars / profiles
-/ maps and appends them along ``time`` to a Zarr store. The result is a small,
-self-describing, append-only dataset that a viewer can plot live as the run
-writes it or open afterwards.
+/ maps and appends them along ``time`` to a Zarr store — one store per
+*occurrence* (outer-loop iteration), so iterations sit side by side. The result
+is a small, self-describing, append-only dataset a viewer can plot live as the
+run writes it or open afterwards.
 
-The output is split into one *occurrence* per outer-loop iteration —
-``<store_path>/<port>/<NNNN>.zarr`` — derived purely from the message stream
-(see :class:`DistillHandler` and ``reuse_and_close.md``), so a driven workflow
-that re-runs the same time grid each iteration lands each iteration in its own
-occurrence with no extra wiring.
-
-The dynamic-port / single-threaded-drain / backpressure machinery and the
-shared reuse loop live in :mod:`imas_muscle3.actors._tap_base`
-(:func:`~imas_muscle3.actors._tap_base.run_recorder`); this module only
-supplies the distill-and-append handler and the distill-specific settings.
+The shared drain, occurrence numbering and reuse loop live in
+:mod:`imas_muscle3.actors._tap_base`
+(:class:`~imas_muscle3.actors._tap_base.OccurrenceRecorder`); this module only
+supplies the distill-and-append sink and its settings.
 
 Settings (all optional):
 
@@ -51,6 +46,7 @@ from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
     HandlerFactory,
+    OccurrenceRecorder,
     RecorderSettings,
     ids_from_message,
     recorder_main,
@@ -75,69 +71,38 @@ def load_extract_config(config_path: str) -> ExtractFn:
     return extract
 
 
-class DistillHandler:
-    """:class:`~imas_muscle3.actors._tap_base.TimelineHandler` that distills
-    each message and appends it to the current *occurrence*'s Zarr store,
-    rolling to a new occurrence whenever the timeline restarts.
-
-    An occurrence is one contiguous, time-ordered run of messages. A new one
-    begins when the previous message ended a stream (``next_timestamp is
-    None``) or simulation time steps backwards — i.e. an outer-loop iteration
-    re-running the same time grid. Occurrences are written side by side as
-    ``<store_dir>/<NNNN>.zarr`` for the viewer to compare — derived purely from
-    the message stream, so it needs no per-iteration trigger or wiring.
-    """
+class DistillSink:
+    """:class:`~imas_muscle3.actors._tap_base.Sink` that distills each message
+    and appends it to one occurrence's Zarr store (``<base>.zarr``)."""
 
     def __init__(
         self,
-        store_dir: Path,
+        base: Path,
         ids_name: str,
         distiller: Distiller,
         profile: Optional[str] = None,
     ) -> None:
-        self._store_dir = store_dir
+        self._store = base.with_suffix(".zarr")
         self._ids_name = ids_name
         self._distiller = distiller
         self._profile = profile
-        self._occurrence = 0
-        self._sink: Optional[ZarrSink] = None
-        self._last_time: Optional[float] = None
-        self._prev_ended = False
+        self._zarr = ZarrSink(self._store)
 
-    def _store(self) -> Path:
-        return self._store_dir / f"{self._occurrence:04d}.zarr"
-
-    def _close_current(self) -> None:
-        if self._sink is None:
-            return
-        self._sink.close()
-        # Stamp the occurrence index (+ profile) so the viewer can group and
-        # load the matching bespoke plots.
-        meta: dict = {"occurrence": self._occurrence}
-        if self._profile:
-            meta["distill_profile"] = str(Path(self._profile).resolve())
-        write_root_attrs(self._store(), meta)
-        self._sink = None
-
-    def handle(self, seq: int, msg: Message) -> str:
-        restarted = self._prev_ended or (
-            self._last_time is not None and msg.timestamp < self._last_time
-        )
-        if self._sink is not None and restarted:
-            self._close_current()
-            self._occurrence += 1
-        if self._sink is None:
-            self._sink = ZarrSink(self._store())
+    def write(self, msg: Message) -> str:
         ids = ids_from_message(self._ids_name, msg.data)
         datasets = self._distiller.distill(ids)
         for full_path, ds in datasets.items():
-            self._sink.append(full_path, ds)
-        self._last_time = msg.timestamp
-        self._prev_ended = msg.next_timestamp is None
-        return f"occ {self._occurrence:04d}, {len(datasets)} var(s)"
+            self._zarr.append(full_path, ds)
+        return f"{len(datasets)} var(s)"
 
     def close(self) -> None:
-        self._close_current()
+        self._zarr.close()
+        # Stamp the occurrence index (+ profile) so a viewer can group stores
+        # and load the matching bespoke plots.
+        meta: dict = {"occurrence": int(self._store.stem)}
+        if self._profile:
+            meta["distill_profile"] = str(Path(self._profile).resolve())
+        write_root_attrs(self._store, meta)
 
 
 def _build_factory(
@@ -150,14 +115,17 @@ def _build_factory(
     extract = load_extract_config(config) if config else None
     logger.info("distilling with auto=%s, config=%s", auto, config or "-")
 
-    # A fresh Distiller per timeline keeps its discovery cache thread-local, so
-    # the per-port workers never share mutable state.
-    return lambda port, ids_name: DistillHandler(
-        settings.store_path / port,
-        ids_name,
-        Distiller(auto=auto, extract=extract),
-        config,
-    )
+    def factory(port: str, ids_name: str) -> OccurrenceRecorder:
+        # A fresh Distiller per timeline keeps its discovery cache local, so
+        # the per-sender workers never share mutable state.
+        distiller = Distiller(auto=auto, extract=extract)
+        return OccurrenceRecorder(
+            settings.store_path / port,
+            ids_name,
+            lambda base, name: DistillSink(base, name, distiller, config),
+        )
+
+    return factory
 
 
 if __name__ == "__main__":

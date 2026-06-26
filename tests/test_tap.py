@@ -2,13 +2,11 @@ import multiprocessing
 
 import pytest
 from imas import DBEntry
+from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
-from imas_muscle3.actors.tap_component import (
-    ids_name_from_port,
-    record_message,
-)
+from imas_muscle3.actors.tap_component import DBEntrySink, ids_name_from_port
 from tests.ymmsl_helpers import load_config
 
 """Force 'spawn' start method to avoid deadlocks with pytest."""
@@ -29,15 +27,14 @@ def test_ids_name_from_port_rejects_unknown():
         ids_name_from_port("not_an_ids_in")
 
 
-def test_record_message_roundtrip(tmp_path, equilibrium):
-    store_path = tmp_path / "store"
-    data = equilibrium.serialize()
-    record_message(store_path, "equilibrium_in", "equilibrium", data, seq=0)
+def test_dbentry_sink_roundtrip(tmp_path, equilibrium):
+    base = tmp_path / "equilibrium_in" / "0000"
+    base.parent.mkdir(parents=True)
+    sink = DBEntrySink(base, "equilibrium")
+    sink.write(Message(0.0, None, data=equilibrium.serialize()))
+    sink.close()
 
-    msg_dir = store_path / "equilibrium_in" / "00000000"
-    assert msg_dir.is_dir()
-    uri = f"imas:hdf5?path={msg_dir}"
-    with DBEntry(uri, "r") as entry:
+    with DBEntry(f"imas:hdf5?path={base}", "r") as entry:
         assert all(entry.get("equilibrium").time == equilibrium.time)
 
 
@@ -103,15 +100,14 @@ def test_tap_records_two_timelines(tmp_path, equilibrium, pf_active):
     manager.start_instances()
     assert manager.wait()
 
-    # Each timeline is iterated over its 3 time points -> 3 per-message
-    # DBEntries per port.
-    eq_msgs = sorted((store_path / "equilibrium_in").glob("*"))
-    pf_msgs = sorted((store_path / "pf_active_in").glob("*"))
-    assert len(eq_msgs) == len(equilibrium.time)
-    assert len(pf_msgs) == len(pf_active.time)
+    # Each timeline streams its slices into one occurrence -> one DBEntry per
+    # port, holding that occurrence's full trace.
+    eq_occ = sorted((store_path / "equilibrium_in").glob("*"))
+    pf_occ = sorted((store_path / "pf_active_in").glob("*"))
+    assert len(eq_occ) == 1
+    assert len(pf_occ) == 1
 
-    # The recorded slices read back as the right IDS.
-    with DBEntry(f"imas:hdf5?path={eq_msgs[0]}", "r") as entry:
-        assert entry.get("equilibrium").time.size >= 1
-    with DBEntry(f"imas:hdf5?path={pf_msgs[0]}", "r") as entry:
-        assert entry.get("pf_active").time.size >= 1
+    with DBEntry(f"imas:hdf5?path={eq_occ[0]}", "r") as entry:
+        assert all(entry.get("equilibrium").time == equilibrium.time)
+    with DBEntry(f"imas:hdf5?path={pf_occ[0]}", "r") as entry:
+        assert all(entry.get("pf_active").time == pf_active.time)

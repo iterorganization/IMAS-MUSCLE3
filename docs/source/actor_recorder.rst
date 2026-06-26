@@ -6,11 +6,14 @@ Recorder actors
 Two terminal (sink-only) actors that tap the live traffic of a running workflow
 and write it to disk, without disturbing the coupling:
 
-- **tap** (``imas_muscle3.actors.tap_component``) stores each received IDS
-  verbatim, one DBEntry per message — a faithful, re-openable copy.
+- **tap** (``imas_muscle3.actors.tap_component``) stores the IDSs verbatim — a
+  faithful, re-openable IMAS copy.
 - **distill** (``imas_muscle3.actors.distill_component``) reduces each IDS to
   compact scalars, profiles and maps in a Zarr store — a small, self-describing
   dataset a viewer can plot live or open afterwards.
+
+Each writes one store per *occurrence* (outer-loop iteration), so iterations sit
+side by side.
 
 .. code-block:: bash
 
@@ -27,16 +30,13 @@ and write it to disk, without disturbing the coupling:
 Output
 ------
 
-**tap** writes each message to its own DBEntry, re-openable with IMAS-Python::
+Each occurrence ``NNNN`` is one store per port::
 
-  imas:hdf5?path=<store_path>/<port_name>/<seq>      # zero-padded <seq>
+  <store_path>/<port_name>/<NNNN>       # tap: a DBEntry; distill: <NNNN>.zarr
 
-**distill** records each outer-loop iteration as its own *occurrence*, so
-iterations sit side by side::
-
-  <store_path>/<port_name>/<NNNN>.zarr               # open_zarr(..., group=<ids>)
-
-``store_path`` defaults to the instance's run folder.
+re-openable with ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")`` (tap) or
+``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill). ``store_path``
+defaults to the instance's run folder.
 
 Settings
 --------

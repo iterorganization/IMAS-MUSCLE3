@@ -1,15 +1,12 @@
 """Tap recorder actor for MUSCLE3.
 
-A terminal (sink-only) actor that taps onto an arbitrary number of independent
-*timelines* and records every message it receives to disk, one DBEntry per
-message.
-
-The dynamic-port / single-threaded-drain / backpressure machinery and the
-shared reuse loop live in :mod:`imas_muscle3.actors._tap_base`
-(:func:`~imas_muscle3.actors._tap_base.run_recorder`); this module only
-supplies the per-message *recorder*: each received message is written to its
-own ``imas:hdf5?path=<store_path>/<port>/<seq>`` DBEntry, queryable afterwards
-with IMAS-Python. ``store_path`` defaults to the instance's run folder.
+A terminal (sink-only) actor that records each received IDS verbatim: one IMAS
+DBEntry per *occurrence* (outer-loop iteration), holding that iteration's trace
+and re-openable with IMAS-Python. The shared drain, occurrence numbering and
+reuse loop live in :mod:`imas_muscle3.actors._tap_base`
+(:class:`~imas_muscle3.actors._tap_base.OccurrenceRecorder`); this module only
+supplies the DBEntry sink. ``store_path`` defaults to the instance's run
+folder.
 
 Example yMMSL (yMMSL v0.2)::
 
@@ -27,7 +24,7 @@ Example yMMSL (yMMSL v0.2)::
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from imas import DBEntry
 from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
@@ -35,71 +32,56 @@ from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
     HandlerFactory,
+    OccurrenceRecorder,
     RecorderSettings,
     ids_from_message,
     ids_name_from_port,
     recorder_main,
 )
 
-# Re-exported for backwards compatibility / tests; they now live in _tap_base.
-__all__ = [
-    "ids_name_from_port",
-    "record_message",
-]
+# Re-exported for backwards compatibility / tests.
+__all__ = ["ids_name_from_port"]
 
 
-def record_message(
-    store_path: Path,
-    port: str,
-    ids_name: str,
-    data: bytes,
-    seq: int,
-) -> str:
-    """Deserialize one message and write it to its own DBEntry.
+class DBEntrySink:
+    """A :class:`~imas_muscle3.actors._tap_base.Sink` writing one occurrence's
+    messages into a single DBEntry, verbatim, as an IMAS time-trace.
 
-    Uses ``put`` for full / time-independent IDSs and ``put_slice`` for single
-    time slices, mirroring :func:`imas_muscle3.data_sink_source.handle_sink`.
-
-    Returns the IMAS URI the message was written to, so it can be logged for
-    easy reopening.
+    Streamed slices are ``put_slice``'d into the entry; a whole-trace message
+    is ``put`` once. Re-open with ``imas.DBEntry("imas:hdf5?path=<base>",
+    "r")``.
     """
-    ids = ids_from_message(ids_name, data)
-    uri = f"imas:hdf5?path={store_path / port / f'{seq:08d}'}"
-    with DBEntry(uri, "w") as entry:
+
+    def __init__(self, base: Path, ids_name: str) -> None:
+        self._uri = f"imas:hdf5?path={base}"
+        self._ids_name = ids_name
+        self._entry: Optional[DBEntry] = None
+
+    def write(self, msg: Message) -> str:
+        ids = ids_from_message(self._ids_name, msg.data)
+        if self._entry is None:
+            self._entry = DBEntry(self._uri, "w")
         if (
             len(ids.time) > 1
             or ids.ids_properties.homogeneous_time == IDS_TIME_MODE_INDEPENDENT
         ):
-            entry.put(ids)
+            self._entry.put(ids)
         else:
-            entry.put_slice(ids)
-    return uri
+            self._entry.put_slice(ids)
+        return self._uri
 
-
-class RecordHandler:
-    """:class:`~imas_muscle3.actors._tap_base.TimelineHandler` that writes one
-    DBEntry per message under ``<store_path>/<port>/<seq>``."""
-
-    def __init__(self, store_path: Path, port: str, ids_name: str) -> None:
-        self._store_path = store_path
-        self._port = port
-        self._ids_name = ids_name
-
-    def handle(self, seq: int, msg: Message) -> str:
-        return record_message(
-            self._store_path, self._port, self._ids_name, msg.data, seq
-        )
-
-    def close(self) -> None:  # nothing to release: each message owns its entry
-        pass
+    def close(self) -> None:
+        if self._entry is not None:
+            self._entry.close()
+            self._entry = None
 
 
 def _build_factory(
     instance: Instance, settings: RecorderSettings, s_ports: List[str]
 ) -> HandlerFactory:
-    """Build the per-timeline factory (raw recording has no extra settings)."""
-    return lambda port, ids_name: RecordHandler(
-        settings.store_path, port, ids_name
+    """Raw recording has no extra settings; one DBEntry sink per occurrence."""
+    return lambda port, ids_name: OccurrenceRecorder(
+        settings.store_path / port, ids_name, DBEntrySink
     )
 
 
