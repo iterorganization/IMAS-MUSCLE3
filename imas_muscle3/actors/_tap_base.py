@@ -71,15 +71,10 @@ def ids_name_from_port(port_name: str) -> str:
 
 
 def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
-    """Build the IDS metadata for each name once, single-threaded.
+    """Build each IDS type's metadata once, single-threaded.
 
-    imas-python lazily builds and caches ``IDSMetadata`` the first time an IDS
-    of a given type is constructed, and that construction is **not**
-    thread-safe (concurrent first-construction races with
-    ``AttributeError: type object 'IDSMetadata' has no attribute
-    '__setattr__'``). Constructing each type once here populates the shared
-    cache so the worker threads only ever read it, which makes concurrent
-    deserialization and handling safe.
+    imas-python caches it lazily on first construction, which is not
+    thread-safe; doing it here lets the worker threads only ever read it.
     """
     factory = IDSFactory()
     for ids_name in set(ids_names):
@@ -94,24 +89,15 @@ def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
 
 
 class TimelineHandler(Protocol):
-    """What :func:`serve_timelines` does with each message of one timeline.
-
-    Implementations carry whatever per-port state they need (a store path, a
-    Zarr sink, a distiller). They are constructed by a *factory* given to
-    :func:`serve_timelines` and used by exactly one worker thread, so they need
-    not be thread-safe themselves.
-    """
+    """Records one timeline's messages. One per port, used by one thread (so it
+    need not be thread-safe); built by a factory given to serve_timelines."""
 
     def handle(self, seq: int, msg: Message) -> str:
-        """Handle message ``seq`` of this timeline.
-
-        Returns a short human-readable detail (e.g. the URI written) that the
-        worker logs alongside the timestamp.
-        """
+        """Record message ``seq``; return a short detail to log (a URI)."""
         ...
 
     def close(self) -> None:
-        """Release per-timeline resources, once the timeline has ended."""
+        """Release per-timeline resources after the timeline ends."""
         ...
 
 
