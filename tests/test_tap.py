@@ -5,7 +5,6 @@ from imas import DBEntry
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
-from imas_muscle3.actors._tap_base import DrainMetrics, PortMetrics
 from imas_muscle3.actors.tap_component import (
     ids_name_from_port,
     record_message,
@@ -40,25 +39,6 @@ def test_record_message_roundtrip(tmp_path, equilibrium):
     uri = f"imas:hdf5?path={msg_dir}"
     with DBEntry(uri, "r") as entry:
         assert all(entry.get("equilibrium").time == equilibrium.time)
-
-
-def test_drain_metrics_saturation():
-    # handling dominates -> drain saturation near 1 (tap is the bottleneck)
-    drain = DrainMetrics()
-    drain.update(t_wait=0.0, t_write=1.0)
-    assert drain.saturation > 0.99
-    # waiting dominates -> saturation near 0 (drain idle, no backpressure)
-    drain = DrainMetrics()
-    drain.update(t_wait=1.0, t_write=0.0)
-    assert drain.saturation < 0.01
-
-
-def test_port_metrics_track_handler_cost():
-    metric = PortMetrics("equilibrium_in")
-    metric.update(timestamp=2.0, t_write=0.5)
-    assert metric.messages == 1
-    assert metric.last_timestamp == 2.0
-    assert metric.t_write_ewma == 0.5
 
 
 # --- integration test: two timelines -> one tap ---------------------------

@@ -34,22 +34,16 @@ from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
-    BackpressureMonitor,
     HandlerFactory,
-    PortMetrics,
     RecorderSettings,
     ids_from_message,
     ids_name_from_port,
-    precompute_ids_metadata,
     recorder_main,
 )
 
 # Re-exported for backwards compatibility / tests; they now live in _tap_base.
 __all__ = [
-    "BackpressureMonitor",
-    "PortMetrics",
     "ids_name_from_port",
-    "precompute_ids_metadata",
     "record_message",
 ]
 
