@@ -38,6 +38,49 @@ def test_dbentry_sink_roundtrip(tmp_path, equilibrium):
         assert all(entry.get("equilibrium").time == equilibrium.time)
 
 
+def test_dbentry_sink_per_message(tmp_path, equilibrium):
+    base = tmp_path / "equilibrium_in" / "0000"
+    base.parent.mkdir(parents=True)
+    sink = DBEntrySink(base, "equilibrium", per_message=True)
+    sink.write(Message(0.0, None, data=equilibrium.serialize()))
+    sink.write(Message(1.0, None, data=equilibrium.serialize()))
+    sink.close()
+
+    # Each message is its own complete, immediately-readable DBEntry.
+    e0 = base.parent / "0000_00000000"
+    e1 = base.parent / "0000_00000001"
+    assert e0.is_dir() and e1.is_dir()
+    with DBEntry(f"imas:hdf5?path={e0}", "r") as entry:
+        assert all(entry.get("equilibrium").time == equilibrium.time)
+
+
+def test_raw_sink_frames_and_replays(tmp_path, equilibrium):
+    from imas import IDSFactory
+
+    from imas_muscle3.actors.raw_component import RawSink
+
+    base = tmp_path / "equilibrium_in" / "0000"
+    base.parent.mkdir(parents=True)
+    data = bytes(equilibrium.serialize())
+    sink = RawSink(base, "equilibrium")
+    sink.write(Message(0.0, None, data=data))
+    sink.write(Message(1.0, None, data=data))
+    sink.close()
+
+    raw = (base.parent / "0000.raw").read_bytes()
+    frames, off = [], 0
+    while off < len(raw):
+        n = int.from_bytes(raw[off : off + 8], "big")
+        off += 8
+        frames.append(raw[off : off + n])
+        off += n
+    assert len(frames) == 2 and frames[0] == data
+
+    eq = IDSFactory().new("equilibrium")
+    eq.deserialize(frames[0])
+    assert all(eq.time == equilibrium.time)
+
+
 # --- integration test: two timelines -> one tap ---------------------------
 
 

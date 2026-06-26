@@ -11,6 +11,8 @@ and write it to disk, without disturbing the coupling:
 - **distill** (``imas_muscle3.actors.distill_component``) reduces each IDS to
   compact scalars, profiles and maps in a Zarr store — a small, self-describing
   dataset a viewer can plot live or open afterwards.
+- **raw** (``imas_muscle3.actors.raw_component``) writes each message's wire
+  bytes verbatim, no IMAS decode — the cheapest, most faithful capture.
 
 Each writes one store per *occurrence* (outer-loop iteration), so iterations sit
 side by side.
@@ -24,6 +26,9 @@ side by side.
     distill_component:
       executable: python
       args: -u -m imas_muscle3.actors.distill_component
+    raw_component:
+      executable: python
+      args: -u -m imas_muscle3.actors.raw_component
 
 .. include:: _recorder_model.rst
 
@@ -32,11 +37,12 @@ Output
 
 Each occurrence ``NNNN`` is one store per port::
 
-  <store_path>/<port_name>/<NNNN>       # tap: a DBEntry; distill: <NNNN>.zarr
+  <store_path>/<port_name>/<NNNN>       # tap: DBEntry; distill: .zarr; raw: .raw
 
-re-openable with ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")`` (tap) or
-``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill). ``store_path``
-defaults to the instance's run folder.
+re-openable with ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")`` (tap),
+``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill), or by replaying
+the length-framed wire bytes (raw). ``store_path`` defaults to the instance's
+run folder.
 
 Settings
 --------
@@ -44,6 +50,9 @@ Settings
 * Optional
 
   - **store_path**: (string) Root for the output. Defaults to the run folder.
+  - **per_message** (tap): (bool) Write each message as its own DBEntry
+    (``<NNNN>_<seq>``), readable while the run is going, instead of one trace
+    per occurrence. Defaults to ``false``.
   - **auto** (distill): (bool) Record every time-dependent 0D/1D/2D ``FLT``
     quantity (GGD/grid excluded). Defaults to ``true``.
   - **config** (distill): (string) Path to a Python file defining
