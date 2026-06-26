@@ -55,7 +55,7 @@ def main() -> None:
         {
             # Optional driver trigger: when connected, the actor reuses once
             # per received message (e.g. one per outer-loop iteration) and
-            # keeps theserver alive across them. When unconnected it runs
+            # keeps the server alive across them. When unconnected it runs
             # a single pass.
             Operator.F_INIT: ["trigger_in"],
             Operator.S: [
