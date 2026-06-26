@@ -32,7 +32,7 @@ Example yMMSL (yMMSL v0.2)::
 
 from functools import partial
 from pathlib import Path
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, Optional
 
 import msgpack  # type: ignore[import-untyped]
 from imas import DBEntry
@@ -41,8 +41,6 @@ from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
-    HandlerFactory,
-    OccurrenceRecorder,
     RecorderSettings,
     SinkFactory,
     ids_from_message,
@@ -132,35 +130,27 @@ class RawSink:
             self._fh = None
 
 
-def _build_factory(
-    instance: Instance, settings: RecorderSettings, s_ports: List[str]
-) -> HandlerFactory:
-    """Pick the per-occurrence sink from the ``format`` setting."""
+def _build_sink_factory(
+    instance: Instance, settings: RecorderSettings
+) -> SinkFactory:
+    """Pick the per-occurrence sink class from the ``format`` setting."""
     fmt = get_setting_optional(instance, "format", "imas")
-
-    if fmt == "distill":
-        # Lazy: only the distill format pulls in xarray/zarr/the distiller.
-        from imas_muscle3.distill.sink import build_distill_factory
-
-        return build_distill_factory(instance, settings, s_ports)
-
-    sink_factory: SinkFactory
     if fmt == "raw":
-        sink_factory = RawSink
-    elif fmt == "imas":
+        return RawSink
+    if fmt == "imas":
         per_message = bool(
             get_setting_optional(instance, "per_message", False)
         )
-        sink_factory = partial(DBEntrySink, per_message=per_message)
-    else:
-        raise ValueError(
-            f"unknown recorder format '{fmt}'; use imas, raw or distill."
-        )
+        return partial(DBEntrySink, per_message=per_message)
+    if fmt == "distill":
+        # Lazy: only the distill format pulls in xarray/zarr/the distiller.
+        from imas_muscle3.distill.sink import build_distill_sink_factory
 
-    return lambda port, ids_name: OccurrenceRecorder(
-        settings.store_path / port, ids_name, sink_factory
+        return build_distill_sink_factory(instance)
+    raise ValueError(
+        f"unknown recorder format '{fmt}'; use imas, raw or distill."
     )
 
 
 if __name__ == "__main__":
-    recorder_main("recorder", _build_factory)
+    recorder_main("recorder", _build_sink_factory)

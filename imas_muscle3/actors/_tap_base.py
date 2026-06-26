@@ -132,10 +132,6 @@ class OccurrenceRecorder:
             self._sink.close()
 
 
-#: A factory mapping ``(port, ids_name)`` to that timeline's recorder.
-HandlerFactory = Callable[[str, str], OccurrenceRecorder]
-
-
 def connected_s_ports(instance: Instance) -> List[str]:
     """Sorted, connected ``S`` ports of a terminal recorder, validated.
 
@@ -154,9 +150,8 @@ def connected_s_ports(instance: Instance) -> List[str]:
 
 
 def serve_timelines(
-    s_ports: List[str],
+    recorders: Dict[str, OccurrenceRecorder],
     ids_names: Dict[str, str],
-    handler_factory: HandlerFactory,
     instance: Instance,
 ) -> Dict[str, BaseException]:
     """Drain every timeline concurrently, one worker thread per sender.
@@ -170,14 +165,14 @@ def serve_timelines(
     so a worker does not stop there.
 
     Returns a mapping of port -> exception for any failed timeline (empty on
-    success); handlers are always closed.
+    success); recorders are always closed.
     """
     # Build every IDS type's metadata once on the main thread (imas-python's
     # lazy cache is not thread-safe); workers then only read it.
     precompute_ids_metadata(ids_names.values())
     _disable_deadlock_detector(instance)
 
-    handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
+    s_ports = list(recorders)
     errors: Dict[str, BaseException] = {}
     errors_lock = threading.Lock()
     counts: Dict[str, int] = {p: 0 for p in s_ports}
@@ -186,7 +181,7 @@ def serve_timelines(
         workers = [
             threading.Thread(
                 target=_drain_ports,
-                args=(ports, handlers, counts, instance, errors, errors_lock),
+                args=(ports, recorders, counts, instance, errors, errors_lock),
                 name=f"recorder-{ports[0]}",
             )
             for ports in _group_ports_by_peer(instance, s_ports)
@@ -196,13 +191,13 @@ def serve_timelines(
         for worker in workers:
             worker.join()
     finally:
-        for port, handler in handlers.items():
+        for port, recorder in recorders.items():
             try:
-                handler.close()
+                recorder.close()
             except BaseException as exc:  # noqa: B036
                 errors.setdefault(port, exc)
                 logger.exception(
-                    "closing handler for timeline '%s' failed", port
+                    "closing recorder for timeline '%s' failed", port
                 )
 
     logger.info(
@@ -260,7 +255,7 @@ def _group_ports_by_peer(
 
 def _drain_ports(
     ports: List[str],
-    handlers: Dict[str, OccurrenceRecorder],
+    recorders: Dict[str, OccurrenceRecorder],
     counts: Dict[str, int],
     instance: Instance,
     errors: Dict[str, BaseException],
@@ -298,7 +293,7 @@ def _drain_ports(
                 )
                 continue
             try:
-                detail = handlers[port].handle(seq[port], msg)
+                detail = recorders[port].handle(seq[port], msg)
             except BaseException as exc:  # noqa: B036  -- surfaced to main
                 with errors_lock:
                     errors[port] = exc
@@ -317,7 +312,7 @@ class RecorderSettings:
     """Settings shared by every recorder format.
 
     Read once (constant across reuses); a format reads any extra settings
-    itself in its :data:`FactoryBuilder`.
+    itself in its :data:`SinkFactoryBuilder`.
     """
 
     store_path: Path
@@ -337,29 +332,26 @@ def read_recorder_settings(instance: Instance) -> RecorderSettings:
     return RecorderSettings(store_path=store_path)
 
 
-# Builds the per-timeline HandlerFactory once the ports and common settings are
-# known: (instance, settings, s_ports) -> HandlerFactory. This is where a
-# format reads its extra settings (e.g. distill's auto/config).
-FactoryBuilder = Callable[
-    [Instance, RecorderSettings, List[str]], HandlerFactory
-]
+# Reads the format's settings once the ports and common settings are known and
+# returns the sink class/partial used to make one sink per occurrence. This is
+# where a format reads its extra settings (e.g. distill's auto/config).
+SinkFactoryBuilder = Callable[[Instance, RecorderSettings], SinkFactory]
 
 
-def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
+def run_recorder(name: str, build_sink_factory: SinkFactoryBuilder) -> None:
     """Run the shared MUSCLE3 reuse loop for the terminal recorder.
 
-    ``build_factory(instance, settings, s_ports)`` is called once, after the
-    connected ``S`` ports are known, and returns the :data:`HandlerFactory`
-    used to make one :class:`OccurrenceRecorder` per timeline. Every connected
-    ``S`` port is drained to its real close, so this loop runs once even
-    when the peer keeps reusing; per-occurrence bookkeeping lives in the
-    recorder, not here.
+    ``build_sink_factory(instance, settings)`` is called once, after the
+    connected ``S`` ports are known, and returns the :data:`SinkFactory` used
+    to make one sink per occurrence. Every connected ``S`` port is drained to
+    its real close, so this loop runs once even when the peer keeps reusing;
+    per-occurrence bookkeeping lives in the :class:`OccurrenceRecorder`.
     """
     # Dynamic ports: no port description, ports come from the yMMSL config.
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
 
     settings: Optional[RecorderSettings] = None
-    factory: Optional[HandlerFactory] = None
+    sink_factory: Optional[SinkFactory] = None
     while instance.reuse_instance():
         s_ports = connected_s_ports(instance)
         if not s_ports:
@@ -380,9 +372,16 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
             # an explicit store_path leaves no stale occurrences behind.
             for port in s_ports:
                 shutil.rmtree(settings.store_path / port, ignore_errors=True)
-            factory = build_factory(instance, settings, s_ports)
-        # settings and factory are set together on the first reuse.
-        assert factory is not None
+            sink_factory = build_sink_factory(instance, settings)
+        # settings and sink_factory are set together on the first reuse.
+        assert settings is not None and sink_factory is not None
+
+        recorders = {
+            p: OccurrenceRecorder(
+                settings.store_path / p, ids_names[p], sink_factory
+            )
+            for p in s_ports
+        }
 
         logger.info(
             "%s recording %d timeline(s) %s to %s",
@@ -392,7 +391,7 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
             settings.store_path,
         )
 
-        errors = serve_timelines(s_ports, ids_names, factory, instance)
+        errors = serve_timelines(recorders, ids_names, instance)
 
         if errors:
             msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
@@ -400,10 +399,10 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
             raise RuntimeError(f"{name} timeline(s) failed: {msg}")
 
 
-def recorder_main(name: str, build_factory: FactoryBuilder) -> None:
+def recorder_main(name: str, build_sink_factory: SinkFactoryBuilder) -> None:
     """Recorder module entry point: set up logging, then run the loop."""
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
     )
-    run_recorder(name, build_factory)
+    run_recorder(name, build_sink_factory)
