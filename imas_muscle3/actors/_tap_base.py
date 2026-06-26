@@ -1,33 +1,21 @@
-"""Shared machinery for terminal *tap*-style actors.
+"""Shared machinery for the terminal recorder actor.
 
-A tap is a sink-only MUSCLE3 actor that drains an arbitrary number of
-independent *timelines* (one per connected ``S`` port) and does something with
-each received message. Two concrete taps build on this — :mod:`tap_component`
-(records one raw DBEntry per message) and :mod:`distill_component` (distills
-each message into compact scalars / profiles appended to a Zarr store) — and
-everything they share lives here:
+A recorder is a sink-only MUSCLE3 actor that drains an arbitrary number of
+independent *timelines* (one per connected ``S`` port) and writes each to disk
+via a pluggable :class:`Sink`. :mod:`recorder_component` picks the sink by a
+``format`` setting; everything the formats share lives here:
 
-- **Dynamic ports** (MUSCLE3 0.10): the :class:`~libmuscle.Instance` is created
-  without a port description, so the ports come from the yMMSL configuration.
-  Any connected ``S`` port whose name maps to a valid IDS name (an optional
-  ``_in`` suffix is stripped) is drained; see :func:`ids_name_from_port`.
-- **Concurrent draining, one thread per sender**: each timeline is drained by
-  its own worker thread, so a slow timeline never head-of-line blocks a busy
-  one (ports from the same sender share a thread — they share one libmuscle
-  ``MPPClient``, which is not concurrency-safe). Receives go through the
-  communicator, not ``instance.receive`` (which would shut the whole instance
-  down on the first port's close), and the deadlock detector is disabled for
-  the tap; see :func:`serve_timelines`. A timeline ends when its peer's port
-  *closes*; ``next_timestamp is None`` marks an intermediate stream restart,
-  not the end (see ``reuse_and_close.md``).
-- **Backpressure**: at shutdown the tap logs one line on what it recorded, and
-  warns *once* if it was write-bound (spent most of its time writing rather
-  than waiting for data) — meaning it is the bottleneck and senders back up.
-  No live monitoring thread; just the wall-clock split it already measures.
+- **Dynamic ports** (MUSCLE3 0.10): the instance is created without a port
+  description, so ports come from the yMMSL config. Any connected ``S`` port
+  whose name maps to an IDS (optional ``_in`` suffix stripped) is drained.
+- **One worker thread per sender**, so a slow timeline never head-of-line
+  blocks a busy one. Ports from one sender share a thread (they share a
+  libmuscle ``MPPClient``, which is not concurrency-safe). Receives go through
+  the communicator, not ``instance.receive`` (which shuts the whole instance
+  down on any one port's close), and the deadlock detector is disabled.
 
-A concrete tap supplies a :class:`TimelineHandler` factory to
-:func:`serve_timelines`; the per-timeline loop, timing and error plumbing are
-provided here.
+A timeline ends when its peer's port *closes*; ``next_timestamp is None`` is an
+intermediate stream restart (an outer-loop iteration boundary), not the end.
 """
 
 import logging
@@ -35,7 +23,6 @@ import shutil
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
 from typing import Callable, Dict, Iterable, List, Optional, Protocol
 
 from imas import IDSFactory
@@ -48,17 +35,12 @@ from imas_muscle3.utils import get_setting_optional
 
 logger = logging.getLogger()
 
-# Warn once at shutdown if the recorder spent at least this fraction of its
-# time writing rather than waiting for data: it is the bottleneck and senders
-# are backing up on it. A single diagnostic line, no live monitoring thread.
-_WRITE_BOUND_FRACTION = 0.8
-
 
 def ids_name_from_port(port_name: str) -> str:
     """Map a port name to the IDS name to deserialize it as.
 
-    The port name is taken to be the IDS name, with an optional trailing
-    ``_in`` suffix stripped. Raises if the result is not a valid IDS name.
+    The port name is the IDS name, with an optional trailing ``_in`` stripped.
+    Raises if the result is not a valid IDS name.
     """
     ids_name = port_name[:-3] if port_name.endswith("_in") else port_name
     if ids_name not in IDSFactory().ids_names():
@@ -167,15 +149,15 @@ class OccurrenceRecorder:
 
 
 def connected_s_ports(instance: Instance) -> List[str]:
-    """Sorted, connected ``S`` ports of a terminal tap, validated.
+    """Sorted, connected ``S`` ports of a terminal recorder, validated.
 
-    Raises if the instance has any non-``S`` ports, since a tap is terminal.
+    Raises if the instance has any non-``S`` ports, since it is terminal.
     """
     ports = instance.list_ports()
     for operator in (Operator.O_I, Operator.O_F, Operator.F_INIT):
         if ports.get(operator):
             raise RuntimeError(
-                f"A tap actor is terminal and only supports S ports; "
+                f"A recorder is terminal and only supports S ports; "
                 f"got {operator.name} ports {ports.get(operator)}."
             )
     return sorted(
@@ -191,47 +173,33 @@ def serve_timelines(
 ) -> Dict[str, BaseException]:
     """Drain every timeline concurrently, one worker thread per sender.
 
-    Each connected ``S`` port is a timeline. Ports fed by *distinct* senders
-    are drained in parallel threads, each blocking on its own ``receive``, so a
-    slow timeline never head-of-line blocks a busy one. Ports that share a
-    sender are drained by one thread (see :func:`_group_ports_by_peer`): they
-    share a single libmuscle ``MPPClient`` whose ``receive`` is not
-    concurrency-safe.
-
-    Each ``receive`` goes through the communicator, not ``instance.receive`` —
-    the latter calls ``Instance.__shutdown()`` on the first port's close,
-    severing this instance's connections to *every* peer; we detect each port's
-    ``ClosePort`` ourselves so one timeline ending doesn't cut off the others
-    (this also bypasses the MMSF sequence validator, which a terminal tap has
-    no submodel loop to satisfy). Concurrent receives additionally need
-    libmuscle's deadlock detector off — it asserts a single waiting receive per
-    instance, so concurrent waits would crash the manager (see
-    :func:`_disable_deadlock_detector`). A ``next_timestamp is None`` is an
-    intermediate close that arrives as a normal message, so a worker does not
-    stop there (see ``reuse_and_close.md``).
+    Ports fed by *distinct* senders drain in parallel threads, each blocking on
+    its own ``receive``; ports sharing a sender drain on one thread (see
+    :func:`_group_ports_by_peer`). Each ``receive`` goes through the
+    communicator and the ``ClosePort`` is detected here, so one timeline ending
+    does not cut off the others (``instance.receive`` would shut the whole
+    instance down). A ``next_timestamp is None`` arrives as a normal message,
+    so a worker does not stop there.
 
     Returns a mapping of port -> exception for any failed timeline (empty on
-    success); the caller decides how to surface it. Handlers are always closed.
+    success); handlers are always closed.
     """
-    # Build every IDS type's metadata once, on the main thread: imas-python
-    # caches it lazily on first construction and that is not thread-safe, so
-    # the per-sender workers must only read it (see precompute_ids_metadata).
+    # Build every IDS type's metadata once on the main thread (imas-python's
+    # lazy cache is not thread-safe); workers then only read it.
     precompute_ids_metadata(ids_names.values())
     _disable_deadlock_detector(instance)
 
     handlers = {p: handler_factory(p, ids_names[p]) for p in s_ports}
     errors: Dict[str, BaseException] = {}
     errors_lock = threading.Lock()
-    # Per port [messages, seconds waiting on receive, seconds writing]: each
-    # port is written by its own worker thread only, summed after the join.
-    stats: Dict[str, List[float]] = {p: [0.0, 0.0, 0.0] for p in s_ports}
+    counts: Dict[str, int] = {p: 0 for p in s_ports}
 
     try:
         workers = [
             threading.Thread(
                 target=_drain_ports,
-                args=(ports, handlers, stats, instance, errors, errors_lock),
-                name=f"tap-{ports[0]}",
+                args=(ports, handlers, counts, instance, errors, errors_lock),
+                name=f"recorder-{ports[0]}",
             )
             for ports in _group_ports_by_peer(instance, s_ports)
         ]
@@ -249,40 +217,21 @@ def serve_timelines(
                     "closing handler for timeline '%s' failed", port
                 )
 
-    _log_summary(stats)
+    logger.info(
+        "recorder: %d message(s) across %d timeline(s)",
+        sum(counts.values()),
+        len(counts),
+    )
     return errors
 
 
-def _log_summary(stats: Dict[str, List[float]]) -> None:
-    """Log one line on what was recorded, and warn if the tap was write-bound.
-
-    ``stats`` maps each port to ``[messages, t_wait, t_write]``. If the tap
-    spent most of its time writing rather than waiting for data it is the
-    bottleneck and senders back up on it -- the one diagnostic worth flagging.
-    """
-    total = int(sum(s[0] for s in stats.values()))
-    wait = sum(s[1] for s in stats.values())
-    write = sum(s[2] for s in stats.values())
-    logger.info(
-        "recorder: %d message(s) across %d timeline(s)", total, len(stats)
-    )
-    busy = wait + write
-    if total and busy > 0 and write / busy >= _WRITE_BOUND_FRACTION:
-        logger.warning(
-            "recorder is write-bound (%.0f%% of its time writing, not waiting "
-            "for data): it may not keep up and senders back up on it.",
-            100 * write / busy,
-        )
-
-
 def _disable_deadlock_detector(instance: Instance) -> None:
-    """Turn off libmuscle's receive-timeout deadlock detector for this tap.
+    """Turn off libmuscle's receive-timeout deadlock detector for this actor.
 
-    The detector tracks a single waiting receive per instance (it asserts as
-    much in the manager), so the concurrent waits of the per-sender drain
-    threads would crash it. A terminal tap only receives, so it can never be
-    part of a deadlock cycle, so disabling it is safe. Best-effort: if a
-    libmuscle version no longer exposes the hook, set
+    The detector tracks a single waiting receive per instance, so the
+    concurrent waits of the per-sender drain threads would crash it. A terminal
+    recorder only receives, so it can never be part of a deadlock cycle.
+    Best-effort: if the hook is gone, set
     ``<recorder>.muscle_deadlock_receive_timeout: -1.0`` in the workflow.
     """
     try:
@@ -299,10 +248,9 @@ def _group_ports_by_peer(
 ) -> List[List[str]]:
     """Group ports by the sender instance that feeds them.
 
-    Ports from the same sender share one libmuscle ``MPPClient`` (one TCP
-    connection, whose ``receive`` is not concurrency-safe), so they must drain
-    on one thread; ports from different senders drain concurrently. Falls back
-    to one group per port (assuming distinct senders) if libmuscle's peer info
+    Ports from one sender share a single ``MPPClient`` (whose ``receive`` is
+    not concurrency-safe), so they drain on one thread; ports from different
+    senders drain concurrently. Falls back to one group per port if peer info
     cannot be read.
     """
     try:
@@ -325,7 +273,7 @@ def _group_ports_by_peer(
 def _drain_ports(
     ports: List[str],
     handlers: Dict[str, TimelineHandler],
-    stats: Dict[str, List[float]],
+    counts: Dict[str, int],
     instance: Instance,
     errors: Dict[str, BaseException],
     errors_lock: "threading.Lock",
@@ -334,22 +282,19 @@ def _drain_ports(
 
     With a single port per sender (the usual case) this is just that port's
     blocking receive loop; co-located ports take turns so the shared connection
-    is never used concurrently. Receives go through the communicator and the
-    ClosePort is detected here (see :func:`serve_timelines`).
+    is never used concurrently.
     """
     active = list(ports)
     seq = {p: 0 for p in ports}
     while active:
         for port in list(active):
             try:
-                t0 = perf_counter()
                 msg, _ = instance._communicator.receive_message(port)
-                t1 = perf_counter()
             except (RuntimeError, OSError) as exc:
                 # A genuine mid-stream failure (peer crashed without a
                 # ClosePort, or a torn socket). The data so far is on disk and
-                # a real crash is reported by the manager via exit codes, so we
-                # end this timeline and let the other workers carry on.
+                # the manager reports a real crash via exit codes, so we end
+                # this timeline and let the other workers carry on.
                 active.remove(port)
                 logger.warning(
                     "timeline '%s' ended after %d messages: %r",
@@ -366,7 +311,6 @@ def _drain_ports(
                 continue
             try:
                 detail = handlers[port].handle(seq[port], msg)
-                t2 = perf_counter()
             except BaseException as exc:  # noqa: B036  -- surfaced to main
                 with errors_lock:
                     errors[port] = exc
@@ -375,30 +319,26 @@ def _drain_ports(
                 )
                 active.remove(port)
                 continue
-            st = stats[port]
-            st[0] += 1
-            st[1] += t1 - t0  # waiting on receive
-            st[2] += t2 - t1  # writing (handler)
+            counts[port] += 1
             logger.info("handled %s t=%.4e -> %s", port, msg.timestamp, detail)
             seq[port] += 1
 
 
 @dataclass
 class RecorderSettings:
-    """Settings shared by every recorder component.
+    """Settings shared by every recorder format.
 
-    Read once (constant across reuses); a component reads any format-specific
-    settings itself, in its :data:`FactoryBuilder`.
+    Read once (constant across reuses); a format reads any extra settings
+    itself in its :data:`FactoryBuilder`.
     """
 
     store_path: Path
 
 
 def read_recorder_settings(instance: Instance) -> RecorderSettings:
-    """Read the settings common to all recorder components.
+    """Read the common recorder settings.
 
-    ``store_path`` defaults to the instance's run folder (its working directory
-    in the MUSCLE3 run).
+    ``store_path`` defaults to the instance's run folder.
     """
     store_path_setting = get_setting_optional(instance, "store_path")
     store_path = (
@@ -411,25 +351,21 @@ def read_recorder_settings(instance: Instance) -> RecorderSettings:
 
 # Builds the per-timeline HandlerFactory once the ports and common settings are
 # known: (instance, settings, s_ports) -> HandlerFactory. This is where a
-# component reads any format-specific settings (e.g. distill's auto/config).
+# format reads its extra settings (e.g. distill's auto/config).
 FactoryBuilder = Callable[
     [Instance, RecorderSettings, List[str]], HandlerFactory
 ]
 
 
 def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
-    """Run the shared MUSCLE3 reuse loop for a terminal recorder component.
+    """Run the shared MUSCLE3 reuse loop for the terminal recorder.
 
-    ``name`` labels log / error messages (e.g. ``"tap"``, ``"distill"``).
-    ``build_factory`` is called once, after the connected ``S`` ports are known
-    and the common settings read, as ``build_factory(instance, settings,
-    s_ports)``; it returns the :data:`HandlerFactory` used to make one
-    :class:`TimelineHandler` per timeline.
-
-    Every connected ``S`` port is drained to its real close (see
-    :func:`serve_timelines` and ``reuse_and_close.md``), so this loop runs
-    effectively once even when the peer keeps reusing; per-occurrence /
-    per-message bookkeeping lives in the handler, not here.
+    ``build_factory(instance, settings, s_ports)`` is called once, after the
+    connected ``S`` ports are known, and returns the :data:`HandlerFactory`
+    used to make one :class:`TimelineHandler` per timeline. Every connected
+    ``S`` port is drained to its real close, so this loop runs once even
+    when the peer keeps reusing; per-occurrence bookkeeping lives in the
+    handler, not here.
     """
     # Dynamic ports: no port description, ports come from the yMMSL config.
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
@@ -445,22 +381,19 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
                 name,
             )
             break
-        # Validate all port -> IDS mappings up front so a bad config fails
-        # fast, before any handler is built.
+        # Validate all port -> IDS mappings up front so a bad config fails.
         ids_names = {p: ids_name_from_port(p) for p in s_ports}
 
         if settings is None:
             settings = read_recorder_settings(instance)
             settings.store_path.mkdir(parents=True, exist_ok=True)
             # Clear this recorder's own per-port dirs up front (never
-            # store_path itself, which may be the instance's run folder), so a
-            # re-run into an explicit store_path can't leave stale occurrences
-            # behind. On the default fresh run folder this is a harmless no-op.
+            # store_path itself, which may be the run folder), so a re-run into
+            # an explicit store_path leaves no stale occurrences behind.
             for port in s_ports:
                 shutil.rmtree(settings.store_path / port, ignore_errors=True)
             factory = build_factory(instance, settings, s_ports)
-        # settings and factory are set together on the first reuse, so both are
-        # non-None here for every iteration.
+        # settings and factory are set together on the first reuse.
         assert factory is not None
 
         logger.info(
@@ -480,7 +413,7 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
 
 
 def recorder_main(name: str, build_factory: FactoryBuilder) -> None:
-    """Module entry point for a recorder: set up logging, then run the loop."""
+    """Recorder module entry point: set up logging, then run the loop."""
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,

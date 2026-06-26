@@ -1,41 +1,7 @@
-"""Distill recorder actor for MUSCLE3.
-
-A terminal (sink-only) actor that, instead of storing each raw IDS (see
-:mod:`tap_component`), *distills* every message into compact scalars / profiles
-/ maps and appends them along ``time`` to a Zarr store — one store per
-*occurrence* (outer-loop iteration), so iterations sit side by side. The result
-is a small, self-describing, append-only dataset a viewer can plot live as the
-run writes it or open afterwards.
-
-The shared drain, occurrence numbering and reuse loop live in
-:mod:`imas_muscle3.actors._tap_base`
-(:class:`~imas_muscle3.actors._tap_base.OccurrenceRecorder`); this module only
-supplies the distill-and-append sink and its settings.
-
-Settings (all optional):
-
-- ``store_path``: where the per-port output goes (default: the instance's run
-  folder).
-- ``auto`` (default ``true``): auto-discover and record every time-dependent
-  0D/1D/2D ``FLT`` quantity in each IDS.
-- ``config``: path to a Python file defining ``extract(ids) -> dict[str,
-  xarray.Dataset]`` for derived/geometric quantities; recorded in addition to
-  (or, with ``auto: false``, instead of) the auto-discovered ones.
-
-Example yMMSL (yMMSL v0.2)::
-
-    components:
-      distill:
-        implementation: distill_component
-        ports:
-          s: [equilibrium_in, core_profiles_in]
-    settings:
-      distill.store_path: /scratch/distill_store
-    implementations:
-      distill_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.distill_component
-"""
+"""The distill :class:`Sink` and its factory, for the recorder's ``distill``
+format. Distills each message into compact arrays and appends them along
+``time`` to one Zarr store per occurrence — small, self-describing, and
+live-tailable as the run writes it."""
 
 import logging
 import runpy
@@ -49,11 +15,9 @@ from imas_muscle3.actors._tap_base import (
     OccurrenceRecorder,
     RecorderSettings,
     ids_from_message,
-    recorder_main,
 )
-from imas_muscle3.distill import Distiller, ZarrSink
-from imas_muscle3.distill.distiller import ExtractFn
-from imas_muscle3.distill.zarr_sink import write_root_attrs
+from imas_muscle3.distill.distiller import Distiller, ExtractFn
+from imas_muscle3.distill.zarr_sink import ZarrSink, write_root_attrs
 from imas_muscle3.utils import get_setting_optional
 
 logger = logging.getLogger()
@@ -105,10 +69,10 @@ class DistillSink:
         write_root_attrs(self._store, meta)
 
 
-def _build_factory(
+def build_distill_factory(
     instance: Instance, settings: RecorderSettings, s_ports: List[str]
 ) -> HandlerFactory:
-    """Read distill-specific settings and build the per-timeline factory."""
+    """Read distill settings (``auto``, ``config``) and build the factory."""
     auto = get_setting_optional(instance, "auto", True)
     config = get_setting_optional(instance, "config")
     assert auto is not None
@@ -126,7 +90,3 @@ def _build_factory(
         )
 
     return factory
-
-
-if __name__ == "__main__":
-    recorder_main("distill", _build_factory)

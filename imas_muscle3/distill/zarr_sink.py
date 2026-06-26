@@ -1,24 +1,17 @@
 """Append distilled datasets for one timeline to a Zarr store, live.
 
-Each distilled IDS (and config group) becomes a Zarr *group* in one store. A
-recorder hands the sink one dataset per received message (a single slice, or a
-whole trace); the sink **writes it to disk immediately**, extending the group
-along ``time``, so the store is durable and live-tailable as the run
-progresses rather than only once the timeline ends.
+Each distilled IDS (and config group) becomes a Zarr *group*. The sink writes
+each received dataset (a slice, or a whole trace) to disk immediately,
+extending the group along ``time``, so the store is durable and live-tailable
+mid-run.
 
-A consistent stream (same quantities, same grid every step — the common case)
-is a plain ``time`` append. When a message doesn't fit the group's on-disk
-schema, the append is rebuilt with :func:`_combine` (:func:`xarray.concat`,
-outer join on ``time``) over the existing store plus the new message, which
-keeps the store robust to the messy realities of real IDS streams:
-
-* **gaps / inhomogeneous time** — a quantity may be absent on some steps (e.g.
-  ``profiles_1d`` empty on TORAX's first solver steps, whose root ``time``
-  nonetheless advances). The union of time values is taken and missing entries
-  are ``NaN``-filled, so every quantity shares one consistent ``time`` axis.
-* **ragged non-time dims** — a profile's length can vary between steps (a
-  re-gridded equilibrium); non-time dims are padded with ``NaN`` to the max
-  width.
+A consistent stream (same quantities and grid every step — the common case) is
+a plain ``time`` append. A message that doesn't fit the group's on-disk schema
+is rebuilt with :func:`_combine` (outer join on ``time``) over the store so far
+plus the new message, keeping it robust to real IDS streams: **gaps** (a
+quantity absent on some steps, e.g. empty ``profiles_1d`` while ``time`` runs)
+are ``NaN``-filled on a union time axis, and **ragged non-time dims** (a
+re-gridded profile) are ``NaN``-padded to the max width.
 """
 
 import logging

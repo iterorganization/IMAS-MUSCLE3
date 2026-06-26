@@ -1,69 +1,51 @@
 .. _`actor_recorder`:
 
-Recorder actors
-===============
+Recorder actor
+==============
 
-Two terminal (sink-only) actors that tap the live traffic of a running workflow
-and write it to disk, without disturbing the coupling:
+A terminal (sink-only) actor that taps the live traffic of a running workflow
+and writes it to disk without disturbing the coupling. It uses MUSCLE3 dynamic
+ports: every connected ``S`` port is an independent timeline, its name the IDS
+it carries (an optional ``_in`` suffix is stripped). Each timeline is written as
+its messages arrive, in full until that port's stream closes; a driven sender
+re-running each outer-loop iteration is recorded across every iteration, one
+store per occurrence ``NNNN``.
 
-- **tap** (``imas_muscle3.actors.tap_component``) stores the IDSs verbatim — a
-  faithful, re-openable IMAS copy.
-- **distill** (``imas_muscle3.actors.distill_component``) reduces each IDS to
-  compact scalars, profiles and maps in a Zarr store — a small, self-describing
-  dataset a viewer can plot live or open afterwards.
-- **raw** (``imas_muscle3.actors.raw_component``) writes each MUSCLE3 message
-  verbatim — its frame plus the undecoded payload — to a msgpack stream, no
-  IMAS decode: the cheapest, most faithful capture.
+.. code-block:: yaml
 
-Each writes one store per *occurrence* (outer-loop iteration), so iterations sit
-side by side.
+    implementations:
+      recorder:
+        executable: python
+        args: -u -m imas_muscle3.actors.recorder_component
 
-.. code-block:: bash
+Formats
+-------
 
-  implementations:
-    tap_component:
-      executable: python
-      args: -u -m imas_muscle3.actors.tap_component
-    distill_component:
-      executable: python
-      args: -u -m imas_muscle3.actors.distill_component
-    raw_component:
-      executable: python
-      args: -u -m imas_muscle3.actors.raw_component
+The ``format`` setting picks what is written:
 
-.. include:: _recorder_model.rst
+* ``imas`` (default): each IDS verbatim as an IMAS DBEntry, re-openable with
+  ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")``.
+* ``raw``: each MUSCLE3 message (frame + undecoded payload) as a msgpack stream
+  of ``{t, next_t, data}`` records, read via ``msgpack.Unpacker``; the cheapest,
+  most faithful capture.
+* ``distill``: each IDS reduced to compact arrays in a Zarr store, opened with
+  ``xarray.open_zarr("<...>/0000.zarr", group=<ids>)``.
 
-Output
-------
-
-Each occurrence ``NNNN`` is one store per port::
-
-  <store_path>/<port_name>/<NNNN>   # tap: DBEntry; distill: .zarr; raw: .msgpack
-
-re-openable with ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")`` (tap),
-``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill), or as a msgpack
-stream of ``{t, next_t, data}`` records via ``msgpack.Unpacker`` (raw), the
-``data`` payload replayed with ``IDSFactory().new(<ids>).deserialize(...)``.
-``store_path`` defaults to the instance's run folder.
+Output is ``<store_path>/<port>/<NNNN>`` per occurrence (``.msgpack`` for raw,
+``.zarr`` for distill).
 
 Settings
 --------
 
-* Optional
+All optional:
 
-  - **store_path**: (string) Root for the output. Defaults to the run folder.
-  - **per_message** (tap): (bool) Write each message as its own DBEntry
-    (``<NNNN>_<seq>``), readable while the run is going, instead of one trace
-    per occurrence. Defaults to ``false``.
-  - **auto** (distill): (bool) Record every time-dependent 0D/1D/2D ``FLT``
-    quantity (GGD/grid excluded). Defaults to ``true``.
-  - **config** (distill): (string) Path to a Python file defining
-    ``extract(ids) -> dict[str, xarray.Dataset]`` for derived/geometric
-    quantities, recorded alongside (or, with ``auto: false``, instead of) the
-    auto-discovered ones.
-
-Ports
------
-
-Any connected ``S`` port; its name is the IDS it carries, optionally ``_in``-
-suffixed. Not bound to a specific DD version.
+* **store_path**: root for the output. Defaults to the run folder.
+* **format**: ``imas`` | ``raw`` | ``distill``. Defaults to ``imas``.
+* **per_message** (``imas``): write each message as its own DBEntry
+  (``<NNNN>_<seq>``), readable while the run is going. Defaults to ``false``.
+* **auto** (``distill``): record every time-dependent 0D/1D/2D ``FLT`` quantity
+  (GGD/grid excluded). Defaults to ``true``.
+* **config** (``distill``): path to a Python file defining
+  ``extract(ids) -> dict[str, xarray.Dataset]`` for derived/geometric
+  quantities, recorded alongside (or, with ``auto: false``, instead of) the
+  auto-discovered ones.

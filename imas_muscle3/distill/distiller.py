@@ -1,34 +1,21 @@
 """Select distillable IDS quantities and tensorize them with imas-python.
 
-The :class:`Distiller` is the panel-free distillation core behind the
-:mod:`~imas_muscle3.actors.distill_component` recorder. For each received
-single-time-slice IDS it returns a mapping ``group -> xarray.Dataset`` ready to
-append along ``time``.
+For each received IDS the :class:`Distiller` returns ``group -> Dataset`` ready
+to append along ``time``. The datasets are built by imas-python's own
+:func:`imas.util.to_xarray`, so they follow its netCDF conventions: dotted DD
+variable names (``profiles_1d.electrons.density``), ``time`` as a real
+coordinate, DD ``units`` on each quantity, and coordinate arrays as proper
+dataset coordinates.
 
-The datasets are built by **imas-python's own** :func:`imas.util.to_xarray`, so
-they follow exactly the conventions of imas-python's netCDF backend and
-``DBEntry.get(...).to_xarray()``:
-
-* variable names are the DD path with ``/`` replaced by ``.``
-  (``profiles_1d.electrons.density``);
-* ``time`` is a real coordinate dimension (length 1 per received slice), so
-  slices concatenate cleanly;
-* each quantity carries its DD ``units``, ``documentation`` and a CF-style
-  ``coordinates`` attribute, and its coordinate arrays are proper dataset
-  coordinates (``profiles_1d.grid.rho_tor_norm``);
-* non-time dimensions are named after their coordinate path (``…:i``) and float
-  gaps are filled with ``NaN``.
-
-The distiller's only job is to *choose which paths* to tensorize:
+The distiller only *chooses which paths* to tensorize:
 
 * **auto-discovery** (default): every time-dependent 0D/1D/2D ``FLT`` quantity,
-  found once per IDS type by walking the tree (GGD/grid subtrees are
-  skipped, as they explode into tens of thousands of nodes). All of them
-  are tensorized into one dataset keyed by the IDS name.
+  found once per IDS type by walking the tree (GGD/grid subtrees skipped, as
+  they explode into tens of thousands of nodes), into one dataset keyed by the
+  IDS name.
 * an optional **config callable** ``extract(ids) -> dict[str, xarray.Dataset]``
-  for derived/geometric quantities (separatrix, contours, ...) that
-  auto-discovery cannot express. Its datasets are recorded as extra groups and
-  must likewise hold a single ``time`` step.
+  for derived/geometric quantities (separatrix, contours) that auto-discovery
+  cannot express, recorded as extra groups (each a single ``time`` step).
 """
 
 import logging
