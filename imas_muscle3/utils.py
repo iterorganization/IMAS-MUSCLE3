@@ -1,4 +1,4 @@
-from typing import List, TypeVar
+from typing import List, Optional, TypeVar, cast
 
 from libmuscle import Instance
 
@@ -6,6 +6,23 @@ from libmuscle import Instance
 from ymmsl.v0_2 import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
+
+
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: Optional[TSetting] = None,
+) -> Optional[TSetting]:
+    """Get an optional setting, returning ``default`` when unset.
+
+    libmuscle's ``Instance.get_setting(default=...)`` re-raises ``KeyError``
+    when the default is ``None``, so it cannot express "optional, may be None".
+    This helper covers that case.
+    """
+    try:
+        return cast(TSetting, instance.get_setting(setting_name))
+    except KeyError:
+        return default
 
 
 def get_port_list(instance: Instance, operator: Operator) -> List[str]:
