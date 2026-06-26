@@ -55,6 +55,7 @@ def test_dbentry_sink_per_message(tmp_path, equilibrium):
 
 
 def test_raw_sink_frames_and_replays(tmp_path, equilibrium):
+    import msgpack
     from imas import IDSFactory
 
     from imas_muscle3.actors.raw_component import RawSink
@@ -63,21 +64,19 @@ def test_raw_sink_frames_and_replays(tmp_path, equilibrium):
     base.parent.mkdir(parents=True)
     data = bytes(equilibrium.serialize())
     sink = RawSink(base, "equilibrium")
-    sink.write(Message(0.0, None, data=data))
+    sink.write(Message(0.0, 1.0, data=data))
     sink.write(Message(1.0, None, data=data))
     sink.close()
 
-    raw = (base.parent / "0000.raw").read_bytes()
-    frames, off = [], 0
-    while off < len(raw):
-        n = int.from_bytes(raw[off : off + 8], "big")
-        off += 8
-        frames.append(raw[off : off + n])
-        off += n
-    assert len(frames) == 2 and frames[0] == data
+    with open(base.parent / "0000.msgpack", "rb") as fh:
+        records = list(msgpack.Unpacker(fh, raw=False))
+    # The MUSCLE3 frame is preserved alongside the undecoded payload.
+    assert [r["t"] for r in records] == [0.0, 1.0]
+    assert [r["next_t"] for r in records] == [1.0, None]
+    assert records[0]["data"] == data
 
     eq = IDSFactory().new("equilibrium")
-    eq.deserialize(frames[0])
+    eq.deserialize(records[0]["data"])
     assert all(eq.time == equilibrium.time)
 
 

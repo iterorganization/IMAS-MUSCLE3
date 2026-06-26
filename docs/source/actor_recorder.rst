@@ -11,8 +11,9 @@ and write it to disk, without disturbing the coupling:
 - **distill** (``imas_muscle3.actors.distill_component``) reduces each IDS to
   compact scalars, profiles and maps in a Zarr store — a small, self-describing
   dataset a viewer can plot live or open afterwards.
-- **raw** (``imas_muscle3.actors.raw_component``) writes each message's wire
-  bytes verbatim, no IMAS decode — the cheapest, most faithful capture.
+- **raw** (``imas_muscle3.actors.raw_component``) writes each MUSCLE3 message
+  verbatim — its frame plus the undecoded payload — to a msgpack stream, no
+  IMAS decode: the cheapest, most faithful capture.
 
 Each writes one store per *occurrence* (outer-loop iteration), so iterations sit
 side by side.
@@ -37,12 +38,13 @@ Output
 
 Each occurrence ``NNNN`` is one store per port::
 
-  <store_path>/<port_name>/<NNNN>       # tap: DBEntry; distill: .zarr; raw: .raw
+  <store_path>/<port_name>/<NNNN>   # tap: DBEntry; distill: .zarr; raw: .msgpack
 
 re-openable with ``imas.DBEntry("imas:hdf5?path=<...>/0000", "r")`` (tap),
-``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill), or by replaying
-the length-framed wire bytes (raw). ``store_path`` defaults to the instance's
-run folder.
+``xarray.open_zarr("<...>/0000.zarr", group=<ids>)`` (distill), or as a msgpack
+stream of ``{t, next_t, data}`` records via ``msgpack.Unpacker`` (raw), the
+``data`` payload replayed with ``IDSFactory().new(<ids>).deserialize(...)``.
+``store_path`` defaults to the instance's run folder.
 
 Settings
 --------

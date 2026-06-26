@@ -1,11 +1,16 @@
 """Raw recorder actor for MUSCLE3.
 
-A terminal (sink-only) actor that captures each received message's *wire bytes*
-verbatim — no IMAS decode at all — to one length-framed file per *occurrence*
-(outer-loop iteration), ``<store_path>/<port>/<NNNN>.raw``. It is the cheapest,
-most faithful capture (no deserialize/serialize round-trip) and is flushed per
-message, so it can be tailed while the run is going. Replay each frame with
-``IDSFactory().new(<ids>).deserialize(bytes)`` (the IDS is the port's name).
+A terminal (sink-only) actor that captures each received MUSCLE3 message
+verbatim — its frame (``timestamp``, ``next_timestamp``) plus the undecoded
+payload — to one msgpack stream per *occurrence* (outer-loop iteration),
+``<store_path>/<port>/<NNNN>.msgpack``. It is the cheapest, most faithful
+capture (no IMAS deserialize/serialize round-trip) and is flushed per message,
+so it can be tailed while the run is going.
+
+Each record is a msgpack map ``{"t", "next_t", "data"}``; read them back as a
+stream with :class:`msgpack.Unpacker`. ``data`` is the IMAS-serialized IDS
+payload — replay with ``IDSFactory().new(<ids>).deserialize(rec["data"])`` (the
+IDS is the port's name).
 
 The shared drain, occurrence numbering and reuse loop live in
 :mod:`imas_muscle3.actors._tap_base`; this module only supplies the raw sink.
@@ -27,6 +32,7 @@ Example yMMSL (yMMSL v0.2)::
 from pathlib import Path
 from typing import BinaryIO, List, Optional
 
+import msgpack  # type: ignore[import-untyped]
 from libmuscle import Instance, Message
 
 from imas_muscle3.actors._tap_base import (
@@ -38,24 +44,28 @@ from imas_muscle3.actors._tap_base import (
 
 
 class RawSink:
-    """A :class:`~imas_muscle3.actors._tap_base.Sink` writing each message's
-    raw wire bytes to one length-framed file per occurrence (``<base>.raw``).
+    """A :class:`~imas_muscle3.actors._tap_base.Sink` writing each MUSCLE3
+    message as a msgpack record to one stream per occurrence
+    (``<base>.msgpack``).
 
-    Each frame is an 8-byte big-endian length followed by the serialized IDS;
-    flushed per message so a reader can tail it live.
+    Each record is a map ``{"t", "next_t", "data"}`` — the frame plus the
+    undecoded wire payload — flushed per message so a reader can tail it live.
     """
 
     def __init__(self, base: Path, ids_name: str) -> None:
-        self._path = base.with_suffix(".raw")
+        self._path = base.with_suffix(".msgpack")
         self._fh: Optional[BinaryIO] = None
 
     def write(self, msg: Message) -> str:
         if self._fh is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             self._fh = open(self._path, "wb")
-        data = bytes(msg.data)
-        self._fh.write(len(data).to_bytes(8, "big"))
-        self._fh.write(data)
+        record = {
+            "t": msg.timestamp,
+            "next_t": msg.next_timestamp,
+            "data": bytes(msg.data),
+        }
+        self._fh.write(msgpack.packb(record, use_bin_type=True))
         self._fh.flush()
         return str(self._path)
 
@@ -68,7 +78,7 @@ class RawSink:
 def _build_factory(
     instance: Instance, settings: RecorderSettings, s_ports: List[str]
 ) -> HandlerFactory:
-    """Raw capture has no extra settings; one raw file per occurrence."""
+    """Raw capture has no extra settings; one msgpack stream per occurrence."""
     return lambda port, ids_name: OccurrenceRecorder(
         settings.store_path / port, ids_name, RawSink
     )
