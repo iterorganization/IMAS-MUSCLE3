@@ -70,23 +70,6 @@ def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
     return ids
 
 
-class TimelineHandler(Protocol):
-    """Records one timeline's messages. One per port, used by one thread (so it
-    need not be thread-safe); built by a factory given to serve_timelines."""
-
-    def handle(self, seq: int, msg: Message) -> str:
-        """Record message ``seq``; return a short detail to log (a URI)."""
-        ...
-
-    def close(self) -> None:
-        """Release per-timeline resources after the timeline ends."""
-        ...
-
-
-#: A factory mapping ``(port, ids_name)`` to a handler for that timeline.
-HandlerFactory = Callable[[str, str], TimelineHandler]
-
-
 class Sink(Protocol):
     """Writes one occurrence's messages to disk in a given format.
 
@@ -110,10 +93,11 @@ SinkFactory = Callable[[Path, str], Sink]
 
 
 class OccurrenceRecorder:
-    """A :class:`TimelineHandler` that writes each outer-loop iteration to its
-    own occurrence store ``<store_dir>/<NNNN>``, rolling on a stream restart (a
-    message with no ``next_timestamp``, or time stepping backwards).
-    All format-specific work lives in the injected :data:`SinkFactory`.
+    """Records one timeline, writing each outer-loop iteration to its own
+    occurrence store ``<store_dir>/<NNNN>`` and rolling on a stream restart (a
+    message with no ``next_timestamp``, or time stepping backwards). All
+    format-specific work lives in the injected :data:`SinkFactory`. One per
+    port, used by one thread, so it need not be thread-safe.
     """
 
     def __init__(
@@ -146,6 +130,10 @@ class OccurrenceRecorder:
     def close(self) -> None:
         if self._sink is not None:
             self._sink.close()
+
+
+#: A factory mapping ``(port, ids_name)`` to that timeline's recorder.
+HandlerFactory = Callable[[str, str], OccurrenceRecorder]
 
 
 def connected_s_ports(instance: Instance) -> List[str]:
@@ -272,7 +260,7 @@ def _group_ports_by_peer(
 
 def _drain_ports(
     ports: List[str],
-    handlers: Dict[str, TimelineHandler],
+    handlers: Dict[str, OccurrenceRecorder],
     counts: Dict[str, int],
     instance: Instance,
     errors: Dict[str, BaseException],
@@ -362,10 +350,10 @@ def run_recorder(name: str, build_factory: FactoryBuilder) -> None:
 
     ``build_factory(instance, settings, s_ports)`` is called once, after the
     connected ``S`` ports are known, and returns the :data:`HandlerFactory`
-    used to make one :class:`TimelineHandler` per timeline. Every connected
+    used to make one :class:`OccurrenceRecorder` per timeline. Every connected
     ``S`` port is drained to its real close, so this loop runs once even
     when the peer keeps reusing; per-occurrence bookkeeping lives in the
-    handler, not here.
+    recorder, not here.
     """
     # Dynamic ports: no port description, ports come from the yMMSL config.
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
