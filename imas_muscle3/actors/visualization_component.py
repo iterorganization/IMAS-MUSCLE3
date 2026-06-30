@@ -2,6 +2,7 @@
 MUSCLE3 actor for visualization
 """
 
+import contextlib
 import logging
 import time
 from typing import Dict
@@ -71,7 +72,7 @@ def main() -> None:
     ]
     while instance.reuse_instance():
         if instance.resuming():
-            pass
+            msg = instance.load_snapshot()
         if instance.should_init():
             pass
 
@@ -101,61 +102,54 @@ def main() -> None:
         assert throttle_interval is not None
 
         is_running = True
-        while is_running:
-            md_dict = handle_machine_description(instance, first_run)
-            if first_run:
-                visualization_actor = VisualizationActor(
-                    plot_file_path,
-                    port,
-                    md_dict,
-                    open_browser,
-                    extract_all,
-                    automatic_mode,
-                )
-                first_run = False
-
-            assert visualization_actor is not None
-            common_time = None
-            for port_name in ports_in:
-                msg = instance.receive(port_name)
-                t_cur = msg.timestamp
-                ids_name = port_name.replace("_in", "")
-
-                temp_ids = IDSFactory().new(ids_name)
-                temp_ids.deserialize(msg.data)
-
-                # Ensure the IDSs have the same time basis
-                if common_time is None:
-                    common_time = temp_ids.time
-                else:
-                    if not (temp_ids.time == common_time).all():
-                        raise ValueError(
-                            f"Time mismatch detected in IDS {ids_name}"
+        try:
+            with contextlib.ExitStack() as stack:
+                while is_running:
+                    md_dict = handle_machine_description(instance, first_run)
+                    if first_run:
+                        visualization_actor = VisualizationActor(
+                            plot_file_path,
+                            port,
+                            md_dict,
+                            open_browser,
+                            extract_all,
+                            automatic_mode,
+                            keep_alive=bool(keep_alive),
                         )
+                        stack.enter_context(visualization_actor)
+                        first_run = False
 
-                visualization_actor.state.extract_data(temp_ids)
-                if msg.next_timestamp is None:
-                    is_running = False
-            current_time = time.time()
-            if current_time - last_trigger_time >= throttle_interval:
+                    assert visualization_actor is not None
+                    for port_name in ports_in:
+                        msg = instance.receive(port_name)
+                        t_cur = msg.timestamp
+                        ids_name = port_name.replace("_in", "")
+
+                        temp_ids = IDSFactory().new(ids_name)
+                        temp_ids.deserialize(msg.data)
+
+                        visualization_actor.state.extract_data(temp_ids)
+                        if msg.next_timestamp is None:
+                            is_running = False
+                    current_time = time.time()
+                    if current_time - last_trigger_time >= throttle_interval:
+                        visualization_actor.state.param.trigger("data")
+                        last_trigger_time = current_time
+                    visualization_actor.update_time(temp_ids.time[-1])
+
+                    if instance.should_save_snapshot(t_cur):
+                        msg = Message(t_cur)
+                        instance.save_snapshot(msg)
+
+                assert visualization_actor is not None
                 visualization_actor.state.param.trigger("data")
-                last_trigger_time = current_time
-            visualization_actor.update_time(temp_ids.time[-1])
 
-            if instance.should_save_snapshot(t_cur):
+        except (RuntimeError, NameError, TypeError) as e:
+            logging.error(f"{type(e).__name__}: {e}")
+        finally:
+            if instance.should_save_final_snapshot():
                 msg = Message(t_cur)
-                instance.save_snapshot(msg)
-
-        assert visualization_actor is not None
-        visualization_actor.state.param.trigger("data")
-        if keep_alive:
-            visualization_actor.notify_done()
-        else:
-            visualization_actor.stop_server()
-
-        if instance.should_save_final_snapshot():
-            msg = Message(t_cur)
-            instance.save_final_snapshot(msg)
+                instance.save_final_snapshot(msg)
 
 
 if __name__ == "__main__":
