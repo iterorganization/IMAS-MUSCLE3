@@ -1,4 +1,6 @@
-from typing import List, Optional, TypeVar, cast
+import re
+from typing import TYPE_CHECKING, Any, List, Optional, TypeVar, cast, overload
+from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
 
@@ -6,23 +8,6 @@ from libmuscle import Instance
 from ymmsl.v0_2 import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
-
-
-def get_setting_optional(
-    instance: Instance,
-    setting_name: str,
-    default: Optional[TSetting] = None,
-) -> Optional[TSetting]:
-    """Get an optional setting, returning ``default`` when unset.
-
-    libmuscle's ``Instance.get_setting(default=...)`` re-raises ``KeyError``
-    when the default is ``None``, so it cannot express "optional, may be None".
-    This helper covers that case.
-    """
-    try:
-        return cast(TSetting, instance.get_setting(setting_name))
-    except KeyError:
-        return default
 
 
 def get_port_list(instance: Instance, operator: Operator) -> List[str]:
@@ -33,3 +18,25 @@ def get_port_list(instance: Instance, operator: Operator) -> List[str]:
         port for port in total_port_list if instance.is_connected(port)
     ]
     return port_list
+
+
+def increment_suffix(uri: str) -> str:
+    # parse uri
+    parsed = urlparse(uri)
+    query_dict = {}
+    for option in re.split("[&;?]", parsed.query):
+        name, _, value = option.partition("=")
+        query_dict[name] = value
+
+    # increment path
+    path = query_dict["path"]
+    if "_" in path and path.rsplit("_", 1)[-1].isdigit():
+        base, num = path.rsplit("_", 1)
+        query_dict["path"] = f"{base}_{int(num) + 1}"
+    else:
+        query_dict["path"] = f"{path}_1"
+
+    # rebuild uri
+    new_query = "&".join(f"{k}={v}" for k, v in query_dict.items())
+    parsed = parsed._replace(query=new_query)
+    return urlunparse(parsed)

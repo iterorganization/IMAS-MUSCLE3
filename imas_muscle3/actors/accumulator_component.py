@@ -62,7 +62,7 @@ def main() -> None:
                 msg = instance.load_snapshot()
                 t_cur = msg.timestamp
                 ids_next = msg.data[0]
-                for ids_name, obj in msg.data[1]:
+                for ids_name, obj in msg.data[1].items():
                     ids = db.factory.new(ids_name)
                     ids.deserialize(obj)
                     db.put(ids)

@@ -14,6 +14,9 @@ from pathlib import Path
 
 from imas import DBEntry, IDSFactory
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
+from imas_validator.report.validationReportGenerator import (
+    ValidationReportGenerator,
+)
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
@@ -27,14 +30,7 @@ logger = logging.getLogger()
 def main() -> None:
     """Create instance and enter submodel execution loop"""
     logger.info("Starting OLC Actor")
-    instance = Instance(
-        {
-            Operator.F_INIT: [
-                f"{ids_name}_in" for ids_name in IDSFactory().ids_names()
-            ],
-        },
-        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
-    )
+    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
 
     # enter re-use loop
     while instance.reuse_instance():
@@ -85,17 +81,28 @@ def main() -> None:
                 today = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                 # not sure whether we need the summary report generator
                 # or the detailed
+                html_path = Path.cwd() / f"{t_cur}_report.html"
+                txt_path = Path.cwd() / f"{t_cur}_report.txt"
                 summary_generator = SummaryReportGenerator([result], today)
-                summary_generator.save_html(f"{t_cur}_report.html")
+                summary_generator.save_html(html_path)
+                summary_generator = ValidationReportGenerator(result)
+                summary_generator.save_txt(txt_path)
 
-                if instance.get_setting("halt_on_error", default=False):
-                    logger.critical("Check failed!")
+                # this message can be much more verbose. Should include:
+                # - IDSes that have failed
+                # - rules that have been violated (unless there are many?)
+                msg = (
+                    "Check failed! Read the IMAS-Validator reports written to "
+                    f"{html_path} and {txt_path} in the working directory for "
+                    "more information"
+                )
+                if get_setting_optional(
+                    instance, "halt_on_error", default=False
+                ):
+                    logger.critical(msg)
                     sys.exit(1)
                 else:
-                    # this message can be much more verbose. Should include:
-                    # - IDSes that have failed
-                    # - rules that have been violated (unless there are many?)
-                    logger.warning("Check failed!")
+                    logger.warning(msg)
 
 
 if __name__ == "__main__":

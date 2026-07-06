@@ -1,4 +1,4 @@
-[build-system]
+build-system]
 # Minimum requirements for the build system to execute.
 requires = ["setuptools>=61", "wheel", "packaging", "tomli;python_version<'3.11'", "setuptools_scm>8"]
 
@@ -51,6 +51,7 @@ dependencies = [
     "rich",
     "packaging",
     "imas-python",
+    "imas-core",
     "imas-validator",
     "muscle3>=0.10",
     "ymmsl>=0.17",

@@ -19,9 +19,7 @@ def test_accumulator(tmpdir, core_profiles, use_t_next):
     # whether or not optional override port is used for t_next
     if use_t_next:
         ports = "[core_profiles_in, t_next]"
-        conduit = (
-            "source_component.core_profiles_out: accumulator_component.t_next"
-        )
+        conduit = "source_component.core_profiles_out: accumulator_component.t_next"
     else:
         ports = "[core_profiles_in]"
         conduit = ""
