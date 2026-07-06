@@ -1,5 +1,5 @@
 import re
-from typing import List, TypeVar
+from typing import List, Optional, TypeVar, cast
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
@@ -8,6 +8,25 @@ from libmuscle import Instance
 from ymmsl.v0_2 import Operator, SettingValue
 
 TSetting = TypeVar("TSetting", bound=SettingValue)
+
+
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: Optional[TSetting] = None,
+) -> Optional[TSetting]:
+    """Helper function to get optional settings from instance.
+
+    libmuscle's Instance.get_setting(default=...) cannot distinguish
+    "no default" from "default is None", so it re-raises KeyError even
+    when default=None is passed explicitly. This wraps it correctly.
+    """
+    setting: Optional[TSetting]
+    try:
+        setting = cast(TSetting, instance.get_setting(setting_name))
+    except KeyError:
+        setting = default
+    return setting
 
 
 def get_port_list(instance: Instance, operator: Operator) -> List[str]:

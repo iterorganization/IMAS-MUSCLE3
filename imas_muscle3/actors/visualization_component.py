@@ -154,10 +154,6 @@ def main() -> None:
 
         except (RuntimeError, NameError, TypeError) as e:
             logging.error(f"{type(e).__name__}: {e}")
-        finally:
-            if instance.should_save_final_snapshot():
-                msg = Message(t_cur)
-                instance.save_snapshot(msg)
 
         assert visualization_actor is not None
         visualization_actor.state.param.trigger("data")

@@ -19,54 +19,55 @@ def test_accumulator(tmpdir, core_profiles, use_t_next):
     # whether or not optional override port is used for t_next
     if use_t_next:
         ports = "[core_profiles_in, t_next]"
-        conduit = (
-            "source_component.core_profiles_out: accumulator_component.t_next"
-        )
+        conduit = "source.core_profiles_out: accumulator.t_next"
     else:
         ports = "[core_profiles_in]"
         conduit = ""
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [core_profiles_out]
-    accumulator_component:
-      implementation: accumulator_component
-      ports:
-        s: {ports}
-        o_f: [core_profiles_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [core_profiles_in]
-  conduits:
-    source_component.core_profiles_out: accumulator_component.core_profiles_in
-    {conduit}
-    accumulator_component.core_profiles_out: sink_component.core_profiles_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source:
+        description: source component
+        implementation: source
+        ports:
+          o_i: [core_profiles_out]
+      accumulator:
+        description: accumulator component
+        implementation: accumulator
+        ports:
+          s: {ports}
+          o_f: [core_profiles_out]
+      sink:
+        description: sink component
+        implementation: sink
+        ports:
+          f_init: [core_profiles_in]
+    conduits:
+      source.core_profiles_out: accumulator.core_profiles_in
+      {conduit}
+      accumulator.core_profiles_out: sink.core_profiles_in
 settings:
-  source_component.source_uri: {source_uri}
-  sink_component.sink_uri: {sink_uri}
-implementations:
-  sink_component:
+  source.source_uri: {source_uri}
+  sink.sink_uri: {sink_uri}
+programs:
+  sink:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
-  source_component:
+  source:
     executable: python
     args: -u -m imas_muscle3.actors.source_component
-  accumulator_component:
+  accumulator:
     executable: python
     args: -u -m imas_muscle3.actors.accumulator_component
 resources:
-  sink_component:
+  sink:
     threads: 1
-  source_component:
+  source:
     threads: 1
-  accumulator_component:
+  accumulator:
     threads: 1
 """
 
@@ -85,6 +86,4 @@ resources:
 
     assert data_sink_path.exists()
     with DBEntry(sink_uri, "r") as entry:
-        print(core_profiles.time)
-        print(entry.get("core_profiles").time)
         assert all(entry.get("core_profiles").time == core_profiles.time)

@@ -69,6 +69,7 @@ from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import (
     get_port_list,
+    get_setting_optional,
     increment_suffix,
 )
 
@@ -132,10 +133,9 @@ def muscled_sink() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = instance.get_setting("dd_version", default=None)
+            dd_version = get_setting_optional(instance, "dd_version")
             sink_mode = instance.get_setting("sink_mode", default="x")
             sink_uri = instance.get_setting("sink_uri")
-            sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
             avoid_name_collision = instance.get_setting(
                 "avoid_name_collision", default=True
             )
@@ -170,7 +170,7 @@ def muscled_source() -> None:
     while instance.reuse_instance():
         if first_run:
             iterative = instance.get_setting("iterative", default=True)
-            dd_version = instance.get_setting("dd_version", default=None)
+            dd_version = get_setting_optional(instance, "dd_version")
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_out = get_port_list(instance, Operator.O_I)
@@ -229,9 +229,9 @@ def muscled_sink_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = instance.get_setting("dd_version", default=None)
+            dd_version = get_setting_optional(instance, "dd_version")
             sink_mode = instance.get_setting("sink_mode", default="x")
-            sink_uri = instance.get_setting("sink_uri", default=None)
+            sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
             avoid_name_collision = instance.get_setting(
                 "avoid_name_collision", default=True
@@ -348,7 +348,7 @@ def sanity_check_ports(instance: Instance) -> None:
                     f"'*ids_name*_out'. Problem port is {port_name}."
                 )
     # check whether uri is provided if component acts as source
-    no_source_uri = instance.get_setting("source_uri", default=None) is None
+    no_source_uri = get_setting_optional(instance, "source_uri") is None
     no_source_ports = (
         len(
             instance.list_ports().get(Operator.O_I, [])

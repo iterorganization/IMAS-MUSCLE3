@@ -29,23 +29,25 @@ def create_ymmsl_config(settings: dict) -> str:
     settings_str = "\n".join(f"  {k}: {v}" for k, v in settings.items())
 
     return f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [equilibrium_out]
-    visualization_component:
-      implementation: visualization_component
-      ports:
-        s: [equilibrium_in]
-  conduits:
-    source_component.equilibrium_out: visualization_component.equilibrium_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [equilibrium_out]
+      visualization_component:
+        description: visualization component
+        implementation: visualization_component
+        ports:
+          s: [equilibrium_in]
+    conduits:
+      source_component.equilibrium_out: visualization_component.equilibrium_in
 settings:
 {settings_str}
-implementations:
+programs:
   visualization_component:
     executable: python
     args: -u -m imas_muscle3.actors.visualization_component
