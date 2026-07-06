@@ -18,15 +18,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade .[linting]
-      - name: black
+      - name: Check formatting
         run: |
-          black --check imas_muscle3
-      - name: flake8
+          python -m ruff format --check
+      - name: Check linting
         run: |
-          flake8 imas_muscle3
-      - name: mypy
+          python -m ruff check
+      - name: Check typing
         run: |
-          mypy imas_muscle3
-      - name: isort
-        run: |
-          isort --check-only imas_muscle3
+          python -m ty check imas_muscle3

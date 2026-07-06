@@ -20,9 +20,9 @@ from imas_validator.report.validationReportGenerator import (
 from imas_validator.validate.validate import validate
 from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
-from imas_muscle3.utils import get_port_list, get_setting_optional
+from imas_muscle3.utils import get_port_list
 
 logger = logging.getLogger()
 
@@ -61,19 +61,15 @@ def main() -> None:
                 for ids in ids_data.values():
                     db.put(ids)
 
-            rulesets = get_setting_optional(
-                instance, "rulesets", default="PDS-OLC"
-            )
-            ruledirs = get_setting_optional(
-                instance, "extra_rule_dirs", default=""
-            )
+            rulesets = instance.get_setting("rulesets", default="PDS-OLC")
+            ruledirs = instance.get_setting("extra_rule_dirs", default="")
             assert isinstance(rulesets, str)
             assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
                 rulesets=rulesets.split(";"),
                 extra_rule_dirs=[Path(x) for x in ruledirs.split(";")],
-                apply_generic=get_setting_optional(
-                    instance, "apply_generic", default=True
+                apply_generic=instance.get_setting(
+                    "apply_generic", default=True
                 ),
             )
 
@@ -88,9 +84,9 @@ def main() -> None:
                 html_path = Path.cwd() / f"{t_cur}_report.html"
                 txt_path = Path.cwd() / f"{t_cur}_report.txt"
                 summary_generator = SummaryReportGenerator([result], today)
-                summary_generator.save_html(html_path)
+                summary_generator.save_html(str(html_path))
                 summary_generator = ValidationReportGenerator(result)
-                summary_generator.save_txt(txt_path)
+                summary_generator.save_txt(str(txt_path))
 
                 # this message can be much more verbose. Should include:
                 # - IDSes that have failed
@@ -100,9 +96,7 @@ def main() -> None:
                     f"{html_path} and {txt_path} in the working directory for "
                     "more information"
                 )
-                if get_setting_optional(
-                    instance, "halt_on_error", default=False
-                ):
+                if instance.get_setting("halt_on_error", default=False):
                     logger.critical(msg)
                     sys.exit(1)
                 else:

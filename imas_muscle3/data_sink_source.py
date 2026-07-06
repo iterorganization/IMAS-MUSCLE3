@@ -21,31 +21,35 @@ Muscled data sink and/or source actor.
     dd_version: which IMAS DD version should be used
     {port_name}_occ: occurrence number for loading and saving of given ids
 
-How to use in ymmsl file::
+How to use in ymmsl file (yMMSL v0.2)::
 
-    model:
-        name: example_model
-        components:
-            macro:
-                implementation: source_component
-                ports:
-                o_i: [core_profiles_out]
-            micro:
-                implementation: sink_component
-                ports:
-                f_init: [core_profiles_in]
-        conduits:
-            macro.core_profiles_out: micro.core_profiles_in
+    ymmsl_version: v0.2
+    models:
+        example_model:
+            description: minimal source -> sink example
+            components:
+                macro:
+                    description: data source
+                    implementation: source_component
+                    ports:
+                        o_i: [core_profiles_out]
+                micro:
+                    description: data sink
+                    implementation: sink_component
+                    ports:
+                        f_init: [core_profiles_in]
+            conduits:
+                macro.core_profiles_out: micro.core_profiles_in
     settings:
         macro.source_uri: source_uri
         micro.sink_uri: sink_uri
-    implementations:
+    programs:
         sink_component:
             executable: python
-            args: -u -m pds.utils.sink_component
+            args: -u -m imas_muscle3.actors.sink_component
         source_component:
             executable: python
-            args: -u -m pds.utils.source_component
+            args: -u -m imas_muscle3.actors.source_component
 """
 
 import logging
@@ -61,7 +65,7 @@ from imas.ids_defs import (
 )
 from imas_core.exception import ImasCoreBackendException
 from libmuscle import Instance, InstanceFlags, Message
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import (
     get_port_list,
@@ -130,10 +134,10 @@ def muscled_sink() -> None:
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
-            sink_mode = get_setting_optional(instance, "sink_mode", "x")
-            sink_uri = instance.get_setting("sink_uri", "str")
-            avoid_name_collision = get_setting_optional(
-                instance, "avoid_name_collision", True
+            sink_mode = instance.get_setting("sink_mode", default="x")
+            sink_uri = instance.get_setting("sink_uri")
+            avoid_name_collision = instance.get_setting(
+                "avoid_name_collision", default=True
             )
             sink_db_entry = get_sink_db_entry(
                 sink_uri,
@@ -165,7 +169,7 @@ def muscled_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            iterative = get_setting_optional(instance, "iterative", True)
+            iterative = instance.get_setting("iterative", default=True)
             dd_version = get_setting_optional(instance, "dd_version")
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
@@ -226,11 +230,11 @@ def muscled_sink_source() -> None:
     while instance.reuse_instance():
         if first_run:
             dd_version = get_setting_optional(instance, "dd_version")
-            sink_mode = get_setting_optional(instance, "sink_mode", "x")
+            sink_mode = instance.get_setting("sink_mode", default="x")
             sink_uri = get_setting_optional(instance, "sink_uri")
             source_uri = instance.get_setting("source_uri")
-            avoid_name_collision = get_setting_optional(
-                instance, "avoid_name_collision", True
+            avoid_name_collision = instance.get_setting(
+                "avoid_name_collision", default=True
             )
             if isinstance(sink_uri, str):
                 sink_db_entry = get_sink_db_entry(
@@ -276,7 +280,7 @@ def handle_source(
 
     for port_name in port_list:
         ids_name = port_name.replace("_out", "")
-        occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
+        occ = instance.get_setting(f"{port_name}_occ", default=0)
         interp_method = fix_interpolation_method(instance)
         if iterative:
             slice_out = db_entry.get_slice(
@@ -306,7 +310,7 @@ def handle_sink(
     t_next = None
     for port_name in port_list:
         ids_name = port_name.replace("_in", "")
-        occ = get_setting_optional(instance, f"{port_name}_occ", default=0)
+        occ = instance.get_setting(f"{port_name}_occ", default=0)
         msg_in = instance.receive(port_name)
         t_cur = msg_in.timestamp
         t_next = msg_in.next_timestamp
@@ -360,7 +364,7 @@ def sanity_check_ports(instance: Instance) -> None:
 
 
 def fix_interpolation_method(instance: Instance) -> int:
-    setting = get_setting_optional(instance, "interpolation_method")
+    setting = instance.get_setting("interpolation_method", default="closest")
     if setting == "closest":
         interp = CLOSEST_INTERP
     elif setting == "previous":
@@ -378,11 +382,9 @@ def time_array_from_IDS(
     for port in port_list:
         t_array = db_entry.get(port.replace("_out", ""), lazy=True).time
         if len(t_array) > 0:
-            t_min = get_setting_optional(instance, "t_min")
-            t_min = -1e20 if t_min is None else t_min
+            t_min = instance.get_setting("t_min", default=-1e20)
             t_min = max(t_min, t_array[0])
-            t_max = get_setting_optional(instance, "t_max")
-            t_max = 1e20 if t_max is None else t_max
+            t_max = instance.get_setting("t_max", default=1e20)
             t_max = min(t_max, t_array[-1])
             t_array = [t for t in t_array if t_min <= t <= t_max]
             return t_array

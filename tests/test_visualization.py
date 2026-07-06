@@ -29,23 +29,25 @@ def create_ymmsl_config(settings: dict) -> str:
     settings_str = "\n".join(f"  {k}: {v}" for k, v in settings.items())
 
     return f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [equilibrium_out]
-    visualization_component:
-      implementation: visualization_component
-      ports:
-        s: [equilibrium_in]
-  conduits:
-    source_component.equilibrium_out: visualization_component.equilibrium_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [equilibrium_out]
+      visualization_component:
+        description: visualization component
+        implementation: visualization_component
+        ports:
+          s: [equilibrium_in]
+    conduits:
+      source_component.equilibrium_out: visualization_component.equilibrium_in
 settings:
 {settings_str}
-implementations:
+programs:
   visualization_component:
     executable: python
     args: -u -m imas_muscle3.actors.visualization_component
@@ -72,7 +74,8 @@ def test_visualization_actor(tmpdir, equilibrium):
     current_dir = Path(__file__).parent
     plot_script_path = (
         current_dir
-        / "../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py"
+        / "../imas_muscle3/visualization/examples/simple_1d_plot"
+        / "simple_1d_plot.py"
     ).resolve()
     if not plot_script_path.exists():
         pytest.fail(f"Example plot script not found at: {plot_script_path}")
@@ -96,7 +99,9 @@ def test_visualization_actor(tmpdir, equilibrium):
     assert success
 
 
-def run_and_check_for_error(tmpdir, equilibrium, ymmsl_settings, expected_error):
+def run_and_check_for_error(
+    tmpdir, equilibrium, ymmsl_settings, expected_error
+):
     """Helper function to run a simulation and check for a specific error."""
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
@@ -123,9 +128,10 @@ def test_visualization_actor_no_plot_file(tmpdir, equilibrium):
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     port = get_free_port()
+    plot_file_path = "/path/to/non/existent/file.py"
     settings = {
         "source_component.source_uri": source_uri,
-        "visualization_component.plot_file_path": "/path/to/non/existent/file.py",
+        "visualization_component.plot_file_path": plot_file_path,
         "visualization_component.port": port,
         "visualization_component.throttle_interval": 0,
         "visualization_component.keep_alive": False,
@@ -142,7 +148,9 @@ def test_visualization_actor_missing_classes(tmpdir, equilibrium, tmp_path):
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_state_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_state_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -156,7 +164,9 @@ class Plotter(BasePlotter): pass
     run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
 
 
-def test_visualization_actor_bad_plotter_inheritance(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_bad_plotter_inheritance(
+    tmpdir, equilibrium, tmp_path
+):
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -175,7 +185,8 @@ def test_state_data(equilibrium, monkeypatch):
     current_dir = Path(__file__).parent
     plot_script_path = (
         current_dir
-        / "../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py"
+        / "../imas_muscle3/visualization/examples/simple_1d_plot"
+        / "simple_1d_plot.py"
     ).resolve()
     if not plot_script_path.exists():
         pytest.fail(f"Example plot script not found at: {plot_script_path}")
@@ -190,7 +201,9 @@ def test_state_data(equilibrium, monkeypatch):
     with DBEntry("imas:memory?path=/", "w") as db:
         db.put(equilibrium)
         for t in equilibrium.time:
-            single_slice_ids = db.get_slice("equilibrium", t, ids_defs.CLOSEST_INTERP)
+            single_slice_ids = db.get_slice(
+                "equilibrium", t, ids_defs.CLOSEST_INTERP
+            )
             actor.state.extract(single_slice_ids)
 
     state_data = actor.plotter._state.data["equilibrium"]
@@ -201,7 +214,8 @@ def test_state_data(equilibrium, monkeypatch):
 
 
 def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
-    """Create a single-time-slice equilibrium IDS with all fields required by pds.py."""
+    """Create a single-time-slice equilibrium IDS with all fields required
+    by pds.py."""
     eq = imas.IDSFactory("4.0.0").equilibrium()
     eq.ids_properties.homogeneous_time = 0
     eq.time = [t]
@@ -240,7 +254,8 @@ def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
 
 
 def _make_pds_pf_active_slice(t, n_coils=3):
-    """Create a single-time-slice pf_active IDS with all fields required by pds.py."""
+    """Create a single-time-slice pf_active IDS with all fields required
+    by pds.py."""
     pfa = imas.IDSFactory("4.0.0").pf_active()
     pfa.ids_properties.homogeneous_time = 0
     pfa.time = [t]
@@ -278,7 +293,9 @@ def test_pds_different_time_bases(monkeypatch):
     eq_data = state.data["equilibrium"]
     assert np.allclose(eq_data.time.values, eq_times)
     assert np.allclose(eq_data.ip.values, [1e6 + t * 1e4 for t in eq_times])
-    assert np.allclose(eq_data.beta_tor.values, [0.05 + t * 0.01 for t in eq_times])
+    assert np.allclose(
+        eq_data.beta_tor.values, [0.05 + t * 0.01 for t in eq_times]
+    )
 
     pf_data = state.data["pf_active"]
     assert np.allclose(pf_data.time.values, pf_times)
