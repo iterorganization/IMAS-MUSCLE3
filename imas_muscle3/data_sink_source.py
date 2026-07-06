@@ -69,7 +69,6 @@ from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import (
     get_port_list,
-    get_setting_optional,
     increment_suffix,
 )
 
@@ -133,7 +132,7 @@ def muscled_sink() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = get_setting_optional(instance, "dd_version")
+            dd_version = instance.get_setting("dd_version", default=None)
             sink_mode = instance.get_setting("sink_mode", default="x")
             sink_uri = instance.get_setting("sink_uri")
             sink_db_entry = DBEntry(sink_uri, sink_mode, dd_version=dd_version)
@@ -171,7 +170,7 @@ def muscled_source() -> None:
     while instance.reuse_instance():
         if first_run:
             iterative = instance.get_setting("iterative", default=True)
-            dd_version = get_setting_optional(instance, "dd_version")
+            dd_version = instance.get_setting("dd_version", default=None)
             source_uri = instance.get_setting("source_uri")
             source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
             port_list_out = get_port_list(instance, Operator.O_I)
@@ -230,12 +229,12 @@ def muscled_sink_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = get_setting_optional(instance, "dd_version")
+            dd_version = instance.get_setting("dd_version", default=None)
             sink_mode = instance.get_setting("sink_mode", default="x")
-            sink_uri = get_setting_optional(instance, "sink_uri")
+            sink_uri = instance.get_setting("sink_uri", default=None)
             source_uri = instance.get_setting("source_uri")
-            avoid_name_collision = get_setting_optional(
-                instance, "avoid_name_collision", True
+            avoid_name_collision = instance.get_setting(
+                "avoid_name_collision", default=True
             )
             if isinstance(sink_uri, str):
                 sink_db_entry = get_sink_db_entry(
@@ -349,7 +348,7 @@ def sanity_check_ports(instance: Instance) -> None:
                     f"'*ids_name*_out'. Problem port is {port_name}."
                 )
     # check whether uri is provided if component acts as source
-    no_source_uri = get_setting_optional(instance, "source_uri") is None
+    no_source_uri = instance.get_setting("source_uri", default=None) is None
     no_source_ports = (
         len(
             instance.list_ports().get(Operator.O_I, [])
@@ -383,11 +382,9 @@ def time_array_from_IDS(
     for port in port_list:
         t_array = db_entry.get(port.replace("_out", ""), lazy=True).time
         if len(t_array) > 0:
-            t_min = get_setting_optional(instance, "t_min")
-            t_min = -1e20 if t_min is None else t_min
+            t_min = instance.get_setting("t_min", default=-1e20)
             t_min = max(t_min, t_array[0])
-            t_max = get_setting_optional(instance, "t_max")
-            t_max = 1e20 if t_max is None else t_max
+            t_max = instance.get_setting("t_max", default=1e20)
             t_max = min(t_max, t_array[-1])
             t_array = [t for t in t_array if t_min <= t <= t_max]
             return t_array

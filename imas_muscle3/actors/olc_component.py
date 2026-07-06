@@ -96,9 +96,7 @@ def main() -> None:
                     f"{html_path} and {txt_path} in the working directory for "
                     "more information"
                 )
-                if get_setting_optional(
-                    instance, "halt_on_error", default=False
-                ):
+                if instance.get_setting("halt_on_error", default=False):
                     logger.critical(msg)
                     sys.exit(1)
                 else:

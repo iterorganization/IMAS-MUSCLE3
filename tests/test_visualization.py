@@ -126,9 +126,10 @@ def test_visualization_actor_no_plot_file(tmpdir, equilibrium):
     data_source_path = (Path(tmpdir) / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     port = get_free_port()
+    plot_file_path = "/path/to/non/existent/file.py"
     settings = {
         "source_component.source_uri": source_uri,
-        "visualization_component.plot_file_path": "/path/to/non/existent/file.py",
+        "visualization_component.plot_file_path": plot_file_path,
         "visualization_component.port": port,
         "visualization_component.throttle_interval": 0,
         "visualization_component.keep_alive": False,
@@ -211,7 +212,8 @@ def test_state_data(equilibrium, monkeypatch):
 
 
 def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
-    """Create a single-time-slice equilibrium IDS with all fields required by pds.py."""
+    """Create a single-time-slice equilibrium IDS with all fields required
+    by pds.py."""
     eq = imas.IDSFactory("4.0.0").equilibrium()
     eq.ids_properties.homogeneous_time = 0
     eq.time = [t]
@@ -250,7 +252,8 @@ def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
 
 
 def _make_pds_pf_active_slice(t, n_coils=3):
-    """Create a single-time-slice pf_active IDS with all fields required by pds.py."""
+    """Create a single-time-slice pf_active IDS with all fields required
+    by pds.py."""
     pfa = imas.IDSFactory("4.0.0").pf_active()
     pfa.ids_properties.homogeneous_time = 0
     pfa.time = [t]
@@ -288,7 +291,9 @@ def test_pds_different_time_bases(monkeypatch):
     eq_data = state.data["equilibrium"]
     assert np.allclose(eq_data.time.values, eq_times)
     assert np.allclose(eq_data.ip.values, [1e6 + t * 1e4 for t in eq_times])
-    assert np.allclose(eq_data.beta_tor.values, [0.05 + t * 0.01 for t in eq_times])
+    assert np.allclose(
+        eq_data.beta_tor.values, [0.05 + t * 0.01 for t in eq_times]
+    )
 
     pf_data = state.data["pf_active"]
     assert np.allclose(pf_data.time.values, pf_times)

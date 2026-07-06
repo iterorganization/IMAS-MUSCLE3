@@ -67,8 +67,12 @@ resources:
 def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
     data_source_path = (tmp_path / "source_component_data").absolute()
     data_sink_path = (tmp_path / "sink_component_data").absolute()
-    data_hybrid_source_path = (tmp_path / "source_hybrid_component_data").absolute()
-    data_hybrid_sink_path = (tmp_path / "sink_hybrid_component_data").absolute()
+    data_hybrid_source_path = (
+        tmp_path / "source_hybrid_component_data"
+    ).absolute()
+    data_hybrid_sink_path = (
+        tmp_path / "sink_hybrid_component_data"
+    ).absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     sink_uri = f"imas:hdf5?path={data_sink_path}"
     hybrid_source_uri = f"imas:hdf5?path={data_hybrid_source_path}"

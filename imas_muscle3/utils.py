@@ -1,5 +1,5 @@
 import re
-from typing import TYPE_CHECKING, Any, List, Optional, TypeVar, cast, overload
+from typing import List, TypeVar
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
