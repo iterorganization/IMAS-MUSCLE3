@@ -84,9 +84,9 @@ def main() -> None:
                 html_path = Path.cwd() / f"{t_cur}_report.html"
                 txt_path = Path.cwd() / f"{t_cur}_report.txt"
                 summary_generator = SummaryReportGenerator([result], today)
-                summary_generator.save_html(html_path)
+                summary_generator.save_html(str(html_path))
                 summary_generator = ValidationReportGenerator(result)
-                summary_generator.save_txt(txt_path)
+                summary_generator.save_txt(str(txt_path))
 
                 # this message can be much more verbose. Should include:
                 # - IDSes that have failed
