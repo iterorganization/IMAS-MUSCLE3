@@ -17,7 +17,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Environment :: Plugins",
-    "Framework :: Flake8",
     "Framework :: Pytest",
     "Framework :: Sphinx",
 # Custom trove classifiers are not allowed, and newer versions of python setuptools will fail to build
@@ -81,10 +80,8 @@ test = [
     "pytest-randomly",
 ]
 linting = [
-    "black>=24,<25",
-    "flake8",
-    "mypy",
-    "isort",
+    "ty==0.0.53",
+    "ruff~=0.15.0",
 ]
 
 [project.urls]
@@ -103,42 +100,61 @@ testpaths = "tests"
 write_to = "imas_muscle3/_version.py"
 local_scheme = "no-local-version"
 
-[tool.black]
-force-exclude = "imas_muscle3/_version.py"
+[tool.ruff]
+extend-exclude = ["imas_muscle3/_version.py"]
 line-length = 79
 
-[tool.mypy]
-packages = "imas_muscle3"
-disallow_untyped_calls = true
-disallow_untyped_defs = true
-disallow_untyped_decorators = true
+[tool.ruff.lint]
+# E/W: pycodestyle (replaces flake8), F: pyflakes, I: isort (replaces isort tool)
+select = ["E", "F", "W", "I"]
 
-[[tool.mypy.overrides]]
-# visualization.* carries pre-existing type debt (panel/param have no usable
-# stubs); ignore it here rather than block CI. TODO: type it properly.
-module = [
-    "tests.*",
-    "imas_muscle3.visualization.*"
+[tool.ruff.lint.isort]
+# black-compatible import sorting (equivalent to isort profile = "black")
+force-sort-within-sections = false
+
+[tool.ruff.format]
+# black-compatible formatter; line-length inherited from [tool.ruff]
+
+[tool.ty.src]
+include = ["imas_muscle3/**"]
+
+[tool.ty.rules]
+# mypy type: ignore comments in source are not ty ignore comments; suppress noise
+unused-type-ignore-comment = "ignore"
+
+[tool.ty.analysis]
+# replace imports with Any, equivalent to mypy ignore_missing_imports = true
+replace-imports-with-any = [
+    "imas",
+    "imas_validator",
+    "libmuscle",
+    "muscle3",
+    "ymmsl",
+    "panel",
+    "param",
+    "holoviews",
+    "zarr",
+    "matplotlib",
+    "xarray",
 ]
-ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = [
-    "imas.*",
-    "numpy.*",
-    "rich.*",
-    "imas_core.*",
-    "imas_validator.*",
-    "libmuscle.*",
-    "ymmsl.*",
-    "imas_muscle3._version",
-    "panel.*",
-    "param.*",
-    "holoviews.*",
-    "zarr.*"
-]
-ignore_missing_imports = true
+[[tool.ty.overrides]]
+# ignore type errors in tests and visualization examples (mypy: ignore_errors = true)
+include = ["tests/**", "imas_muscle3/visualization/**"]
+rules.invalid-argument-type = "ignore"
+rules.invalid-assignment = "ignore"
+rules.invalid-return-type = "ignore"
+rules.unresolved-import = "ignore"
+rules.unresolved-attribute = "ignore"
 
-[tool.isort]
-profile = "black"
-skip=['imas_muscle3/_version.py']
+[[tool.ty.overrides]]
+# imas IDSBase retains its name after replace-imports-with-any; attributes are dynamic
+include = ["imas_muscle3/visualization/base_state.py"]
+rules.unresolved-attribute = "ignore"
+rules.not-iterable = "ignore"
+rules.invalid-return-type = "ignore"
+
+[[tool.ty.overrides]]
+# imas constants (CLOSEST_INTERP etc.) typed as Unknown after replace-imports-with-any
+include = ["imas_muscle3/data_sink_source.py"]
+rules.invalid-return-type = "ignore"

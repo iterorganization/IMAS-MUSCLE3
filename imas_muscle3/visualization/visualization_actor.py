@@ -1,6 +1,7 @@
 import logging
 import runpy
-from typing import Dict
+from types import TracebackType
+from typing import Dict, Optional, Type
 
 import panel as pn
 import param
@@ -25,15 +26,18 @@ class VisualizationActor(param.Parameterized):
         open_browser_on_start: bool,
         extract_all: bool = False,
         automatic_mode: bool = False,
+        keep_alive: bool = False,
     ):
         """Initialize the visualization actor.
 
         Loads a State and Plotter class from the given file path, sets up the
         Panel layout, and starts the server.
         """
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
         self.port = port
         self.server = None
+        self.stopped = False
+        self.keep_alive = keep_alive
         self.open_browser_on_start = open_browser_on_start
 
         run_path = runpy.run_path(plot_file_path)
@@ -72,7 +76,8 @@ class VisualizationActor(param.Parameterized):
 
     def stop_server(self) -> None:
         """Stop the Panel server if running."""
-        if self.server:
+        if self.server and not self.stopped:
+            self.stopped = True
             self.server.stop()
             logger.info("Panel server stopped.")
 
@@ -95,3 +100,17 @@ class VisualizationActor(param.Parameterized):
             threaded=True,
             start=True,
         )
+
+    def __enter__(self) -> "VisualizationActor":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> None:
+        if exc_type is not None or not self.keep_alive:
+            self.stop_server()
+        else:
+            self.notify_done()

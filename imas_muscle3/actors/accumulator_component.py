@@ -23,7 +23,7 @@ from typing import Dict, List
 from imas import DBEntry, IDSFactory
 from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, InstanceFlags, Message
-from ymmsl import Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import get_port_list
 
@@ -62,7 +62,7 @@ def main() -> None:
                 msg = instance.load_snapshot()
                 t_cur = msg.timestamp
                 ids_next = msg.data[0]
-                for ids_name, obj in msg.data[1]:
+                for ids_name, obj in msg.data[1].items():
                     ids = db.factory.new(ids_name)
                     ids.deserialize(obj)
                     db.put(ids)

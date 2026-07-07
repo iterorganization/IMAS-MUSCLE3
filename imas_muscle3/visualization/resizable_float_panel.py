@@ -45,9 +45,7 @@ class ResizableFloatPanel(pn.layout.FloatPanel):
 
     _scripts = dict(pn.layout.FloatPanel._scripts)
 
-    _scripts[
-        "render"
-    ] = """
+    _scripts["render"] = """
         if (state.panel) {
           view.run_script('close')
         }

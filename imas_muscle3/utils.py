@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional, TypeVar, cast, overload
+from typing import List, Optional, TypeVar, cast
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
@@ -32,7 +32,12 @@ def get_setting_optional(
     setting_name: str,
     default: Optional[TSetting] = None,
 ) -> Optional[TSetting]:
-    """Helper function to get optional settings from instance"""
+    """Helper function to get optional settings from instance.
+
+    libmuscle's Instance.get_setting(default=...) cannot distinguish
+    "no default" from "default is None", so it re-raises KeyError even
+    when default=None is passed explicitly. This wraps it correctly.
+    """
     setting: Optional[TSetting]
     try:
         setting = cast(TSetting, instance.get_setting(setting_name))

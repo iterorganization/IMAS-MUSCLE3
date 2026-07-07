@@ -1,6 +1,7 @@
 import functools
 import logging
 import random
+from typing import Optional
 
 import holoviews as hv
 import numpy as np
@@ -34,9 +35,9 @@ class BasePlotter(Viewer):
     )
 
     def __init__(self, state: BaseState) -> None:
-        super().__init__(_state=state)
-        self._frozen_state = None
-        self.active_state = self._state
+        super().__init__(_state=state)  # type: ignore[no-untyped-call]
+        self._frozen_state: Optional[BaseState] = None
+        self.active_state: BaseState = state
 
         self.live_view_checkbox = pn.widgets.Checkbox.from_param(
             self.param._live_view
@@ -61,7 +62,7 @@ class BasePlotter(Viewer):
         ui = pn.Row()
 
         # Add UI elements for automatic mic
-        if self._state.auto:
+        if state.auto:
             self.variable_selector = pn.widgets.Select(  # type: ignore
                 width=400
             )
@@ -107,6 +108,7 @@ class BasePlotter(Viewer):
     @param.depends("_live_view", watch=True)  # type: ignore[untyped-decorator]
     def _store_frozen_state(self) -> None:
         """Store frozen state when live view is toggled."""
+        assert self._state is not None
         if self._live_view:
             self._frozen_state = None
         else:
@@ -120,6 +122,7 @@ class BasePlotter(Viewer):
     @param.depends("_state.data", watch=True)  # type: ignore[untyped-decorator] # noqa: E501
     def _update_on_new_data(self) -> None:
         """Updates time slider options when new data is added to the state."""
+        assert self._state is not None
         if not self._state.data:
             return
         all_times = sorted(
@@ -138,7 +141,8 @@ class BasePlotter(Viewer):
 
     def _update_filter_view(self, event: param.Event) -> None:
         """Updates the variable selector based on the filter text."""
-        filter_text = self.filter_input.value_input.lower()
+        assert self._state is not None
+        filter_text = (self.filter_input.value_input or "").lower()
         options = [
             full_path
             for full_path in self._state.variables
@@ -149,6 +153,7 @@ class BasePlotter(Viewer):
     @param.depends("_state.variables", watch=True)  # type: ignore[untyped-decorator] # noqa: E501
     def _update_variable_selector(self) -> None:
         """Updates the variable selector when new variables are discovered."""
+        assert self._state is not None
         self.variable_selector.options = sorted(
             list(self._state.variables.keys())
         )
@@ -156,10 +161,11 @@ class BasePlotter(Viewer):
     def _close_all_plots_callback(self, event: param.Event) -> None:
         """Closes all active plot panels."""
         for float_panel in self.float_panels:
-            float_panel.status = "closed"
+            float_panel.status = "closed"  # type: ignore[attr-defined]
 
     def _add_plot_callback(self, event: param.Event) -> None:
         """Adds a new plot panel for the selected variable."""
+        assert self._state is not None
         full_path = self.variable_selector.value
         if not full_path or full_path not in self._state.variables:
             return
@@ -196,9 +202,10 @@ class BasePlotter(Viewer):
         self.float_panels.append(float_panel)
 
     def _floatpanel_closed_callback(
-        self, full_path: str, event: param.Event = None
+        self, full_path: str, event: Optional[param.Event] = None
     ) -> None:
         """Handles cleanup when a plot panel is closed."""
+        assert self._state is not None
         if full_path in self._state.variables:
             var = self._state.variables[full_path]
             var.is_visualized = False

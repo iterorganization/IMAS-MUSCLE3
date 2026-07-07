@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 import ymmsl
 from imas import DBEntry
@@ -16,24 +14,26 @@ def test_source_to_sink(tmp_path, core_profiles):
         entry.put(core_profiles)
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [core_profiles_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [core_profiles_in]
-  conduits:
-    source_component.core_profiles_out: sink_component.core_profiles_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [core_profiles_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [core_profiles_in]
+    conduits:
+      source_component.core_profiles_out: sink_component.core_profiles_in
 settings:
   source_component.source_uri: {source_uri}
   sink_component.sink_uri: {sink_uri}
-implementations:
+programs:
   sink_component:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
@@ -85,32 +85,35 @@ def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
         entry.put(core_profiles)
     # make config
     ymmsl_text = f"""
-    ymmsl_version: v0.1
-    model:
-      name: test_model
-      components:
-        source_component:
-          implementation: source_component
-          ports:
-            o_i: [core_profiles_out]
-        sink_component:
-          implementation: sink_component
-          ports:
-            f_init: [core_profiles_in]
-        hybrid_component:
-          implementation: hybrid_component
-          ports:
-            f_init: [core_profiles_in]
-            o_f: [core_profiles_out]
-      conduits:
-        source_component.core_profiles_out: hybrid_component.core_profiles_in
-        hybrid_component.core_profiles_out: sink_component.core_profiles_in
+    ymmsl_version: v0.2
+    models:
+      test_model:
+        components:
+          source_component:
+            description: source component
+            implementation: source_component
+            ports:
+              o_i: [core_profiles_out]
+          sink_component:
+            description: sink component
+            implementation: sink_component
+            ports:
+              f_init: [core_profiles_in]
+          hybrid_component:
+            description: hybrid component
+            implementation: hybrid_component
+            ports:
+              f_init: [core_profiles_in]
+              o_f: [core_profiles_out]
+        conduits:
+          source_component.core_profiles_out: hybrid_component.core_profiles_in
+          hybrid_component.core_profiles_out: sink_component.core_profiles_in
     settings:
       source_component.source_uri: {source_uri}
       sink_component.sink_uri: {sink_uri}
       hybrid_component.source_uri: {hybrid_source_uri}
-      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ''}
-    implementations:
+      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ""}
+    programs:
       sink_component:
         executable: python
         args: -u -m imas_muscle3.actors.sink_component
@@ -162,26 +165,28 @@ def test_source_with_time_range(tmp_path, core_profiles):
         entry.put(core_profiles)
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [core_profiles_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [core_profiles_in]
-  conduits:
-    source_component.core_profiles_out: sink_component.core_profiles_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [core_profiles_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [core_profiles_in]
+    conduits:
+      source_component.core_profiles_out: sink_component.core_profiles_in
 settings:
   source_component.source_uri: {source_uri}
   source_component.t_min: 0.5
   source_component.t_max: 1.5
   sink_component.sink_uri: {sink_uri}
-implementations:
+programs:
   sink_component:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
@@ -228,25 +233,27 @@ def test_source_without_time_array(tmp_path, iron_core, pf_active):
         entry.put(pf_active)
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [iron_core_out, pf_active_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [iron_core_in, pf_active_in]
-  conduits:
-    source_component.iron_core_out: sink_component.iron_core_in
-    source_component.pf_active_out: sink_component.pf_active_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [iron_core_out, pf_active_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [iron_core_in, pf_active_in]
+    conduits:
+      source_component.iron_core_out: sink_component.iron_core_in
+      source_component.pf_active_out: sink_component.pf_active_in
 settings:
   source_component.source_uri: {source_uri}
   sink_component.sink_uri: {sink_uri}
-implementations:
+programs:
   sink_component:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
@@ -299,26 +306,28 @@ def test_source_checkpoints(tmp_path, pf_active):
         entry.put(pf_active)
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [pf_active_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [pf_active_in]
-  conduits:
-    source_component.pf_active_out: sink_component.pf_active_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [pf_active_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [pf_active_in]
+    conduits:
+      source_component.pf_active_out: sink_component.pf_active_in
 settings:
   source_component.source_uri: {source_uri}
   source_component.iterative: true
   sink_component.sink_uri: {sink_uri}
   sink_component.sink_mode: 'w'
-implementations:
+programs:
   sink_component:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
@@ -365,25 +374,27 @@ def test_increment_existing_sink(tmp_path, core_profiles):
         entry.put(core_profiles)
     # make config
     ymmsl_text = f"""
-ymmsl_version: v0.1
-model:
-  name: test_model
-  components:
-    source_component:
-      implementation: source_component
-      ports:
-        o_i: [core_profiles_out]
-    sink_component:
-      implementation: sink_component
-      ports:
-        f_init: [core_profiles_in]
-  conduits:
-    source_component.core_profiles_out: sink_component.core_profiles_in
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [core_profiles_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [core_profiles_in]
+    conduits:
+      source_component.core_profiles_out: sink_component.core_profiles_in
 settings:
   source_component.source_uri: {source_uri}
   sink_component.sink_uri: {source_uri}
   sink_component.sink_mode: x
-implementations:
+programs:
   sink_component:
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
@@ -415,7 +426,7 @@ resources:
         assert all(entry.get("core_profiles").time == core_profiles.time)
 
     new_sink_path = data_source_path.with_name(
-      f"{data_source_path.stem}_1{data_source_path.suffix}"
+        f"{data_source_path.stem}_1{data_source_path.suffix}"
     )
     assert new_sink_path.exists()
     new_sink_uri = f"imas:hdf5?path={new_sink_path}"
