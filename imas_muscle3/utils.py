@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional, TypeVar, cast
+from typing import List, Optional, TypeVar, cast, overload
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
