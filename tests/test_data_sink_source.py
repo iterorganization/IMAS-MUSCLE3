@@ -219,6 +219,70 @@ resources:
         assert all(entry.get("core_profiles").time == [1])
 
 
+def test_non_iterative_source_with_time_range(tmp_path, core_profiles):
+    data_source_path = (tmp_path / "source_component_data").absolute()
+    data_sink_path = (tmp_path / "sink_component_data").absolute()
+    source_uri = f"imas:hdf5?path={data_source_path}"
+    sink_uri = f"imas:hdf5?path={data_sink_path}"
+    with DBEntry(source_uri, "w") as entry:
+        entry.put(core_profiles)
+    # make config
+    ymmsl_text = f"""
+ymmsl_version: v0.2
+models:
+  test_model:
+    components:
+      source_component:
+        description: source component
+        implementation: source_component
+        ports:
+          o_i: [core_profiles_out]
+      sink_component:
+        description: sink component
+        implementation: sink_component
+        ports:
+          f_init: [core_profiles_in]
+    conduits:
+      source_component.core_profiles_out: sink_component.core_profiles_in
+settings:
+  source_component.source_uri: {source_uri}
+  source_component.iterative: false
+  source_component.t_min: 0.5
+  source_component.t_max: 2.5
+  sink_component.sink_uri: {sink_uri}
+programs:
+  sink_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.sink_component
+  source_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
+resources:
+  source_component:
+    threads: 1
+  sink_component:
+    threads: 1
+"""
+
+    config = ymmsl.load(ymmsl_text)
+
+    # set up
+    run_dir = RunDir(tmp_path / "run")
+
+    # launch MUSCLE Manager with simulation
+    manager = Manager(config, run_dir)
+    manager.start_instances()
+    success = manager.wait()
+
+    # check that all went well
+    assert success
+
+    assert data_sink_path.exists()
+    with DBEntry(sink_uri, "r") as entry:
+        assert all(core_profiles.time == [0, 1, 2])
+        assert all(entry.get("core_profiles").time == [1, 2])
+
+
 def test_source_without_time_array(tmp_path, iron_core, pf_active):
     """
     Test if t_array in source is taken from pf_active even if

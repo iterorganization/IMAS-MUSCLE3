@@ -290,10 +290,20 @@ def handle_source(
                 interpolation_method=interp_method,
             )
         else:
-            slice_out = db_entry.get(
-                ids_name=ids_name,
-                occurrence=occ,
-            )
+            t_min = get_setting_optional(instance, "t_min")
+            t_max = get_setting_optional(instance, "t_max")
+            if t_min is None and t_max is None:
+                slice_out = db_entry.get(
+                    ids_name=ids_name,
+                    occurrence=occ,
+                )
+            else:
+                slice_out = db_entry.get_sample(
+                    ids_name=ids_name,
+                    tmin=-1e20 if t_min is None else t_min,
+                    tmax=1e20 if t_max is None else t_max,
+                    occurrence=occ,
+                )
         msg_out = Message(
             t_cur, data=slice_out.serialize(), next_timestamp=next_timestamp
         )
