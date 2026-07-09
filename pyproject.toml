@@ -58,7 +58,8 @@ dependencies = [
     "panel",
     "holoviews",
     "hvplot",
-    "xarray"
+    "xarray",
+    "zarr"
 ]
 
 [project.optional-dependencies]
@@ -132,13 +133,14 @@ replace-imports-with-any = [
     "panel",
     "param",
     "holoviews",
+    "zarr",
     "matplotlib",
     "xarray",
 ]
 
 [[tool.ty.overrides]]
 # ignore type errors in tests and visualization examples (mypy: ignore_errors = true)
-include = ["tests/**", "imas_muscle3/visualization/examples/**"]
+include = ["tests/**", "imas_muscle3/visualization/**"]
 rules.invalid-argument-type = "ignore"
 rules.invalid-assignment = "ignore"
 rules.invalid-return-type = "ignore"

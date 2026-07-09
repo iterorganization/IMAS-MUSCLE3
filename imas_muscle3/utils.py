@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional, TypeVar, cast
+from typing import List, Optional, TypeVar, cast, overload
 from urllib.parse import urlparse, urlunparse
 
 from libmuscle import Instance
@@ -10,6 +10,23 @@ from ymmsl.v0_2 import Operator, SettingValue
 TSetting = TypeVar("TSetting", bound=SettingValue)
 
 
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: None = None,
+) -> Optional[TSetting]: ...
+
+
+@overload
+def get_setting_optional(
+    instance: Instance,
+    setting_name: str,
+    default: TSetting,
+) -> TSetting: ...
+
+
+# it may be a nice proposal for the m3 api
 def get_setting_optional(
     instance: Instance,
     setting_name: str,
