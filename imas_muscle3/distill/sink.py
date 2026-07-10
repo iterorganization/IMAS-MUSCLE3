@@ -98,7 +98,9 @@ def snapshot_config(config: Path, store_path: Path) -> Path:
         return snapshot
     except OSError:
         logger.warning(
-            "could not snapshot config %s to %s", config, snapshot,
+            "could not snapshot config %s to %s",
+            config,
+            snapshot,
             exc_info=True,
         )
         return config
