@@ -4,7 +4,11 @@ import xarray as xr
 from libmuscle import Message
 
 from imas_muscle3.distill import ZarrSink, group_name
-from imas_muscle3.distill.sink import DistillSink, load_extract_config
+from imas_muscle3.distill.sink import (
+    DistillSink,
+    load_extract_config,
+    snapshot_config,
+)
 from imas_muscle3.distill.zarr_sink import read_root_attrs
 
 # --- config loading ---------------------------------------------------------
@@ -48,6 +52,23 @@ def test_load_extract_config_rejects_other_files(tmp_path):
     config.write_text("x = 1\n")
     with pytest.raises(NameError):
         load_extract_config(str(config))
+
+
+def test_snapshot_config_copies_next_to_data(tmp_path):
+    config = tmp_path / "cfg.py"
+    config.write_text("x = 1\n")
+    store_path = tmp_path / "store"
+    store_path.mkdir()
+
+    snapshot = snapshot_config(config, store_path)
+    assert snapshot == store_path / "cfg.py"
+    # Editing the original leaves the snapshot untouched...
+    config.write_text("x = 2\n")
+    assert snapshot.read_text() == "x = 1\n"
+    # ...until the next run re-snapshots it.
+    assert snapshot_config(config, store_path).read_text() == "x = 2\n"
+    # Config already next to the data: returned as-is, no self-copy.
+    assert snapshot_config(snapshot, store_path) == snapshot
 
 
 # --- distill sink -----------------------------------------------------------

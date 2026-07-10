@@ -38,8 +38,12 @@ The ``config`` setting names a Python file defining either:
   datasets are recorded.
 
 The ``State`` form lets one plot file define both what is stored and how the
-muscle3-dashboard plots it; the dashboard finds the file through the run's
-``<rec>.config`` setting.
+muscle3-dashboard plots it. On startup the recorder copies the config file
+next to the data (``<store_path>/<config name>``) and stamps each store's
+``distill_profile`` attribute with the copy's path; the dashboard prefers
+this snapshot over the run's ``<rec>.config`` setting, so a recorded run
+keeps plotting with the exact code that produced it even after the original
+file is edited.
 
 Settings
 --------

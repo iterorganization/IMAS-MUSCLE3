@@ -3,6 +3,7 @@ IDS and append them to one Zarr store per occurrence."""
 
 import logging
 import runpy
+import shutil
 from functools import partial
 from pathlib import Path
 from typing import Callable, Dict
@@ -86,11 +87,29 @@ class DistillSink:
         )
 
 
+def snapshot_config(config: Path, store_path: Path) -> Path:
+    """Copy the config file next to the data, so a viewer can plot the
+    stores with the exact code that produced them even after the original
+    is edited. Returns the copy (the original if copying failed)."""
+    snapshot = store_path / config.name
+    try:
+        if snapshot.resolve() != config.resolve():
+            shutil.copy2(config, snapshot)
+        return snapshot
+    except OSError:
+        logger.warning(
+            "could not snapshot config %s to %s", config, snapshot,
+            exc_info=True,
+        )
+        return config
+
+
 def build_distill_sink_factory(
     instance: Instance, settings: RecorderSettings
 ) -> SinkFactory:
     """Read the required ``config`` setting and bind it to the sink."""
     config = str(instance.get_setting("config", "str"))
     extract = load_extract_config(config)
-    logger.info("distilling with config=%s", config)
-    return partial(DistillSink, extract=extract, profile=config)
+    profile = snapshot_config(Path(config), settings.store_path)
+    logger.info("distilling with config=%s (snapshot: %s)", config, profile)
+    return partial(DistillSink, extract=extract, profile=str(profile))
