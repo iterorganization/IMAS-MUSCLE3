@@ -26,17 +26,9 @@ ExtractFn = Callable[[IDSToplevel], Dict[str, xr.Dataset]]
 
 
 def load_extract_config(config_path: str) -> ExtractFn:
-    """Load the extraction logic from a config file.
-
-    The file defines either a callable ``extract(ids) -> dict[str, Dataset]``,
-    or a visualization ``State`` class (a
-    :class:`~imas_muscle3.visualization.base_state.BaseState` subclass, i.e. a
-    live-actor plot file) whose ``extract`` method is wrapped: each message is
-    fed to a fresh instance and its accumulated ``data`` datasets are
-    recorded. Sharing one plot file between this recorder and a viewer's
-    ``Plotter`` keeps the stored quantities and the plots that read them in
-    lockstep.
-    """
+    """Load the extraction logic from a config file: either a callable
+    ``extract(ids) -> dict[str, Dataset]``, or a visualization ``State``
+    class (a plot file), each message then going through a fresh instance."""
     namespace = runpy.run_path(config_path)
     extract = namespace.get("extract")
     if extract is not None and callable(extract):
@@ -63,9 +55,8 @@ def load_extract_config(config_path: str) -> ExtractFn:
 
 
 class DistillSink:
-    """A :class:`~imas_muscle3.actors._tap_base.Sink` appending each
-    message's extracted datasets to one occurrence's Zarr store
-    (``<base>.zarr``)."""
+    """A :class:`~imas_muscle3.actors._tap_base.Sink` appending each message's
+    extracted datasets to one occurrence's Zarr store (``<base>.zarr``)."""
 
     def __init__(
         self, base: Path, ids_name: str, extract: ExtractFn, profile: str
@@ -85,8 +76,7 @@ class DistillSink:
 
     def close(self) -> None:
         self._zarr.close()
-        # Stamp the occurrence index + config reference so a viewer can group
-        # stores and load the matching plots.
+        # Lets a viewer group stores and load the matching plots.
         write_root_attrs(
             self._store,
             {

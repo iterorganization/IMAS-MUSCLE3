@@ -1,17 +1,9 @@
 """Append distilled datasets for one timeline to a Zarr store, live.
 
-Each distilled IDS (and config group) becomes a Zarr *group*. The sink writes
-each received dataset (a slice, or a whole trace) to disk immediately,
-extending the group along ``time``, so the store is durable and live-tailable
-mid-run.
-
-A consistent stream (same quantities and grid every step — the common case) is
-a plain ``time`` append. A message that doesn't fit the group's on-disk schema
-is rebuilt with :func:`_combine` (outer join on ``time``) over the store so far
-plus the new message, keeping it robust to real IDS streams: **gaps** (a
-quantity absent on some steps, e.g. empty ``profiles_1d`` while ``time`` runs)
-are ``NaN``-filled on a union time axis, and **ragged non-time dims** (a
-re-gridded profile) are ``NaN``-padded to the max width.
+Each distilled dataset becomes a Zarr *group*, written to disk immediately and
+extended along ``time``, so the store is live-tailable mid-run. A message that
+doesn't fit the group's on-disk schema (a gap, a re-gridded/ragged profile)
+triggers a rebuild via :func:`_combine`.
 """
 
 import logging
@@ -30,12 +22,8 @@ _TIME = "time"
 
 
 def write_root_attrs(store_path: Path, attrs: Mapping[str, Any]) -> None:
-    """Stamp metadata onto a store's root group (e.g. the profile reference).
-
-    Lets a reader discover, for instance, which visualization profile produced
-    a store. A no-op if the store does not exist (an empty timeline writes no
-    store).
-    """
+    """Stamp metadata onto a store's root group. A no-op if the store does
+    not exist (an empty timeline writes no store)."""
     store_path = Path(store_path)
     if not store_path.exists():
         return
@@ -55,24 +43,14 @@ def read_root_attrs(store_path: Path) -> Dict[str, object]:
 
 
 def group_name(full_path: str) -> str:
-    """Zarr-safe group name for a variable's ``ids/path`` key.
-
-    IDS paths use ``/`` as a separator and bare integers for array indices;
-    mapping ``/`` to ``.`` yields a flat, readable, collision-free group name
-    (DD node names are slash-free identifiers). The original ``full_path`` is
-    also kept in the group's ``attrs`` for an exact round-trip.
-    """
+    """Zarr-safe (flat, collision-free) group name for an ``ids/path`` key."""
     return full_path.replace("/", ".")
 
 
 def _signature(ds: xr.Dataset) -> tuple:
-    """Schema fingerprint: which quantities, on what non-time grid.
-
-    Two messages with the same signature can be appended along ``time``; a
-    different one (a missing quantity, a re-gridded or ragged profile) means
-    the group must be rebuilt, since :meth:`xarray.Dataset.to_zarr` does *not*
-    reject a mismatched append — it silently corrupts the store.
-    """
+    """Schema fingerprint: which quantities, on what non-time grid. Only a
+    matching signature may be appended — ``to_zarr`` does *not* reject a
+    mismatched append, it silently corrupts the store."""
     names = frozenset(map(str, ds.data_vars))
     dims = tuple(
         sorted((str(d), int(s)) for d, s in ds.sizes.items() if d != _TIME)
@@ -86,14 +64,9 @@ def _signature(ds: xr.Dataset) -> tuple:
 
 
 def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
-    """Concatenate one timeline's messages along ``time`` into one dataset.
-
-    Pads ragged non-time dims to their max width, then outer-joins on the
-    ``time`` coordinate so gaps become ``NaN`` and every quantity shares one
-    ``time``. Non-dimension coordinates are demoted before the concat (xarray
-    will not concat a coordinate that is absent from some parts) and restored
-    after.
-    """
+    """Concat along ``time``, NaN-padding ragged non-time dims and NaN-filling
+    gaps. Non-dimension coordinates are demoted first (xarray will not concat
+    a coordinate absent from some parts) and restored after."""
     if len(parts) == 1:
         return parts[0]
 
@@ -122,12 +95,8 @@ def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
 
 
 class ZarrSink:
-    """Append one timeline's distilled datasets to a Zarr store as they arrive.
-
-    Each group's messages are also kept in memory as the source for a rebuild
-    (see :meth:`append`); the on-disk store always reflects everything received
-    so far, so it is durable and live-tailable mid-run.
-    """
+    """Append one timeline's distilled datasets to a Zarr store as they
+    arrive; each group's messages are kept in memory as rebuild source."""
 
     def __init__(self, store_path: Path) -> None:
         self._store = str(store_path)
@@ -135,15 +104,9 @@ class ZarrSink:
         self._sig: Dict[str, tuple] = {}
 
     def append(self, name: str, ds: xr.Dataset) -> None:
-        """Write a dataset for group ``name`` to disk now, along ``time``.
-
-        ``ds`` must carry a ``time`` dimension; its length is free — a single
-        slice (streamed recording) or a whole trace both work. The first
-        message for a group creates it; a later message with the same schema
-        (see :func:`_signature`) is appended along ``time`` (cheap, the common
-        streaming case); one with a different schema (a gap, a missing
-        quantity, a re-gridded/ragged profile) rebuilds the whole group from
-        all of its messages via :func:`_combine`.
+        """Write a dataset (single slice or whole trace, must carry ``time``)
+        for group ``name`` to disk now: appended along ``time`` if its schema
+        matches the group's, else the group is rebuilt via :func:`_combine`.
         """
         if _TIME not in ds.dims:
             raise ValueError(
@@ -163,9 +126,8 @@ class ZarrSink:
                 self._store, group=group, append_dim=_TIME, consolidated=False
             )
             return
-        # Schema changed: rebuild from all of the group's messages (NaN-filling
-        # gaps, padding ragged dims) and rewrite. Clear the group dir first so
-        # no stale arrays from the old schema linger.
+        # Schema changed: clear the group dir (no stale arrays from the old
+        # schema) and rewrite it from all messages.
         shutil.rmtree(Path(self._store) / group, ignore_errors=True)
         try:
             combined = _combine(parts)

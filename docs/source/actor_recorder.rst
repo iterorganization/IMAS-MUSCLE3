@@ -4,17 +4,13 @@ Recorder actor
 ==============
 
 A terminal (sink-only) actor that taps the live traffic of a running workflow
-and distills it to disk, without disturbing the coupling: wire it as an extra
-receiver on existing conduits (a fan-out entry in the conduit list), so it
-adds no conduit the producers wait on. It uses MUSCLE3 dynamic ports: every
-connected ``S`` port is an independent timeline, its name the IDS it carries
-(an optional ``_in`` suffix is stripped).
-
-Each received IDS is reduced to plot-ready ``xarray`` datasets by the
-``config`` file and appended to a Zarr store that can be read back — also
-mid-run, for live views — with ``xarray.open_zarr(store, group=<name>)``.
-A driven sender re-running each outer-loop iteration is recorded across every
-iteration, one store per occurrence: ``<store_path>/<port>/<NNNN>.zarr``.
+without disturbing the coupling: wire it as an extra receiver on existing
+conduits. Every connected ``S`` port is an independent timeline, its name the
+IDS it carries (an optional ``_in`` suffix is stripped). Each received IDS is
+reduced to plot-ready ``xarray`` datasets by the ``config`` file and appended
+to a Zarr store that can be read back — also mid-run, for live views — with
+``xarray.open_zarr(store, group=<name>)``. Each outer-loop iteration gets its
+own store: ``<store_path>/<port>/<NNNN>.zarr``.
 
 .. code-block:: yaml
 
@@ -37,19 +33,13 @@ The ``config`` setting names a Python file defining either:
 
 * ``extract(ids) -> dict[str, xarray.Dataset]`` — every dataset carries a
   ``time`` dimension (one instant or a whole trace) to append along; or
-* a ``State`` class (a
-  :class:`~imas_muscle3.visualization.base_state.BaseState` subclass, i.e. a
-  :ref:`visualization actor <actor_visualization>` plot file) — each message
-  is fed to a fresh instance and its accumulated ``data`` datasets are
-  recorded.
+* a ``State`` class (a :ref:`visualization actor <actor_visualization>` plot
+  file) — each message is fed to a fresh instance and its accumulated ``data``
+  datasets are recorded.
 
-The ``State`` form is how the muscle3-dashboard renders recorder data: the
-same plot file defines what is stored (``State``) and how it is plotted
-(``Plotter``), so the stored quantities and the plots that read them stay in
-lockstep. The dashboard finds the file through the run's ``<rec>.config``
-setting (each store's root attributes also carry it as ``distill_profile``)
-and shows one tab per recorder, live while the run appends or after it
-finished.
+The ``State`` form lets one plot file define both what is stored and how the
+muscle3-dashboard plots it; the dashboard finds the file through the run's
+``<rec>.config`` setting.
 
 Settings
 --------

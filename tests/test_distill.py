@@ -27,8 +27,6 @@ def test_load_extract_fn(tmp_path, equilibrium):
 
 
 def test_load_extract_state_class(tmp_path, equilibrium):
-    # A visualization plot file's State class works as-is: each message goes
-    # through a fresh instance and its accumulated datasets are recorded.
     config = tmp_path / "plot_file.py"
     config.write_text(
         "import xarray as xr\n"
@@ -73,7 +71,6 @@ def test_distill_sink_writes_and_stamps(tmp_path, equilibrium):
     store = tmp_path / "0002.zarr"
     ds = xr.open_zarr(store, group="equilibrium", consolidated=False)
     assert list(ds.time.values) == [0.0]
-    # Root attrs let a viewer group stores and find the matching plots.
     attrs = read_root_attrs(store)
     assert attrs["occurrence"] == 2
     assert attrs["distill_profile"].endswith("cfg.py")
@@ -147,9 +144,7 @@ def test_zarr_sink_pads_ragged_profiles(tmp_path):
 
 
 def test_zarr_sink_combines_gaps(tmp_path):
-    # Some messages carry a var, others don't (e.g. an empty profiles_1d
-    # early in a run). The store must still open: union time axis, NaN where
-    # the var is absent.
+    # A var absent from some messages: union time axis, NaN where missing.
     store = tmp_path / "core_profiles_in.zarr"
     sink = ZarrSink(store)
     sink.append("x/y", _single_1d(0.0, np.ones(8)))  # has 'value'

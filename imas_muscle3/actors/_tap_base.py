@@ -1,23 +1,10 @@
 """Shared machinery for terminal recorder actors.
 
-A recorder is a sink-only MUSCLE3 actor that drains an arbitrary number of
-independent *timelines* (one per connected ``S`` port) and writes each to disk
-via a pluggable :class:`Sink`. What is written is up to the actor module
-(:mod:`.recorder_component` distills to Zarr; other formats can be added as
-sibling actors); everything they share lives here:
-
-- **Dynamic ports** (MUSCLE3 0.10): the instance is created without a port
-  description, so ports come from the yMMSL config. Any connected ``S`` port
-  whose name maps to an IDS (optional ``_in`` suffix stripped) is drained.
-- **One worker thread per sender**, so a slow timeline never head-of-line
-  blocks a busy one. Ports from one sender share a thread (they share a
-  libmuscle ``MPPClient``, which is not concurrency-safe). Receives go through
-  the communicator, not ``instance.receive`` (which shuts the whole instance
-  down on any one port's close), and the deadlock detector is disabled.
-
-A timeline ends when its peer's port *closes*; ``next_timestamp is None`` is
-an intermediate stream restart (an outer-loop iteration boundary), not the
-end.
+A recorder is a sink-only MUSCLE3 actor that drains independent *timelines*
+(one per connected ``S`` port, dynamic ports) and writes each to disk via a
+pluggable :class:`Sink`, one worker thread per sender. A timeline ends when
+its peer's port closes; ``next_timestamp is None`` is a stream restart (an
+outer-loop iteration boundary), not the end.
 """
 
 import logging
@@ -51,11 +38,8 @@ def ids_name_from_port(port_name: str) -> str:
 
 
 def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
-    """Build each IDS type's metadata once, single-threaded.
-
-    imas-python caches it lazily on first construction, which is not
-    thread-safe; doing it here lets the worker threads only ever read it.
-    """
+    """Build each IDS type's metadata once, single-threaded; imas-python's
+    lazy metadata construction is not thread-safe."""
     factory = IDSFactory()
     for ids_name in set(ids_names):
         factory.new(ids_name)
@@ -69,8 +53,7 @@ def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
 
 
 class Sink(Protocol):
-    """Writes one occurrence's messages to disk. Built per occurrence by a
-    :data:`SinkFactory`; used by one thread, so it need not be thread-safe."""
+    """Writes one occurrence's messages to disk; used by one thread only."""
 
     def write(self, msg: Message) -> str:
         """Write one message; return a short detail to log."""
@@ -81,8 +64,7 @@ class Sink(Protocol):
         ...
 
 
-#: Builds a :class:`Sink` for one occurrence, given its store base path (no
-#: suffix) and the IDS name carried by the timeline.
+#: Builds a :class:`Sink` from a store base path (no suffix) and an IDS name.
 SinkFactory = Callable[[Path, str], Sink]
 
 
@@ -144,8 +126,8 @@ def serve_timelines(
 ) -> Dict[str, BaseException]:
     """Drain every timeline concurrently, one worker thread per sender.
 
-    Returns a mapping of port -> exception for any failed timeline (empty on
-    success); recorders are always closed.
+    Returns port -> exception for failed timelines (empty on success);
+    recorders are always closed.
     """
     precompute_ids_metadata(ids_names.values())
     _disable_deadlock_detector(instance)
@@ -179,14 +161,10 @@ def serve_timelines(
 
 
 def _disable_deadlock_detector(instance: Instance) -> None:
-    """Turn off libmuscle's receive-timeout deadlock detector.
-
-    The detector tracks a single waiting receive per instance, so the
-    concurrent waits of the per-sender drain threads would crash it. A
-    terminal recorder only receives, so it can never be part of a deadlock
-    cycle. Best-effort: if the hook is gone, set
-    ``<recorder>.muscle_deadlock_receive_timeout: -1.0`` in the workflow.
-    """
+    """Turn off libmuscle's deadlock detector: it tracks a single waiting
+    receive per instance, so the concurrent drain threads would crash it (a
+    terminal recorder cannot deadlock anyway). Best-effort: if the hook is
+    gone, set ``<recorder>.muscle_deadlock_receive_timeout: -1.0`` instead."""
     try:
         instance._communicator.set_receive_timeout(-1.0)
     except Exception:
@@ -199,13 +177,8 @@ def _disable_deadlock_detector(instance: Instance) -> None:
 def _group_ports_by_peer(
     instance: Instance, s_ports: List[str]
 ) -> List[List[str]]:
-    """Group ports by the sender instance that feeds them.
-
-    Ports from one sender share a single ``MPPClient`` (whose ``receive`` is
-    not concurrency-safe), so they drain on one thread; ports from different
-    senders drain concurrently. Falls back to one group per port if peer info
-    cannot be read.
-    """
+    """Group ports by sender: ports from one sender share an ``MPPClient``
+    (not concurrency-safe), so they must drain on one thread."""
     try:
         from ymmsl.v0_2 import Identifier
 
@@ -230,12 +203,7 @@ def _drain_ports(
     errors: Dict[str, BaseException],
     errors_lock: "threading.Lock",
 ) -> None:
-    """One worker thread: round-robin ``ports`` (one sender) to their closes.
-
-    With a single port per sender (the usual case) this is just that port's
-    blocking receive loop; co-located ports take turns so the shared
-    connection is never used concurrently.
-    """
+    """One worker thread: round-robin one sender's ports to their closes."""
     active = list(ports)
     count = {p: 0 for p in ports}
     while active:
@@ -243,9 +211,8 @@ def _drain_ports(
             try:
                 msg, _ = instance._communicator.receive_message(port)
             except (RuntimeError, OSError) as exc:
-                # Mid-stream failure (peer crashed without a ClosePort, torn
-                # socket). Data so far is on disk and the manager reports the
-                # peer's crash; end this timeline, let the others carry on.
+                # Peer crashed mid-stream; end this timeline (data so far is
+                # on disk), let the others carry on.
                 active.remove(port)
                 logger.warning(
                     "timeline '%s' ended after %d messages: %r",
@@ -292,25 +259,18 @@ def read_recorder_settings(instance: Instance) -> RecorderSettings:
     return RecorderSettings(store_path=store_path)
 
 
-#: Reads an actor's own settings once ports and common settings are known and
-#: returns the factory used to make one sink per occurrence.
+#: Reads an actor's own settings and returns its per-occurrence SinkFactory.
 SinkFactoryBuilder = Callable[[Instance, RecorderSettings], SinkFactory]
 
 
 def run_recorder(name: str, build_sink_factory: SinkFactoryBuilder) -> None:
-    """The shared MUSCLE3 reuse loop for a terminal recorder actor.
-
-    Every connected ``S`` port is drained to its real close, so this loop runs
-    once even when the peers keep reusing; per-occurrence bookkeeping lives in
-    the :class:`OccurrenceRecorder`.
-    """
+    """The shared MUSCLE3 reuse loop for a terminal recorder actor."""
     # Dynamic ports: no port description, ports come from the yMMSL config.
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
 
     while instance.reuse_instance():
         s_ports = connected_s_ports(instance)
         if not s_ports:
-            # A recorder with nothing wired to it is a no-op, not an error.
             logger.warning(
                 "%s has no connected S ports; nothing to record.", name
             )
@@ -320,9 +280,8 @@ def run_recorder(name: str, build_sink_factory: SinkFactoryBuilder) -> None:
 
         settings = read_recorder_settings(instance)
         settings.store_path.mkdir(parents=True, exist_ok=True)
-        # Clear this recorder's own per-port dirs (never store_path itself,
-        # which may be the run folder), so a re-run into an explicit
-        # store_path leaves no stale occurrences behind.
+        # Clear stale per-port dirs, never store_path itself (may be the
+        # run folder).
         for port in s_ports:
             shutil.rmtree(settings.store_path / port, ignore_errors=True)
         sink_factory = build_sink_factory(instance, settings)
