@@ -1,5 +1,6 @@
 import pytest
 import xarray as xr
+import ymmsl
 from imas import DBEntry
 from libmuscle import Message
 from libmuscle.manager.manager import Manager
@@ -9,7 +10,6 @@ from imas_muscle3.actors._tap_base import (
     OccurrenceRecorder,
     ids_name_from_port,
 )
-from tests.ymmsl_helpers import load_config
 
 # --- port -> IDS name -----------------------------------------------------
 
@@ -86,31 +86,34 @@ def extract(ids):
 
 def _ymmsl(eq_uri, cp_uri, store_path, config_path):
     return f"""
-ymmsl_version: v0.1
-model:
-  name: test_recorder
-  components:
-    eq_source:
-      implementation: source_component
-      ports:
-        o_i: [equilibrium_out]
-    cp_source:
-      implementation: source_component
-      ports:
-        o_i: [core_profiles_out]
-    rec:
-      implementation: recorder_component
-      ports:
-        s: [equilibrium_in, core_profiles_in]
-  conduits:
-    eq_source.equilibrium_out: rec.equilibrium_in
-    cp_source.core_profiles_out: rec.core_profiles_in
+ymmsl_version: v0.2
+models:
+  test_recorder:
+    components:
+      eq_source:
+        description: equilibrium source component
+        implementation: source_component
+        ports:
+          o_i: [equilibrium_out]
+      cp_source:
+        description: core_profiles source component
+        implementation: source_component
+        ports:
+          o_i: [core_profiles_out]
+      rec:
+        description: recorder component
+        implementation: recorder_component
+        ports:
+          s: [equilibrium_in, core_profiles_in]
+    conduits:
+      eq_source.equilibrium_out: rec.equilibrium_in
+      cp_source.core_profiles_out: rec.core_profiles_in
 settings:
   eq_source.source_uri: {eq_uri}
   cp_source.source_uri: {cp_uri}
   rec.store_path: {store_path}
   rec.config: {config_path}
-implementations:
+programs:
   recorder_component:
     executable: python
     args: -u -m imas_muscle3.actors.recorder_component
@@ -118,9 +121,12 @@ implementations:
     executable: python
     args: -u -m imas_muscle3.actors.source_component
 resources:
-  eq_source: {{threads: 1}}
-  cp_source: {{threads: 1}}
-  rec: {{threads: 1}}
+  test_recorder.eq_source:
+    threads: 1
+  test_recorder.cp_source:
+    threads: 1
+  test_recorder.rec:
+    threads: 1
 """
 
 
@@ -135,7 +141,7 @@ def test_records_two_timelines(tmp_path, equilibrium, core_profiles):
     config_path.write_text(_CONFIG)
 
     store_path = (tmp_path / "store").absolute()
-    config = load_config(_ymmsl(eq_uri, cp_uri, store_path, config_path))
+    config = ymmsl.load(_ymmsl(eq_uri, cp_uri, store_path, config_path))
     manager = Manager(config, RunDir(tmp_path / "run"))
     manager.start_instances()
     assert manager.wait()
