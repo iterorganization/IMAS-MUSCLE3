@@ -1,23 +1,24 @@
 """Shared machinery for terminal recorder actors.
 
 A recorder is a sink-only MUSCLE3 actor that drains independent *timelines*
-(one per connected ``S`` port, dynamic ports) and writes each to disk via a
-pluggable :class:`Sink`, one worker thread per sender. A timeline ends when
+(one per connected ``S`` port, dynamic ports), round-robin on a single
+thread, and writes each to disk via a pluggable :class:`Sink`. Senders are
+assumed to keep pace with each other (as in a normal lockstep workflow), so
+blocking on one port in turn doesn't stall the others. A timeline ends when
 its peer's port closes; ``next_timestamp is None`` is a stream restart (an
 outer-loop iteration boundary), not the end.
 """
 
 import logging
 import shutil
-import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Protocol
+from typing import Callable, Dict, Iterable, Optional, Protocol
 
 from imas import IDSFactory
 from libmuscle import Instance, InstanceFlags, Message
 from libmuscle.mpp_message import ClosePort
-from ymmsl.v0_2 import Identifier, Operator
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import (
     get_port_list,
@@ -29,8 +30,7 @@ logger = logging.getLogger()
 
 
 def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
-    """Build each IDS type's metadata once, single-threaded; imas-python's
-    lazy metadata construction is not thread-safe."""
+    """Build each IDS type's metadata once up front."""
     factory = IDSFactory()
     for ids_name in set(ids_names):
         factory.new(ids_name)
@@ -94,30 +94,55 @@ def serve_timelines(
     ids_names: Dict[str, str],
     instance: Instance,
 ) -> Dict[str, BaseException]:
-    """Drain every timeline concurrently, one worker thread per sender.
+    """Drain every timeline in turn on this thread, round-robin.
 
     Returns port -> exception for failed timelines (empty on success);
     recorders are always closed.
     """
     precompute_ids_metadata(ids_names.values())
-    _disable_deadlock_detector(instance)
 
     errors: Dict[str, BaseException] = {}
-    errors_lock = threading.Lock()
-
+    active = list(recorders)
+    count = {p: 0 for p in active}
     try:
-        workers = [
-            threading.Thread(
-                target=_drain_ports,
-                args=(ports, recorders, instance, errors, errors_lock),
-                name=f"recorder-{ports[0]}",
-            )
-            for ports in _group_ports_by_peer(instance, list(recorders))
-        ]
-        for worker in workers:
-            worker.start()
-        for worker in workers:
-            worker.join()
+        while active:
+            for port in list(active):
+                try:
+                    msg, _ = instance._communicator.receive_message(port)
+                except (RuntimeError, OSError) as exc:
+                    # Peer crashed mid-stream; end this timeline (data so far
+                    # is on disk), let the others carry on.
+                    active.remove(port)
+                    logger.warning(
+                        "timeline '%s' ended after %d messages: %r",
+                        port,
+                        count[port],
+                        exc,
+                    )
+                    continue
+                if isinstance(msg.data, ClosePort):
+                    active.remove(port)
+                    logger.info(
+                        "timeline '%s' closed after %d messages",
+                        port,
+                        count[port],
+                    )
+                    continue
+                try:
+                    detail = recorders[port].handle(msg)
+                except BaseException as exc:  # noqa: B036 -- surfaced to caller
+                    errors[port] = exc
+                    logger.exception(
+                        "timeline '%s' failed after %d messages",
+                        port,
+                        count[port],
+                    )
+                    active.remove(port)
+                    continue
+                count[port] += 1
+                logger.info(
+                    "handled %s t=%.4e -> %s", port, msg.timestamp, detail
+                )
     finally:
         for port, recorder in recorders.items():
             try:
@@ -128,85 +153,6 @@ def serve_timelines(
                     "closing recorder for timeline '%s' failed", port
                 )
     return errors
-
-
-def _disable_deadlock_detector(instance: Instance) -> None:
-    """Turn off libmuscle's deadlock detector: it tracks a single waiting
-    receive per instance, so the concurrent drain threads would crash it (a
-    terminal recorder cannot deadlock anyway). Best-effort: if the hook is
-    gone, set ``<recorder>.muscle_deadlock_receive_timeout: -1.0`` instead."""
-    try:
-        instance._communicator.set_receive_timeout(-1.0)
-    except Exception:
-        logger.warning(
-            "could not disable the deadlock detector programmatically; set "
-            "<recorder>.muscle_deadlock_receive_timeout: -1.0 in the workflow."
-        )
-
-
-def _group_ports_by_peer(
-    instance: Instance, s_ports: List[str]
-) -> List[List[str]]:
-    """Group ports by sender: ports from one sender share an ``MPPClient``
-    (not concurrency-safe), so they must drain on one thread."""
-    try:
-        peer_info = instance._communicator._peer_info
-        groups: Dict[str, List[str]] = {}
-        for port in s_ports:
-            endpoints = peer_info.get_peer_endpoints(Identifier(port), [])
-            groups.setdefault(str(endpoints[0].instance()), []).append(port)
-        return list(groups.values())
-    except Exception:
-        logger.warning(
-            "could not read peer info; draining one thread per port. If two "
-            "ports share a sender that is unsafe -- give each its recorder."
-        )
-        return [[p] for p in s_ports]
-
-
-def _drain_ports(
-    ports: List[str],
-    recorders: Dict[str, OccurrenceRecorder],
-    instance: Instance,
-    errors: Dict[str, BaseException],
-    errors_lock: "threading.Lock",
-) -> None:
-    """One worker thread: round-robin one sender's ports to their closes."""
-    active = list(ports)
-    count = {p: 0 for p in ports}
-    while active:
-        for port in list(active):
-            try:
-                msg, _ = instance._communicator.receive_message(port)
-            except (RuntimeError, OSError) as exc:
-                # Peer crashed mid-stream; end this timeline (data so far is
-                # on disk), let the others carry on.
-                active.remove(port)
-                logger.warning(
-                    "timeline '%s' ended after %d messages: %r",
-                    port,
-                    count[port],
-                    exc,
-                )
-                continue
-            if isinstance(msg.data, ClosePort):
-                active.remove(port)
-                logger.info(
-                    "timeline '%s' closed after %d messages", port, count[port]
-                )
-                continue
-            try:
-                detail = recorders[port].handle(msg)
-            except BaseException as exc:  # noqa: B036  -- surfaced to main
-                with errors_lock:
-                    errors[port] = exc
-                logger.exception(
-                    "timeline '%s' failed after %d messages", port, count[port]
-                )
-                active.remove(port)
-                continue
-            count[port] += 1
-            logger.info("handled %s t=%.4e -> %s", port, msg.timestamp, detail)
 
 
 @dataclass
