@@ -6,10 +6,8 @@ from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
-from imas_muscle3.actors._tap_base import (
-    OccurrenceRecorder,
-    ids_name_from_port,
-)
+from imas_muscle3.actors._tap_base import OccurrenceRecorder
+from imas_muscle3.utils import ids_name_from_port
 
 # --- port -> IDS name -----------------------------------------------------
 

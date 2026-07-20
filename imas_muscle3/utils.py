@@ -2,6 +2,8 @@ import re
 from typing import List, Optional, TypeVar, cast
 from urllib.parse import urlparse, urlunparse
 
+from imas import IDSFactory
+from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance
 
 # ymmsl 0.15+ split into versioned subpackages; import the v0.2 API explicitly.
@@ -30,13 +32,32 @@ def get_setting_optional(
 
 
 def get_port_list(instance: Instance, operator: Operator) -> List[str]:
-    """Filter list of ids_names by which ones are actually connected for
+    """Sorted list of ids_names by which ones are actually connected for
     given instance"""
     total_port_list = instance.list_ports().get(operator, [])
-    port_list = [
+    port_list = sorted(
         port for port in total_port_list if instance.is_connected(port)
-    ]
+    )
     return port_list
+
+
+def ids_name_from_port(port_name: str) -> str:
+    """The IDS name a port carries: its name, optional ``_in`` stripped."""
+    ids_name = port_name[:-3] if port_name.endswith("_in") else port_name
+    if ids_name not in IDSFactory().ids_names():
+        raise ValueError(
+            f"Port '{port_name}' does not map to a known IDS name "
+            f"(resolved to '{ids_name}'). Name the port after the IDS it "
+            f"carries, optionally with an '_in' suffix."
+        )
+    return ids_name
+
+
+def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
+    """Deserialize a received message's payload into a fresh IDS."""
+    ids = IDSFactory().new(ids_name)
+    ids.deserialize(data)
+    return ids
 
 
 def increment_suffix(uri: str) -> str:

@@ -15,26 +15,17 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Protocol
 
 from imas import IDSFactory
-from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
 from libmuscle.mpp_message import ClosePort
-from ymmsl.v0_2 import Operator
+from ymmsl.v0_2 import Identifier, Operator
 
-from imas_muscle3.utils import get_setting_optional
+from imas_muscle3.utils import (
+    get_port_list,
+    get_setting_optional,
+    ids_name_from_port,
+)
 
 logger = logging.getLogger()
-
-
-def ids_name_from_port(port_name: str) -> str:
-    """The IDS name a port carries: its name, optional ``_in`` stripped."""
-    ids_name = port_name[:-3] if port_name.endswith("_in") else port_name
-    if ids_name not in IDSFactory().ids_names():
-        raise ValueError(
-            f"Port '{port_name}' does not map to a known IDS name "
-            f"(resolved to '{ids_name}'). Name the port after the IDS it "
-            f"carries, optionally with an '_in' suffix."
-        )
-    return ids_name
 
 
 def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
@@ -43,13 +34,6 @@ def precompute_ids_metadata(ids_names: Iterable[str]) -> None:
     factory = IDSFactory()
     for ids_name in set(ids_names):
         factory.new(ids_name)
-
-
-def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
-    """Deserialize a received message's payload into a fresh IDS."""
-    ids = IDSFactory().new(ids_name)
-    ids.deserialize(data)
-    return ids
 
 
 class Sink(Protocol):
@@ -103,20 +87,6 @@ class OccurrenceRecorder:
     def close(self) -> None:
         if self._sink is not None:
             self._sink.close()
-
-
-def connected_s_ports(instance: Instance) -> List[str]:
-    """Sorted, connected ``S`` ports; rejects non-``S`` ports (terminal)."""
-    ports = instance.list_ports()
-    for operator in (Operator.O_I, Operator.O_F, Operator.F_INIT):
-        if ports.get(operator):
-            raise RuntimeError(
-                f"A recorder is terminal and only supports S ports; "
-                f"got {operator.name} ports {ports.get(operator)}."
-            )
-    return sorted(
-        p for p in ports.get(Operator.S, []) if instance.is_connected(p)
-    )
 
 
 def serve_timelines(
@@ -180,8 +150,6 @@ def _group_ports_by_peer(
     """Group ports by sender: ports from one sender share an ``MPPClient``
     (not concurrency-safe), so they must drain on one thread."""
     try:
-        from ymmsl.v0_2 import Identifier
-
         peer_info = instance._communicator._peer_info
         groups: Dict[str, List[str]] = {}
         for port in s_ports:
@@ -269,7 +237,7 @@ def run_recorder(name: str, build_sink_factory: SinkFactoryBuilder) -> None:
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
 
     while instance.reuse_instance():
-        s_ports = connected_s_ports(instance)
+        s_ports = get_port_list(instance, Operator.S)
         if not s_ports:
             logger.warning(
                 "%s has no connected S ports; nothing to record.", name

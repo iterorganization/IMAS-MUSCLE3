@@ -12,12 +12,9 @@ import xarray as xr
 from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, Message
 
-from imas_muscle3.actors._tap_base import (
-    RecorderSettings,
-    SinkFactory,
-    ids_from_message,
-)
+from imas_muscle3.actors._tap_base import RecorderSettings, SinkFactory
 from imas_muscle3.distill.zarr_sink import ZarrSink, write_root_attrs
+from imas_muscle3.utils import ids_from_message
 
 logger = logging.getLogger()
 
