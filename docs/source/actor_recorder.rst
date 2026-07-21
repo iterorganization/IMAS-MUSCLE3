@@ -46,18 +46,57 @@ Available Ports
 Config file
 -----------
 
-The ``config`` setting names a Python file defining either:
+The ``config`` setting names a Python file defining the extraction logic:
+what gets pulled out of each received IDS and written to a store.
+There are two ways to write it.
 
-* ``extract(ids) -> dict[str, xarray.Dataset]`` — every dataset carries a
-  ``time`` dimension (one instant or a whole trace) to append along; or
-* a ``State`` class (a :ref:`visualization actor <actor_visualization>` plot
-  file) — each message is fed to a fresh instance and its accumulated ``data``
-  datasets are recorded.
+**Plain extract function**
 
-The ``State`` form lets one plot file define both what is stored and how the
-muscle3-dashboard plots it. On startup the recorder copies the config file
-next to the data (``<store_path>/<config name>``) and stamps each store's
-``distill_profile`` attribute with the copy's path; the dashboard prefers
-this snapshot over the run's ``<rec>.config`` setting, so a recorded run
-keeps plotting with the exact code that produced it even after the original
-file is edited.
+Define a module-level function::
+
+    def extract(ids) -> dict[str, xarray.Dataset]:
+        ...
+
+Every returned dataset must carry a ``time`` dimension (one instant, or a
+whole trace) to append along. Use this form when the file only needs to
+record data, with no plotting attached.
+
+**State class (shared with the visualization actor)**
+
+Define a ``State(BaseState)`` class implementing ``extract(self, ids)`` —
+the same class a :ref:`visualization actor <actor_visualization>` plot file
+uses. The recorder builds a *fresh* ``State`` instance for every received
+message, calls its ``extract(self, ids)``, and records whatever ended up in
+``self.data`` from that one call.
+
+Because the instance is fresh each time, a ``State`` that accumulates
+across calls (as the live visualization actor's does, concatenating onto
+``self.data`` from one message to the next) only accumulates *within* one
+``extract`` call. Both message granularities still end up fully recorded,
+just via a different layer:
+
+* One time slice per message: each call records a single instant; the
+  recorder's own Zarr store does the accumulating, appending each new
+  instant to the same occurrence.
+* A whole trace per message (e.g. one message per Picard iteration,
+  looping over ``ids.time_slice`` inside ``extract``): each call already
+  records the full trace it was given; the Zarr store then appends
+  whole-trace batches instead of single instants.
+
+A ``State``-only file works for recording, but there's nothing to plot it
+with. Add a ``Plotter(BasePlotter)`` class to the same file (see
+:ref:`actor_visualization` for the full ``State``/``Plotter`` contract) and
+it becomes an ordinary visualization actor plot file too — the recorder
+still only reads the ``State`` half and ignores ``Plotter``, but the exact
+same file can then be pointed at by a visualization actor, or read by a
+dashboard, to plot precisely what was recorded, with no separate extraction
+logic to keep in sync.
+
+**Config snapshotting**
+
+On startup the recorder copies the config file next to the data
+(``<store_path>/<config name>``) and stamps each store's
+``distill_profile`` attribute with the copy's path. A dashboard reading
+these stores prefers this snapshot over the run's ``<rec>.config`` setting,
+so a recorded run keeps plotting with the exact code that produced it even
+after the original file is edited.

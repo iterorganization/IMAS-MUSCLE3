@@ -261,9 +261,7 @@ def test_recorder_resumes_from_checkpoint(tmp_path, equilibrium):
     config_path.write_text(_CONFIG)
     store_path = (tmp_path / "store").absolute()
 
-    config = ymmsl.load(
-        _checkpoint_ymmsl(eq_uri, store_path, config_path)
-    )
+    config = ymmsl.load(_checkpoint_ymmsl(eq_uri, store_path, config_path))
     run_dir = RunDir(tmp_path / "run")
     run_dir2 = RunDir(tmp_path / "run2")
 

@@ -1,8 +1,7 @@
-import multiprocessing
-
 import imas
 import numpy
 import pytest
+
 
 @pytest.fixture
 def core_profiles():

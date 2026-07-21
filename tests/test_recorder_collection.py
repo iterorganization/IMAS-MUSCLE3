@@ -143,6 +143,4 @@ def test_collection_routes_per_port_and_updates_live_state(
     )
 
     assert len(log) == 1
-    assert set(collection.live_state["equilibrium_in"].data) == {
-        "equilibrium"
-    }
+    assert set(collection.live_state["equilibrium_in"].data) == {"equilibrium"}
