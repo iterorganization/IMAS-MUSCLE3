@@ -6,7 +6,7 @@ from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 
-from imas_muscle3.actors._tap_base import OccurrenceRecorder
+from imas_muscle3.recorder.base import Recorder
 from imas_muscle3.utils import ids_name_from_port
 
 # --- port -> IDS name -----------------------------------------------------
@@ -22,47 +22,56 @@ def test_ids_name_from_port_rejects_unknown():
         ids_name_from_port("not_an_ids_in")
 
 
-# --- occurrence splitting (sink-agnostic) ----------------------------------
+# --- occurrence splitting (format-agnostic) --------------------------------
 
 
-class _NullSink:
-    def write(self, msg):
+class _FakeRecorder(Recorder):
+    """Records which occurrence bases were opened; writes nothing to disk."""
+
+    def __init__(self, store_dir, ids_name, extract, profile, opened):
+        super().__init__(store_dir, ids_name, extract, profile)
+        self._opened = opened
+
+    def _open_occurrence(self, base):
+        self._opened.append(base.name)
+
+    def _write(self, datasets):
         return ""
 
-    def close(self):
+    def _close_occurrence(self):
         pass
 
 
-def _recorder(tmp_path, created):
-    def factory(base, ids_name):
-        created.append(base.name)
-        return _NullSink()
-
-    return OccurrenceRecorder(tmp_path, "equilibrium", factory)
+def _recorder(tmp_path, opened):
+    return _FakeRecorder(
+        tmp_path, "equilibrium", lambda ids: {}, "cfg.py", opened
+    )
 
 
-def test_recorder_splits_occurrences_on_restart(tmp_path):
+def test_recorder_splits_occurrences_on_restart(tmp_path, equilibrium):
     """A backward time step / end-of-stream starts a new occurrence."""
-    created = []
-    rec = _recorder(tmp_path, created)
+    opened = []
+    rec = _recorder(tmp_path, opened)
+    data = equilibrium.serialize()
     # iteration 0: t=0,1 (1 ends the stream); iteration 1: t=0,1 (time resets).
-    rec.handle(Message(0.0, 1.0, data=b""))
-    rec.handle(Message(1.0, None, data=b""))
-    rec.handle(Message(0.0, 1.0, data=b""))
-    rec.handle(Message(1.0, None, data=b""))
+    rec.handle(Message(0.0, 1.0, data=data))
+    rec.handle(Message(1.0, None, data=data))
+    rec.handle(Message(0.0, 1.0, data=data))
+    rec.handle(Message(1.0, None, data=data))
     rec.close()
-    assert created == ["0000", "0001"]
+    assert opened == ["0000", "0001"]
 
 
-def test_recorder_one_occurrence_for_monotonic(tmp_path):
+def test_recorder_one_occurrence_for_monotonic(tmp_path, equilibrium):
     """A single monotonic trace stays one occurrence (no spurious split)."""
-    created = []
-    rec = _recorder(tmp_path, created)
-    rec.handle(Message(0.0, 1.0, data=b""))
-    rec.handle(Message(1.0, 2.0, data=b""))
-    rec.handle(Message(2.0, None, data=b""))
+    opened = []
+    rec = _recorder(tmp_path, opened)
+    data = equilibrium.serialize()
+    rec.handle(Message(0.0, 1.0, data=data))
+    rec.handle(Message(1.0, 2.0, data=data))
+    rec.handle(Message(2.0, None, data=data))
     rec.close()
-    assert created == ["0000"]
+    assert opened == ["0000"]
 
 
 # --- integration: two timelines -> one recorder ----------------------------

@@ -1,9 +1,11 @@
-"""Append distilled datasets for one timeline to a Zarr store, live.
+"""The Zarr :class:`~imas_muscle3.recorder.base.Recorder`: appends one
+port's extracted datasets to a Zarr store, live-tailable mid-run.
 
-Each distilled dataset becomes a Zarr *group*, written to disk immediately and
-extended along ``time``, so the store is live-tailable mid-run. A message that
-doesn't fit the group's on-disk schema (a gap, a re-gridded/ragged profile)
-triggers a rebuild via :func:`_combine`.
+Each occurrence gets its own store, ``<store_dir>/<occurrence>.zarr``; every
+extracted dataset becomes a Zarr *group* within it, written to disk
+immediately and extended along ``time``. A message that doesn't fit the
+group's on-disk schema (a gap, a re-gridded/ragged profile) triggers a
+rebuild via :func:`_combine`.
 """
 
 import logging
@@ -15,9 +17,11 @@ import numpy as np
 import xarray as xr
 import zarr
 
+from imas_muscle3.recorder.base import Recorder
+
 logger = logging.getLogger()
 
-#: The time dimension every distilled dataset shares (see :mod:`.sink`).
+#: The time dimension every extracted dataset shares (see :mod:`.collection`).
 _TIME = "time"
 
 
@@ -49,7 +53,7 @@ def group_name(full_path: str) -> str:
 
 def _signature(ds: xr.Dataset) -> tuple:
     """Schema fingerprint: which quantities, on what non-time grid. Only a
-    matching signature may be appended — ``to_zarr`` does *not* reject a
+    matching signature may be appended -- ``to_zarr`` does *not* reject a
     mismatched append, it silently corrupts the store."""
     names = frozenset(map(str, ds.data_vars))
     dims = tuple(
@@ -94,23 +98,28 @@ def _combine(parts: List[xr.Dataset]) -> xr.Dataset:
     return combined.set_coords([c for c in coord_names if c in combined])
 
 
-class ZarrSink:
-    """Append one timeline's distilled datasets to a Zarr store as they
-    arrive; each group's messages are kept in memory as rebuild source."""
+class ZarrRecorder(Recorder):
+    """Appends one port's extracted datasets to a Zarr store per occurrence;
+    each message's schema is kept in memory as rebuild source until close."""
 
-    def __init__(self, store_path: Path) -> None:
-        self._store = str(store_path)
-        self._buffers: Dict[str, List[xr.Dataset]] = {}
-        self._sig: Dict[str, tuple] = {}
+    _store: str
+    _buffers: Dict[str, List[xr.Dataset]]
+    _sig: Dict[str, tuple]
 
-    def append(self, name: str, ds: xr.Dataset) -> None:
-        """Write a dataset (single slice or whole trace, must carry ``time``)
-        for group ``name`` to disk now: appended along ``time`` if its schema
-        matches the group's, else the group is rebuilt via :func:`_combine`.
-        """
+    def _open_occurrence(self, base: Path) -> None:
+        self._store = str(base.with_suffix(".zarr"))
+        self._buffers = {}
+        self._sig = {}
+
+    def _write(self, datasets: Dict[str, xr.Dataset]) -> str:
+        for name, ds in datasets.items():
+            self._append(name, ds)
+        return f"{len(datasets)} dataset(s)"
+
+    def _append(self, name: str, ds: xr.Dataset) -> None:
         if _TIME not in ds.dims:
             raise ValueError(
-                f"{name}: distilled dataset has no '{_TIME}' dimension "
+                f"{name}: extracted dataset has no '{_TIME}' dimension "
                 f"(dims={dict(ds.sizes)})"
             )
         group = group_name(name)
@@ -138,7 +147,14 @@ class ZarrSink:
         except Exception:
             logger.exception("failed writing group '%s'", group)
 
-    def close(self) -> None:
-        """Every message is already on disk; just drop the rebuild buffer."""
+    def _close_occurrence(self) -> None:
         self._buffers.clear()
         self._sig.clear()
+        # Lets a viewer group stores and load the matching config.
+        write_root_attrs(
+            Path(self._store),
+            {
+                "occurrence": int(Path(self._store).stem),
+                "distill_profile": self._profile,
+            },
+        )
