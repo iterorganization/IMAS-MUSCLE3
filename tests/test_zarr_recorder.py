@@ -108,6 +108,49 @@ def test_zarr_recorder_combines_gaps(tmp_path):
     assert np.isnan(ds["other"].values[0]) and ds["other"].values[1] == 9.0
 
 
+# --- checkpoint/resume: rehydrating the rebuild buffer from disk -----------
+
+
+def test_reopen_occurrence_rehydrates_buffer_for_later_rebuild(tmp_path):
+    """A schema mismatch after resume must still rebuild from the FULL
+    history, including messages written before the checkpoint -- not just
+    what arrived since. Regression test for silently losing pre-checkpoint
+    data on a post-resume rebuild."""
+    # Before the (simulated) checkpoint: one message on disk, no _close.
+    rec1 = _open(tmp_path, "0000")
+    rec1._append("x/y", _single_1d(0.0, np.ones(8)))
+
+    # Resume: a brand-new ZarrRecorder, as a fresh process would build.
+    rec2 = ZarrRecorder(tmp_path, "equilibrium", lambda ids: {}, "cfg.py")
+    rec2._reopen_occurrence(tmp_path / "0000")
+    assert list(rec2._buffers["x.y"][0]["value"].values[0]) == [1.0] * 8
+
+    # Post-resume message has a ragged (narrower) schema: triggers _combine.
+    rec2._append("x/y", _single_1d(1.0, np.full(5, 3.0)))
+    rec2._close_occurrence()
+
+    ds = xr.open_zarr(
+        tmp_path / "0000.zarr", group=group_name("x/y"), consolidated=False
+    )
+    assert list(ds.time.values) == [0.0, 1.0]
+    assert ds["value"].shape == (2, 8)
+    # Pre-checkpoint row survived the rebuild...
+    assert list(ds["value"].values[0]) == [1.0] * 8
+    # ...alongside the post-resume, NaN-padded row.
+    second = ds["value"].values[1]
+    assert list(second[:5]) == [3.0] * 5
+    assert np.isnan(second[5:]).all()
+
+
+def test_reopen_occurrence_on_missing_store_starts_empty(tmp_path):
+    """An occurrence that was opened but never written to (empty timeline)
+    has no store on disk yet; resuming it must not fail."""
+    rec = ZarrRecorder(tmp_path, "equilibrium", lambda ids: {}, "cfg.py")
+    rec._reopen_occurrence(tmp_path / "0000")
+    assert rec._buffers == {}
+    assert rec._sig == {}
+
+
 # --- writing via handle(), including root-attr stamping ---------------------
 
 

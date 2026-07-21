@@ -10,13 +10,14 @@ import logging
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from imas import IDSFactory
-from libmuscle import Instance, InstanceFlags
+from libmuscle import Instance, InstanceFlags, Message
 from libmuscle.mpp_message import ClosePort
 from ymmsl.v0_2 import Operator
 
+from imas_muscle3.recorder.base import RecorderState
 from imas_muscle3.recorder.collection import RecorderCollection
 from imas_muscle3.recorder.zarr_recorder import ZarrRecorder
 from imas_muscle3.utils import (
@@ -65,12 +66,18 @@ def _serve(
     A timeline ends when its peer's port closes; ``next_timestamp is None``
     is a stream restart (an outer-loop iteration boundary), not the end.
 
+    After each full sweep over the still-active ports, checkpoints once
+    every port has advanced past the last checkpoint, using the minimum
+    timestamp across them -- so a resume never finds one port ahead of
+    another's saved state.
+
     Returns port -> exception for failed timelines (empty on success);
     the collection is always closed.
     """
     errors: Dict[str, BaseException] = {}
     active = list(ports)
     count = {p: 0 for p in active}
+    last_time: Dict[str, float] = {}
     try:
         while active:
             for port in list(active):
@@ -106,10 +113,18 @@ def _serve(
                     )
                     active.remove(port)
                     continue
+                last_time[port] = msg.timestamp
                 count[port] += 1
                 logger.info(
                     "handled %s t=%.4e -> %s", port, msg.timestamp, detail
                 )
+
+            if active and all(port in last_time for port in active):
+                t_cur = min(last_time[port] for port in active)
+                if instance.should_save_snapshot(t_cur):
+                    instance.save_snapshot(
+                        Message(t_cur, data=collection.get_state())
+                    )
     finally:
         collection.close()
     return errors
@@ -118,29 +133,42 @@ def _serve(
 def main() -> None:
     """MUSCLE3 execution loop."""
     # Dynamic ports: no port description, ports come from the yMMSL config.
-    instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
+    instance = Instance(flags=InstanceFlags.USES_CHECKPOINT_API)
 
     while instance.reuse_instance():
         s_ports = get_port_list(instance, Operator.S)
+        # Validate all port -> IDS mappings up front so a bad config fails.
+        ids_names = {p: ids_name_from_port(p) for p in s_ports}
+
+        resuming = instance.resuming()
+        snapshot_state: Optional[Dict[str, RecorderState]] = None
+        if resuming:
+            snapshot_state = instance.load_snapshot().data
+        if instance.should_init():
+            pass
+
         if not s_ports:
             logger.warning(
                 "recorder has no connected S ports; nothing to record."
             )
             break
-        # Validate all port -> IDS mappings up front so a bad config fails.
-        ids_names = {p: ids_name_from_port(p) for p in s_ports}
         _precompute_ids_metadata(list(ids_names.values()))
 
         settings = read_settings(instance)
         settings.store_path.mkdir(parents=True, exist_ok=True)
-        # Clear stale per-port dirs, never store_path itself (may be the
-        # run folder).
-        for port in s_ports:
-            shutil.rmtree(settings.store_path / port, ignore_errors=True)
+        if not resuming:
+            # A fresh run starts clean; a resumed one keeps what's already
+            # on disk. Never remove store_path itself (may be the run
+            # folder).
+            for port in s_ports:
+                shutil.rmtree(settings.store_path / port, ignore_errors=True)
 
         collection = RecorderCollection(
             settings.store_path, settings.config, ids_names, ZarrRecorder
         )
+        if snapshot_state is not None:
+            collection.restore_state(snapshot_state)
+
         logger.info(
             "recording %d timeline(s) %s to %s",
             len(s_ports),
@@ -152,6 +180,13 @@ def main() -> None:
             msg = "; ".join(f"{port}: {exc!r}" for port, exc in errors.items())
             instance.error_shutdown(f"recorder timeline(s) failed: {msg}")
             raise RuntimeError(f"recorder timeline(s) failed: {msg}")
+
+        if instance.should_save_final_snapshot():
+            state = collection.get_state()
+            all_times = (s["last_time"] for s in state.values())
+            last_times = [t for t in all_times if t is not None]
+            final_t = max(last_times) if last_times else 0.0
+            instance.save_final_snapshot(Message(final_t, data=state))
 
 
 if __name__ == "__main__":

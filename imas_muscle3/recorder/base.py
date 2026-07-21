@@ -8,7 +8,7 @@ time stepping backwards). The on-disk format is left to a subclass, e.g.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, TypedDict
 
 import xarray as xr
 from imas.ids_toplevel import IDSToplevel
@@ -19,6 +19,16 @@ from imas_muscle3.utils import ids_from_message
 #: Maps one received IDS to ``name -> Dataset``; every dataset carries a
 #: ``time`` dimension (one instant, or a whole trace) to append along.
 ExtractFn = Callable[[IDSToplevel], Dict[str, xr.Dataset]]
+
+
+class RecorderState(TypedDict):
+    """A :class:`Recorder`'s bookkeeping, as saved/restored across a
+    checkpoint (see :meth:`Recorder.get_state`)."""
+
+    occurrence: int
+    last_time: Optional[float]
+    prev_ended: bool
+    is_open: bool
 
 
 class Recorder(ABC):
@@ -63,6 +73,31 @@ class Recorder(ABC):
         if self._is_open:
             self._close_occurrence()
 
+    def get_state(self) -> RecorderState:
+        """Bookkeeping needed to resume this port's timeline after a
+        checkpoint restart. Whatever is already durably on disk is left
+        there; a subclass with extra in-memory state rehydrates it in
+        :meth:`_reopen_occurrence` instead of duplicating it here."""
+        return {
+            "occurrence": self._occurrence,
+            "last_time": self._last_time,
+            "prev_ended": self._prev_ended,
+            "is_open": self._is_open,
+        }
+
+    def restore_state(self, state: RecorderState) -> None:
+        """Resume from a previous :meth:`get_state`: restores bookkeeping
+        and, if an occurrence was still open at checkpoint time, reopens
+        it."""
+        self._occurrence = state["occurrence"]
+        self._last_time = state["last_time"]
+        self._prev_ended = state["prev_ended"]
+        self._is_open = state["is_open"]
+        if self._is_open:
+            self._reopen_occurrence(
+                self._store_dir / f"{self._occurrence:04d}"
+            )
+
     @abstractmethod
     def _open_occurrence(self, base: Path) -> None:
         """Open a fresh store at ``base`` (no suffix) for a new occurrence."""
@@ -74,6 +109,13 @@ class Recorder(ABC):
     @abstractmethod
     def _close_occurrence(self) -> None:
         """Finalize the currently open occurrence's store."""
+
+    def _reopen_occurrence(self, base: Path) -> None:
+        """Resume an occurrence that was already open at checkpoint time.
+        Default: open fresh, there is no extra in-memory state to
+        rehydrate; override when a subclass keeps such state (derived from
+        what's already on disk)."""
+        self._open_occurrence(base)
 
 
 #: Builds a Recorder for one port's store dir, IDS name, the shared extract

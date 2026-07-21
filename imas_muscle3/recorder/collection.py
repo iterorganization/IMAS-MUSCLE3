@@ -15,7 +15,12 @@ import xarray as xr
 from imas.ids_toplevel import IDSToplevel
 from libmuscle import Message
 
-from imas_muscle3.recorder.base import ExtractFn, Recorder, RecorderFactory
+from imas_muscle3.recorder.base import (
+    ExtractFn,
+    Recorder,
+    RecorderFactory,
+    RecorderState,
+)
 
 logger = logging.getLogger()
 
@@ -121,3 +126,14 @@ class RecorderCollection:
     def close(self) -> None:
         for recorder in self._recorders.values():
             recorder.close()
+
+    def get_state(self) -> Dict[str, RecorderState]:
+        """Every port's :class:`~.base.Recorder` bookkeeping, for a
+        checkpoint. Live state is excluded: it's an in-memory-only building
+        block for future plotting, not something a resume needs to restore."""
+        return {port: rec.get_state() for port, rec in self._recorders.items()}
+
+    def restore_state(self, state: Dict[str, RecorderState]) -> None:
+        """Resume every port's recorder from a previous :meth:`get_state`."""
+        for port, port_state in state.items():
+            self._recorders[port].restore_state(port_state)

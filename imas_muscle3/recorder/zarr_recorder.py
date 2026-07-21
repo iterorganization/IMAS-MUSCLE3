@@ -111,6 +111,31 @@ class ZarrRecorder(Recorder):
         self._buffers = {}
         self._sig = {}
 
+    def _reopen_occurrence(self, base: Path) -> None:
+        """Resume an occurrence that was still open at checkpoint time:
+        reopen it, then rehydrate each existing group's rebuild buffer from
+        what's already on disk (the durable source of truth) rather than
+        duplicating it into the checkpoint. A later schema mismatch can
+        then still rebuild from the full history, not just what's arrived
+        since the resume."""
+        self._open_occurrence(base)
+        store = Path(self._store)
+        if not store.exists():
+            return
+        root = zarr.open_group(str(store), mode="r")
+        for name in root.group_keys():
+            try:
+                ds = xr.open_zarr(
+                    self._store, group=name, consolidated=False
+                ).load()
+            except Exception:
+                logger.exception(
+                    "could not rehydrate group '%s' from %s", name, store
+                )
+                continue
+            self._buffers[name] = [ds]
+            self._sig[name] = _signature(ds)
+
     def _write(self, datasets: Dict[str, xr.Dataset]) -> str:
         for name, ds in datasets.items():
             self._append(name, ds)
