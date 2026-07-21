@@ -4,12 +4,6 @@ import imas
 import numpy
 import pytest
 
-# Force 'spawn' start method to avoid deadlocks with pytest (the in-process
-# Manager tests fork subprocesses).
-if multiprocessing.get_start_method(allow_none=True) != "spawn":
-    multiprocessing.set_start_method("spawn", force=True)
-
-
 @pytest.fixture
 def core_profiles():
     cp = imas.IDSFactory("4.0.0").core_profiles()
