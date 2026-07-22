@@ -21,6 +21,7 @@ from imas_muscle3.recorder.base import (
     RecorderFactory,
     RecorderState,
 )
+from imas_muscle3.visualization.base_state import BaseState
 
 logger = logging.getLogger()
 
@@ -35,8 +36,6 @@ def load_extract_config(config_path: str) -> ExtractFn:
         return extract
     state_class = namespace.get("State")
     if state_class is not None:
-        from imas_muscle3.visualization.base_state import BaseState
-
         if isinstance(state_class, type) and issubclass(
             state_class, BaseState
         ):

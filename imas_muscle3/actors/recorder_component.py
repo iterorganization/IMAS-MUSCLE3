@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from imas import IDSFactory
 from libmuscle import Instance, InstanceFlags, Message
 from libmuscle.mpp_message import ClosePort
 from ymmsl.v0_2 import Operator
@@ -40,7 +39,7 @@ class RecorderSettings:
 
 def read_settings(instance: Instance) -> RecorderSettings:
     """``store_path`` defaults to the instance's run folder."""
-    config = Path(str(instance.get_setting("config", "str")))
+    config = Path(instance.get_setting("config", "str"))
     store_path_setting = get_setting_optional(instance, "store_path")
     store_path = (
         Path(str(store_path_setting))
@@ -48,13 +47,6 @@ def read_settings(instance: Instance) -> RecorderSettings:
         else Path.cwd()
     )
     return RecorderSettings(config=config, store_path=store_path)
-
-
-def _precompute_ids_metadata(ids_names: List[str]) -> None:
-    """Build each IDS type's metadata once up front."""
-    factory = IDSFactory()
-    for ids_name in set(ids_names):
-        factory.new(ids_name)
 
 
 def _serve(
@@ -152,7 +144,6 @@ def main() -> None:
                 "recorder has no connected S ports; nothing to record."
             )
             break
-        _precompute_ids_metadata(list(ids_names.values()))
 
         settings = read_settings(instance)
         settings.store_path.mkdir(parents=True, exist_ok=True)

@@ -41,36 +41,42 @@ class Recorder(ABC):
         self._ids_name = ids_name
         self._extract = extract
         self._profile = profile
-        self._occurrence = 0
-        self._last_time: Optional[float] = None
-        self._prev_ended = False
-        self._is_open = False
+        self._state: RecorderState = {
+            "occurrence": 0,
+            "last_time": None,
+            "prev_ended": False,
+            "is_open": False,
+        }
 
     def handle(self, msg: Message) -> Tuple[str, Dict[str, xr.Dataset]]:
         """Extract and write one message. Returns a short detail to log and
         the datasets it extracted, for the caller's live state."""
-        restarted = self._prev_ended or (
-            self._last_time is not None and msg.timestamp < self._last_time
+        state = self._state
+        restarted = state["prev_ended"] or (
+            state["last_time"] is not None
+            and msg.timestamp < state["last_time"]
         )
-        if self._is_open and restarted:
+        if state["is_open"] and restarted:
             self._close_occurrence()
-            self._occurrence += 1
-            self._is_open = False
-        if not self._is_open:
-            self._open_occurrence(self._store_dir / f"{self._occurrence:04d}")
-            self._is_open = True
+            state["occurrence"] += 1
+            state["is_open"] = False
+        if not state["is_open"]:
+            self._open_occurrence(
+                self._store_dir / f"{state['occurrence']:04d}"
+            )
+            state["is_open"] = True
 
         ids = ids_from_message(self._ids_name, msg.data)
         datasets = self._extract(ids)
         detail = self._write(datasets)
-        self._last_time = msg.timestamp
-        self._prev_ended = msg.next_timestamp is None
+        state["last_time"] = msg.timestamp
+        state["prev_ended"] = msg.next_timestamp is None
         return detail, datasets
 
     def close(self) -> None:
         """Finalize the currently open occurrence, if any (an empty
         timeline never opened one)."""
-        if self._is_open:
+        if self._state["is_open"]:
             self._close_occurrence()
 
     def get_state(self) -> RecorderState:
@@ -78,24 +84,16 @@ class Recorder(ABC):
         checkpoint restart. Whatever is already durably on disk is left
         there; a subclass with extra in-memory state rehydrates it in
         :meth:`_reopen_occurrence` instead of duplicating it here."""
-        return {
-            "occurrence": self._occurrence,
-            "last_time": self._last_time,
-            "prev_ended": self._prev_ended,
-            "is_open": self._is_open,
-        }
+        return self._state.copy()
 
     def restore_state(self, state: RecorderState) -> None:
         """Resume from a previous :meth:`get_state`: restores bookkeeping
         and, if an occurrence was still open at checkpoint time, reopens
         it."""
-        self._occurrence = state["occurrence"]
-        self._last_time = state["last_time"]
-        self._prev_ended = state["prev_ended"]
-        self._is_open = state["is_open"]
-        if self._is_open:
+        self._state = state.copy()
+        if self._state["is_open"]:
             self._reopen_occurrence(
-                self._store_dir / f"{self._occurrence:04d}"
+                self._store_dir / f"{self._state['occurrence']:04d}"
             )
 
     @abstractmethod

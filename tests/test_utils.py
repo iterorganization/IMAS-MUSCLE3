@@ -1,8 +1,18 @@
+from unittest.mock import Mock
+
+import numpy
 import pytest
 from imas_core.exception import ImasCoreBackendException
+from ymmsl.v0_2 import Operator
 
 from imas_muscle3.data_sink_source import get_sink_db_entry
-from imas_muscle3.utils import increment_suffix
+from imas_muscle3.utils import (
+    get_port_list,
+    get_setting_optional,
+    ids_from_message,
+    ids_name_from_port,
+    increment_suffix,
+)
 
 
 def test_increment_suffix():
@@ -87,3 +97,59 @@ def test_get_sink_db_entry(tmp_path, backend):
     get_sink_db_entry(legacy_uri, "x", False)
     with pytest.raises(ImasCoreBackendException):
         get_sink_db_entry(legacy_uri, "x", False)
+
+
+def test_get_setting_optional_returns_value_when_present():
+    instance = Mock()
+    instance.get_setting.return_value = "my_value"
+    assert get_setting_optional(instance, "some_setting") == "my_value"
+
+
+def test_get_setting_optional_returns_none_when_missing_and_no_default():
+    instance = Mock()
+    instance.get_setting.side_effect = KeyError("some_setting")
+    assert get_setting_optional(instance, "some_setting") is None
+
+
+def test_get_setting_optional_returns_default_when_missing():
+    instance = Mock()
+    instance.get_setting.side_effect = KeyError("some_setting")
+    assert (
+        get_setting_optional(instance, "some_setting", default="fallback")
+        == "fallback"
+    )
+
+
+def test_get_port_list_filters_to_connected_and_sorts():
+    instance = Mock()
+    instance.list_ports.return_value = {
+        Operator.S: ["c_in", "a_in", "b_in"],
+    }
+    instance.is_connected.side_effect = lambda port: port != "b_in"
+    assert get_port_list(instance, Operator.S) == ["a_in", "c_in"]
+
+
+def test_get_port_list_returns_empty_for_unknown_operator():
+    instance = Mock()
+    instance.list_ports.return_value = {Operator.S: ["a_in"]}
+    instance.is_connected.return_value = True
+    assert get_port_list(instance, Operator.O_F) == []
+
+
+def test_ids_name_from_port_strips_in_suffix():
+    assert ids_name_from_port("core_profiles_in") == "core_profiles"
+
+
+def test_ids_name_from_port_without_in_suffix():
+    assert ids_name_from_port("equilibrium") == "equilibrium"
+
+
+def test_ids_name_from_port_rejects_unknown_ids():
+    with pytest.raises(ValueError):
+        ids_name_from_port("not_a_real_ids")
+
+
+def test_ids_from_message_roundtrip(core_profiles):
+    data = core_profiles.serialize()
+    ids = ids_from_message("core_profiles", data)
+    assert numpy.array_equal(ids.time, core_profiles.time)
