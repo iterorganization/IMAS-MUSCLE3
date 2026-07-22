@@ -9,6 +9,7 @@ with the same timestamp.
 import logging
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -31,6 +32,32 @@ from imas_muscle3.utils import (
 logger = logging.getLogger()
 
 
+@dataclass
+class OLCSettings:
+    """Every setting the OLC actor reads, gathered in one place and read
+    once per reuse."""
+
+    rulesets: str
+    extra_rule_dirs: str
+    apply_generic: bool
+    halt_on_error: bool
+
+
+def read_settings(instance: Instance) -> OLCSettings:
+    return OLCSettings(
+        rulesets=instance.get_setting("rulesets", "str", default="PDS-OLC"),
+        extra_rule_dirs=instance.get_setting(
+            "extra_rule_dirs", "str", default=""
+        ),
+        apply_generic=instance.get_setting(
+            "apply_generic", "bool", default=True
+        ),
+        halt_on_error=instance.get_setting(
+            "halt_on_error", "bool", default=False
+        ),
+    )
+
+
 def main() -> None:
     """Create instance and enter submodel execution loop"""
     logger.info("Starting OLC Actor")
@@ -38,6 +65,7 @@ def main() -> None:
 
     # enter re-use loop
     while instance.reuse_instance():
+        settings = read_settings(instance)
         port_list_in = get_port_list(instance, Operator.F_INIT)
         # wait for messages on all of the ports (one after the other)
         # Note: this does not handle uneven message counts on different ports.
@@ -64,16 +92,12 @@ def main() -> None:
                 for ids in ids_data.values():
                     db.put(ids)
 
-            rulesets = instance.get_setting("rulesets", default="PDS-OLC")
-            ruledirs = instance.get_setting("extra_rule_dirs", default="")
-            assert isinstance(rulesets, str)
-            assert isinstance(ruledirs, str)
             validate_options = ValidateOptions(
-                rulesets=rulesets.split(";"),
-                extra_rule_dirs=[Path(x) for x in ruledirs.split(";")],
-                apply_generic=instance.get_setting(
-                    "apply_generic", default=True
-                ),
+                rulesets=settings.rulesets.split(";"),
+                extra_rule_dirs=[
+                    Path(x) for x in settings.extra_rule_dirs.split(";")
+                ],
+                apply_generic=settings.apply_generic,
             )
 
             result = validate(IMAS_URI, validate_options)
@@ -99,7 +123,7 @@ def main() -> None:
                     f"{html_path} and {txt_path} in the working directory for "
                     "more information"
                 )
-                if instance.get_setting("halt_on_error", default=False):
+                if settings.halt_on_error:
                     logger.critical(msg)
                     sys.exit(1)
                 else:

@@ -53,6 +53,7 @@ How to use in ymmsl file (yMMSL v0.2)::
 """
 
 import logging
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -123,6 +124,79 @@ def get_sink_db_entry(
     )
 
 
+@dataclass
+class SinkSettings:
+    """Every setting the sink actor reads, gathered in one place and read
+    once on its first reuse (settings never change across reuses)."""
+
+    dd_version: Optional[str]
+    sink_mode: str
+    sink_uri: str
+    avoid_name_collision: bool
+
+
+def read_sink_settings(instance: Instance) -> SinkSettings:
+    return SinkSettings(
+        dd_version=get_setting_optional(instance, "dd_version"),
+        sink_mode=instance.get_setting("sink_mode", "str", default="x"),
+        sink_uri=instance.get_setting("sink_uri", "str"),
+        avoid_name_collision=instance.get_setting(
+            "avoid_name_collision", "bool", default=True
+        ),
+    )
+
+
+@dataclass
+class SourceSettings:
+    """Every setting the source actor reads, gathered in one place and
+    read once on its first reuse (settings never change across reuses)."""
+
+    iterative: bool
+    dd_version: Optional[str]
+    source_uri: str
+    interpolation_method: int
+    t_min: Optional[float]
+    t_max: Optional[float]
+
+
+def read_source_settings(instance: Instance) -> SourceSettings:
+    return SourceSettings(
+        iterative=instance.get_setting("iterative", "bool", default=True),
+        dd_version=get_setting_optional(instance, "dd_version"),
+        source_uri=instance.get_setting("source_uri", "str"),
+        interpolation_method=fix_interpolation_method(instance),
+        t_min=get_setting_optional(instance, "t_min"),
+        t_max=get_setting_optional(instance, "t_max"),
+    )
+
+
+@dataclass
+class SinkSourceSettings:
+    """Every setting the hybrid sink/source actor reads, gathered in one
+    place and read once on its first reuse (settings never change across
+    reuses)."""
+
+    dd_version: Optional[str]
+    sink_mode: str
+    sink_uri: Optional[str]
+    source_uri: str
+    avoid_name_collision: bool
+    interpolation_method: int
+
+
+def read_sink_source_settings(instance: Instance) -> SinkSourceSettings:
+    return SinkSourceSettings(
+        dd_version=get_setting_optional(instance, "dd_version"),
+        sink_mode=instance.get_setting("sink_mode", "str", default="x"),
+        sink_uri=get_setting_optional(instance, "sink_uri"),
+        source_uri=instance.get_setting("source_uri", "str"),
+        avoid_name_collision=instance.get_setting(
+            "avoid_name_collision", "bool", default=True
+        ),
+        interpolation_method=fix_interpolation_method(instance),
+    )
+
+
 def muscled_sink() -> None:
     """Implementation of sink component"""
     # we can leave out port names on f_init since any connected port will
@@ -133,17 +207,12 @@ def muscled_sink() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = get_setting_optional(instance, "dd_version")
-            sink_mode = instance.get_setting("sink_mode", default="x")
-            sink_uri = instance.get_setting("sink_uri")
-            avoid_name_collision = instance.get_setting(
-                "avoid_name_collision", default=True
-            )
+            settings = read_sink_settings(instance)
             sink_db_entry = get_sink_db_entry(
-                sink_uri,
-                sink_mode=sink_mode,
-                avoid_name_collision=avoid_name_collision,
-                dd_version=dd_version,
+                settings.sink_uri,
+                sink_mode=settings.sink_mode,
+                avoid_name_collision=settings.avoid_name_collision,
+                dd_version=settings.dd_version,
             )
             port_list_in = get_port_list(instance, Operator.F_INIT)
             sanity_check_ports(instance)
@@ -169,13 +238,13 @@ def muscled_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            iterative = instance.get_setting("iterative", default=True)
-            dd_version = get_setting_optional(instance, "dd_version")
-            source_uri = instance.get_setting("source_uri")
-            source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
+            settings = read_source_settings(instance)
+            source_db_entry = DBEntry(
+                settings.source_uri, "r", dd_version=settings.dd_version
+            )
             port_list_out = get_port_list(instance, Operator.O_I)
             t_array = time_array_from_IDS(
-                source_db_entry, port_list_out, instance
+                source_db_entry, port_list_out, settings
             )
             sanity_check_ports(instance)
             first_run = False
@@ -187,7 +256,7 @@ def muscled_source() -> None:
         if instance.should_init():
             pass
 
-        if iterative:
+        if settings.iterative:
             for i, t_inner in enumerate(t_array):
                 # O_I
                 if i < len(t_array) - 1:
@@ -198,6 +267,7 @@ def muscled_source() -> None:
                     instance,
                     source_db_entry,
                     port_list_out,
+                    settings.interpolation_method,
                     t_inner,
                     next_timestamp=next_t,
                 )
@@ -209,7 +279,10 @@ def muscled_source() -> None:
                 instance,
                 source_db_entry,
                 port_list_out,
+                settings.interpolation_method,
                 t_array[0],
+                t_min=settings.t_min,
+                t_max=settings.t_max,
                 iterative=False,
             )
 
@@ -225,25 +298,20 @@ def muscled_sink_source() -> None:
     sink_db_entry = None
     source_db_entry = None
     instance = Instance(flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE)
-    sink_db_entry = None
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            dd_version = get_setting_optional(instance, "dd_version")
-            sink_mode = instance.get_setting("sink_mode", default="x")
-            sink_uri = get_setting_optional(instance, "sink_uri")
-            source_uri = instance.get_setting("source_uri")
-            avoid_name_collision = instance.get_setting(
-                "avoid_name_collision", default=True
-            )
-            if isinstance(sink_uri, str):
+            settings = read_sink_source_settings(instance)
+            if settings.sink_uri is not None:
                 sink_db_entry = get_sink_db_entry(
-                    sink_uri,
-                    sink_mode=sink_mode,
-                    avoid_name_collision=avoid_name_collision,
-                    dd_version=dd_version,
+                    settings.sink_uri,
+                    sink_mode=settings.sink_mode,
+                    avoid_name_collision=settings.avoid_name_collision,
+                    dd_version=settings.dd_version,
                 )
-            source_db_entry = DBEntry(source_uri, "r", dd_version=dd_version)
+            source_db_entry = DBEntry(
+                settings.source_uri, "r", dd_version=settings.dd_version
+            )
             port_list_in = get_port_list(instance, Operator.F_INIT)
             port_list_out = get_port_list(instance, Operator.O_F)
             sanity_check_ports(instance)
@@ -256,6 +324,7 @@ def muscled_sink_source() -> None:
             instance,
             source_db_entry,
             port_list_out,
+            settings.interpolation_method,
             t_cur,
             next_timestamp=t_next,
         )
@@ -270,7 +339,10 @@ def handle_source(
     instance: Instance,
     db_entry: Optional[DBEntry],
     port_list: List[str],
+    interp_method: int,
     t_cur: float,
+    t_min: Optional[float] = None,
+    t_max: Optional[float] = None,
     next_timestamp: Optional[float] = None,
     iterative: bool = True,
 ) -> None:
@@ -281,7 +353,6 @@ def handle_source(
     for port_name in port_list:
         ids_name = port_name.replace("_out", "")
         occ = instance.get_setting(f"{port_name}_occ", default=0)
-        interp_method = fix_interpolation_method(instance)
         if iterative:
             slice_out = db_entry.get_slice(
                 ids_name=ids_name,
@@ -290,8 +361,6 @@ def handle_source(
                 interpolation_method=interp_method,
             )
         else:
-            t_min = get_setting_optional(instance, "t_min")
-            t_max = get_setting_optional(instance, "t_max")
             if t_min is None and t_max is None:
                 slice_out = db_entry.get(
                     ids_name=ids_name,
@@ -387,14 +456,14 @@ def fix_interpolation_method(instance: Instance) -> int:
 
 
 def time_array_from_IDS(
-    db_entry: DBEntry, port_list: List[str], instance: Instance
+    db_entry: DBEntry, port_list: List[str], settings: SourceSettings
 ) -> List[float]:
     for port in port_list:
         t_array = db_entry.get(port.replace("_out", ""), lazy=True).time
         if len(t_array) > 0:
-            t_min = instance.get_setting("t_min", default=-1e20)
+            t_min = -1e20 if settings.t_min is None else settings.t_min
             t_min = max(t_min, t_array[0])
-            t_max = instance.get_setting("t_max", default=1e20)
+            t_max = 1e20 if settings.t_max is None else settings.t_max
             t_max = min(t_max, t_array[-1])
             t_array = [t for t in t_array if t_min <= t <= t_max]
             return t_array
