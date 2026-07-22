@@ -50,8 +50,10 @@ def read_settings(instance: Instance) -> VisualizationSettings:
         # FIXME: there is an issue when the plotting takes much longer
         # than it takes for data to arrive from the MUSCLE actor. As a
         # remedy, throttle_interval sets a plotting throttle interval.
-        throttle_interval=instance.get_setting(
-            "throttle_interval", "float", default=0.1
+        # Fetched untyped and coerced: ymmsl settings written as e.g. `0`
+        # parse as int, but libmuscle's "float" type check rejects those.
+        throttle_interval=float(
+            instance.get_setting("throttle_interval", default=0.1)
         ),
         keep_alive=instance.get_setting("keep_alive", "bool", default=False),
         open_browser=instance.get_setting(
