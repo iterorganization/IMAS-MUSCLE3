@@ -1,21 +1,19 @@
-import multiprocessing
 import runpy
 import socket
 from pathlib import Path
+from typing import List
 
 import imas
 import numpy as np
 import pytest
 import ymmsl
 from imas import DBEntry, ids_defs
+from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
+from libmuscle.pytest import MuscleTester
 
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
-
-"""Force 'spawn' start method to avoid deadlocks with pytest."""
-if multiprocessing.get_start_method(allow_none=True) != "spawn":
-    multiprocessing.set_start_method("spawn", force=True)
 
 
 def get_free_port() -> int:
@@ -25,7 +23,87 @@ def get_free_port() -> int:
         return s.getsockname()[1]
 
 
+def _slice_messages(
+    ids: imas.ids_toplevel.IDSToplevel, ids_name: str
+) -> List[Message]:
+    """Build one Message per timeslice of `ids`, chaining next_timestamp the
+    way a real source component would."""
+    messages = []
+    times = list(ids.time)
+    with DBEntry("imas:memory?path=/", "w") as db:
+        db.put(ids)
+        for i, t in enumerate(times):
+            next_t = times[i + 1] if i + 1 < len(times) else None
+            data = db.get_slice(
+                ids_name, t, ids_defs.CLOSEST_INTERP
+            ).serialize()
+            messages.append(Message(t, data=data, next_timestamp=next_t))
+    return messages
+
+
 def create_ymmsl_config(settings: dict) -> str:
+    settings_str = "\n".join(f"  {k}: {v}" for k, v in settings.items())
+
+    return f"""
+ymmsl_version: v0.2
+programs:
+  visualization_component:
+    ports:
+      s: [equilibrium_in]
+    executable: python
+    args: -u -m imas_muscle3.actors.visualization_component
+settings:
+{settings_str}
+"""
+
+
+def test_visualization_actor(
+    muscle3_tester: MuscleTester, equilibrium
+) -> None:
+    port = get_free_port()
+
+    current_dir = Path(__file__).parent
+    plot_script_path = (
+        current_dir
+        / "../imas_muscle3/visualization/examples/simple_1d_plot"
+        / "simple_1d_plot.py"
+    ).resolve()
+    if not plot_script_path.exists():
+        pytest.fail(f"Example plot script not found at: {plot_script_path}")
+
+    settings = {
+        "visualization_component.plot_file_path": str(plot_script_path),
+        "visualization_component.port": port,
+        "visualization_component.throttle_interval": 0,
+        "visualization_component.keep_alive": False,
+        "visualization_component.open_browser": False,
+    }
+
+    tester = muscle3_tester.start_implementation(
+        create_ymmsl_config(settings), "visualization_component"
+    )
+
+    for msg in _slice_messages(equilibrium, "equilibrium"):
+        tester.send("equilibrium_in", msg)
+
+    # No exception raised while sending means the actor consumed every
+    # timeslice and shut its server down cleanly.
+
+
+def create_full_ymmsl_config(settings: dict) -> str:
+    """A source_component + visualization_component pair wired through a
+    real Manager.
+
+    Unlike `create_ymmsl_config` above, this does NOT go through
+    MuscleTester: these failure modes all happen while
+    visualization_component constructs its VisualizationActor, before it
+    ever reaches its first `receive()` -- i.e. before its data-plane
+    conduits are ever used. When that happens, MuscleTester's tester
+    component hangs forever trying to establish those conduits (its
+    RECONNECT_TIMEOUT/PEER_TIMEOUT patches don't bound this codepath), so
+    these stay on the classic Manager/RunDir setup, which correctly
+    surfaces the crash via `manager.wait()`.
+    """
     settings_str = "\n".join(f"  {k}: {v}" for k, v in settings.items())
 
     return f"""
@@ -62,56 +140,22 @@ resources:
 """
 
 
-def test_visualization_actor(tmpdir, equilibrium):
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    with DBEntry(source_uri, "w") as entry:
-        entry.put(equilibrium)
-
-    port = get_free_port()
-    tmppath = Path(str(tmpdir))
-
-    current_dir = Path(__file__).parent
-    plot_script_path = (
-        current_dir
-        / "../imas_muscle3/visualization/examples/simple_1d_plot"
-        / "simple_1d_plot.py"
-    ).resolve()
-    if not plot_script_path.exists():
-        pytest.fail(f"Example plot script not found at: {plot_script_path}")
-
-    settings = {
-        "source_component.source_uri": source_uri,
-        "visualization_component.plot_file_path": str(plot_script_path),
-        "visualization_component.port": port,
-        "visualization_component.throttle_interval": 0,
-        "visualization_component.keep_alive": False,
-        "visualization_component.open_browser": False,
-    }
-
-    ymmsl_text = create_ymmsl_config(settings)
-    config = ymmsl.load(ymmsl_text)
-    run_dir = RunDir(tmppath / "run")
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-
-    success = manager.wait()
-    assert success
-
-
 def run_and_check_for_error(
-    tmpdir, equilibrium, ymmsl_settings, expected_error
-):
-    """Helper function to run a simulation and check for a specific error."""
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
+    tmp_path: Path, equilibrium, ymmsl_settings, expected_error
+) -> None:
+    """Run a source_component + visualization_component pair and check that
+    a specific error ends up in the visualization actor's stderr log."""
+    data_source_path = (tmp_path / "source_component_data").absolute()
     source_uri = f"imas:hdf5?path={data_source_path}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(equilibrium)
 
-    tmppath = Path(str(tmpdir))
-    ymmsl_text = create_ymmsl_config(ymmsl_settings)
-    config = ymmsl.load(ymmsl_text)
-    run_dir = RunDir(tmppath / "run")
+    ymmsl_settings = {
+        "source_component.source_uri": source_uri,
+        **ymmsl_settings,
+    }
+    config = ymmsl.load(create_full_ymmsl_config(ymmsl_settings))
+    run_dir = RunDir(tmp_path / "run")
     manager = Manager(config, run_dir)
     manager.start_instances()
     success = manager.wait()
@@ -124,33 +168,33 @@ def run_and_check_for_error(
     assert expected_error in log_text
 
 
-def test_visualization_actor_no_plot_file(tmpdir, equilibrium):
-    data_source_path = (Path(tmpdir) / "source_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
+def test_visualization_actor_no_plot_file(equilibrium, tmp_path) -> None:
     port = get_free_port()
-    plot_file_path = "/path/to/non/existent/file.py"
     settings = {
-        "source_component.source_uri": source_uri,
-        "visualization_component.plot_file_path": plot_file_path,
+        "visualization_component.plot_file_path": (
+            "/path/to/non/existent/file.py"
+        ),
         "visualization_component.port": port,
         "visualization_component.throttle_interval": 0,
         "visualization_component.keep_alive": False,
         "visualization_component.open_browser": False,
     }
-    run_and_check_for_error(tmpdir, equilibrium, settings, "FileNotFoundError")
+    run_and_check_for_error(
+        tmp_path, equilibrium, settings, "FileNotFoundError"
+    )
 
 
-def test_visualization_actor_missing_classes(tmpdir, equilibrium, tmp_path):
+def test_visualization_actor_missing_classes(equilibrium, tmp_path) -> None:
     script_path = tmp_path / "bad_plot.py"
     script_path.write_text("class NotState: pass\nclass NotPlotter: pass")
     settings = {"visualization_component.plot_file_path": str(script_path)}
     expected_error = "must have a 'State' and a 'Plotter' class."
-    run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
+    run_and_check_for_error(tmp_path, equilibrium, settings, expected_error)
 
 
 def test_visualization_actor_bad_state_inheritance(
-    tmpdir, equilibrium, tmp_path
-):
+    equilibrium, tmp_path
+) -> None:
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -161,12 +205,12 @@ class Plotter(BasePlotter): pass
     )
     settings = {"visualization_component.plot_file_path": str(script_path)}
     expected_error = "must inherit from BaseState"
-    run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
+    run_and_check_for_error(tmp_path, equilibrium, settings, expected_error)
 
 
 def test_visualization_actor_bad_plotter_inheritance(
-    tmpdir, equilibrium, tmp_path
-):
+    equilibrium, tmp_path
+) -> None:
     script_path = tmp_path / "bad_inheritance.py"
     script_path.write_text(
         """
@@ -177,7 +221,7 @@ class Plotter: pass  # Does not inherit from BasePlotter
     )
     settings = {"visualization_component.plot_file_path": str(script_path)}
     expected_error = "must inherit from BasePlotter"
-    run_and_check_for_error(tmpdir, equilibrium, settings, expected_error)
+    run_and_check_for_error(tmp_path, equilibrium, settings, expected_error)
 
 
 def test_state_data(equilibrium, monkeypatch):
