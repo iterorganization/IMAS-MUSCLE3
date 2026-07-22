@@ -14,7 +14,11 @@ from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
-from imas_muscle3.utils import get_port_list
+from imas_muscle3.utils import (
+    get_port_list,
+    ids_from_message,
+    ids_name_from_port,
+)
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 logger = logging.getLogger()
@@ -44,9 +48,7 @@ def handle_machine_description(
         if not first_run:
             continue
         ids_name = port_name.replace("_md_in", "")
-        ids = IDSFactory().new(ids_name)
-        ids.deserialize(msg.data)
-        md_dict[ids_name] = ids
+        md_dict[ids_name] = ids_from_message(ids_name, msg.data)
     return md_dict
 
 
@@ -131,10 +133,8 @@ def main() -> None:
                     for port_name in ports_in:
                         msg = instance.receive(port_name)
                         t_cur = msg.timestamp
-                        ids_name = port_name.replace("_in", "")
-
-                        temp_ids = IDSFactory().new(ids_name)
-                        temp_ids.deserialize(msg.data)
+                        ids_name = ids_name_from_port(port_name)
+                        temp_ids = ids_from_message(ids_name, msg.data)
 
                         visualization_actor.state.extract_data(temp_ids)
                         if msg.next_timestamp is None:

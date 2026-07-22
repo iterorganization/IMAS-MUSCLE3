@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from imas import DBEntry, IDSFactory
+from imas import DBEntry
 from imas_validator.report.summaryReportGenerator import SummaryReportGenerator
 from imas_validator.report.validationReportGenerator import (
     ValidationReportGenerator,
@@ -22,7 +22,11 @@ from imas_validator.validate_options import ValidateOptions
 from libmuscle import Instance, InstanceFlags
 from ymmsl.v0_2 import Operator
 
-from imas_muscle3.utils import get_port_list
+from imas_muscle3.utils import (
+    get_port_list,
+    ids_from_message,
+    ids_name_from_port,
+)
 
 logger = logging.getLogger()
 
@@ -41,11 +45,10 @@ def main() -> None:
         # there is no `select` for muscle3 ports
         ids_data = {}
         for port_name in port_list_in:
-            ids_name = port_name.replace("_in", "")
+            ids_name = ids_name_from_port(port_name)
             msg_in = instance.receive(port_name)
             t_cur = msg_in.timestamp
-            ids_data[ids_name] = getattr(IDSFactory(), ids_name)()
-            ids_data[ids_name].deserialize(msg_in.data)
+            ids_data[ids_name] = ids_from_message(ids_name, msg_in.data)
 
         # we have now received one message on each of the ports, and can
         # launch a # validation action

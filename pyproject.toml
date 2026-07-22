@@ -58,7 +58,8 @@ dependencies = [
     "panel",
     "holoviews",
     "hvplot",
-    "xarray"
+    "xarray",
+    "zarr"
 ]
 
 [project.optional-dependencies]
@@ -132,6 +133,7 @@ replace-imports-with-any = [
     "panel",
     "param",
     "holoviews",
+    "zarr",
     "matplotlib",
     "xarray",
 ]

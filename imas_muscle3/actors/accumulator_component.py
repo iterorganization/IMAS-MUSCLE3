@@ -25,7 +25,11 @@ from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
-from imas_muscle3.utils import get_port_list
+from imas_muscle3.utils import (
+    get_port_list,
+    ids_from_message,
+    ids_name_from_port,
+)
 
 logger = logging.getLogger()
 
@@ -63,24 +67,21 @@ def main() -> None:
                 t_cur = msg.timestamp
                 ids_next = msg.data[0]
                 for ids_name, obj in msg.data[1].items():
-                    ids = db.factory.new(ids_name)
-                    ids.deserialize(obj)
-                    db.put(ids)
+                    db.put(ids_from_message(ids_name, obj))
             if instance.should_init():
                 # keep track of whether or not each IDS should keep receiving
                 ids_next = {
-                    port.replace("_in", ""): True for port in port_list_in
+                    ids_name_from_port(port): True for port in port_list_in
                 }
             while any(ids_next.values()):
                 # loop over IDSs and receive until the last timeslice
                 for port_name in port_list_in:
-                    ids_name = port_name.replace("_in", "")
+                    ids_name = ids_name_from_port(port_name)
                     if ids_next.get(ids_name, True):
                         # receive IDS
                         msg_in = instance.receive(port_name)
                         t_cur = msg_in.timestamp
-                        ids = db.factory.new(ids_name)
-                        ids.deserialize(msg_in.data)
+                        ids = ids_from_message(ids_name, msg_in.data)
                         if (
                             ids.ids_properties.homogeneous_time
                             == IDS_TIME_MODE_INDEPENDENT
