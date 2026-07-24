@@ -1,11 +1,9 @@
-from typing import List
-
 import imas
 import pytest
-from imas import DBEntry
-from imas.ids_defs import CLOSEST_INTERP
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
+
+from conftest import slice_messages
 
 CONFIG = """
 ymmsl_version: v0.2
@@ -17,22 +15,6 @@ programs:
     executable: python
     args: -u -m imas_muscle3.actors.accumulator_component
 """
-
-
-def _slice_messages(
-    ids: imas.ids_toplevel.IDSToplevel, ids_name: str
-) -> List[Message]:
-    """Build one Message per timeslice of `ids`, chaining next_timestamp the
-    way a real source component would."""
-    messages = []
-    times = list(ids.time)
-    with DBEntry("imas:memory?path=/", "w") as db:
-        db.put(ids)
-        for i, t in enumerate(times):
-            next_t = times[i + 1] if i + 1 < len(times) else None
-            data = db.get_slice(ids_name, t, CLOSEST_INTERP).serialize()
-            messages.append(Message(t, data=data, next_timestamp=next_t))
-    return messages
 
 
 @pytest.mark.parametrize("use_t_next", [True, False])
@@ -58,8 +40,8 @@ def test_accumulator(
         CONFIG.format(s_ports=s_ports), "accumulator"
     )
 
-    cp_messages = _slice_messages(core_profiles, "core_profiles")
-    eq_messages = _slice_messages(equilibrium, "equilibrium")
+    cp_messages = slice_messages(core_profiles, "core_profiles")
+    eq_messages = slice_messages(equilibrium, "equilibrium")
     n_steps = max(len(cp_messages), len(eq_messages))
 
     for i in range(n_steps):

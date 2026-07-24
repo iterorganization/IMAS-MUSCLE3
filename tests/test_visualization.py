@@ -1,18 +1,17 @@
 import runpy
 import socket
 from pathlib import Path
-from typing import List
 
 import imas
 import numpy as np
 import pytest
 import ymmsl
 from imas import DBEntry, ids_defs
-from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 from libmuscle.pytest import MuscleTester
 
+from conftest import slice_messages
 from imas_muscle3.visualization.visualization_actor import VisualizationActor
 
 
@@ -21,24 +20,6 @@ def get_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
         return s.getsockname()[1]
-
-
-def _slice_messages(
-    ids: imas.ids_toplevel.IDSToplevel, ids_name: str
-) -> List[Message]:
-    """Build one Message per timeslice of `ids`, chaining next_timestamp the
-    way a real source component would."""
-    messages = []
-    times = list(ids.time)
-    with DBEntry("imas:memory?path=/", "w") as db:
-        db.put(ids)
-        for i, t in enumerate(times):
-            next_t = times[i + 1] if i + 1 < len(times) else None
-            data = db.get_slice(
-                ids_name, t, ids_defs.CLOSEST_INTERP
-            ).serialize()
-            messages.append(Message(t, data=data, next_timestamp=next_t))
-    return messages
 
 
 def create_ymmsl_config(settings: dict) -> str:
@@ -83,7 +64,7 @@ def test_visualization_actor(
         create_ymmsl_config(settings), "visualization_component"
     )
 
-    for msg in _slice_messages(equilibrium, "equilibrium"):
+    for msg in slice_messages(equilibrium, "equilibrium"):
         tester.send("equilibrium_in", msg)
 
     # No exception raised while sending means the actor consumed every
@@ -93,16 +74,6 @@ def test_visualization_actor(
 def create_full_ymmsl_config(settings: dict) -> str:
     """A source_component + visualization_component pair wired through a
     real Manager.
-
-    Unlike `create_ymmsl_config` above, this does NOT go through
-    MuscleTester: these failure modes all happen while
-    visualization_component constructs its VisualizationActor, before it
-    ever reaches its first `receive()` -- i.e. before its data-plane
-    conduits are ever used. When that happens, MuscleTester's tester
-    component hangs forever trying to establish those conduits (its
-    RECONNECT_TIMEOUT/PEER_TIMEOUT patches don't bound this codepath), so
-    these stay on the classic Manager/RunDir setup, which correctly
-    surfaces the crash via `manager.wait()`.
     """
     settings_str = "\n".join(f"  {k}: {v}" for k, v in settings.items())
 
