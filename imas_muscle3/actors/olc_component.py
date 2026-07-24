@@ -38,24 +38,28 @@ class OLCSettings:
     once per reuse."""
 
     rulesets: str
+    """Semicolon-separated IMAS-Validator rulesets to apply."""
     extra_rule_dirs: str
+    """Semicolon-separated dirs with extra custom rules."""
     apply_generic: bool
+    """Also apply IMAS-Validator's built-in generic rules."""
     halt_on_error: bool
+    """Exit with an error instead of just warning on failure."""
 
-
-def read_settings(instance: Instance) -> OLCSettings:
-    return OLCSettings(
-        rulesets=instance.get_setting("rulesets", "str", default="PDS-OLC"),
-        extra_rule_dirs=instance.get_setting(
-            "extra_rule_dirs", "str", default=""
-        ),
-        apply_generic=instance.get_setting(
-            "apply_generic", "bool", default=True
-        ),
-        halt_on_error=instance.get_setting(
-            "halt_on_error", "bool", default=False
-        ),
-    )
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "OLCSettings":
+        return cls(
+            rulesets=instance.get_setting("rulesets", "str", default="PDS-OLC"),
+            extra_rule_dirs=instance.get_setting(
+                "extra_rule_dirs", "str", default=""
+            ),
+            apply_generic=instance.get_setting(
+                "apply_generic", "bool", default=True
+            ),
+            halt_on_error=instance.get_setting(
+                "halt_on_error", "bool", default=False
+            ),
+        )
 
 
 def main() -> None:
@@ -65,7 +69,7 @@ def main() -> None:
 
     # enter re-use loop
     while instance.reuse_instance():
-        settings = read_settings(instance)
+        settings = OLCSettings.from_instance(instance)
         port_list_in = get_port_list(instance, Operator.F_INIT)
         # wait for messages on all of the ports (one after the other)
         # Note: this does not handle uneven message counts on different ports.

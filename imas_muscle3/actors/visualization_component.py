@@ -35,37 +35,47 @@ class VisualizationSettings:
     and read once per reuse."""
 
     plot_file_path: str
+    """Path to write the plot/dashboard file to."""
     port: int
+    """Port for the visualization server."""
     throttle_interval: float
+    """Minimum time (s) between plot refreshes."""
     keep_alive: bool
+    """Keep the visualization server running after the last reuse."""
     open_browser: bool
+    """Open a browser tab pointed at the visualization server on start."""
     automatic_mode: bool
+    """Run without waiting for manual plot interaction."""
     extract_all: bool
+    """Extract all available data instead of a curated subset."""
 
-
-def read_settings(instance: Instance) -> VisualizationSettings:
-    return VisualizationSettings(
-        plot_file_path=instance.get_setting("plot_file_path", "str"),
-        port=instance.get_setting("port", "int", default=0),
-        # FIXME: there is an issue when the plotting takes much longer
-        # than it takes for data to arrive from the MUSCLE actor. As a
-        # remedy, throttle_interval sets a plotting throttle interval.
-        # Fetched untyped and coerced: ymmsl settings written as e.g. `0`
-        # parse as int, but libmuscle's "float" type check rejects those.
-        throttle_interval=float(
-            instance.get_setting("throttle_interval", default=0.1)
-        ),
-        keep_alive=instance.get_setting("keep_alive", "bool", default=False),
-        open_browser=instance.get_setting(
-            "open_browser", "bool", default=True
-        ),
-        automatic_mode=instance.get_setting(
-            "automatic_mode", "bool", default=False
-        ),
-        extract_all=instance.get_setting(
-            "automatic_extract_all", "bool", default=False
-        ),
-    )
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "VisualizationSettings":
+        return cls(
+            plot_file_path=instance.get_setting("plot_file_path", "str"),
+            port=instance.get_setting("port", "int", default=0),
+            # FIXME: there is an issue when the plotting takes much longer
+            # than it takes for data to arrive from the MUSCLE actor. As a
+            # remedy, throttle_interval sets a plotting throttle interval.
+            # Fetched untyped and coerced: ymmsl settings written as e.g.
+            # `0` parse as int, but libmuscle's "float" type check rejects
+            # those.
+            throttle_interval=float(
+                instance.get_setting("throttle_interval", default=0.1)
+            ),
+            keep_alive=instance.get_setting(
+                "keep_alive", "bool", default=False
+            ),
+            open_browser=instance.get_setting(
+                "open_browser", "bool", default=True
+            ),
+            automatic_mode=instance.get_setting(
+                "automatic_mode", "bool", default=False
+            ),
+            extract_all=instance.get_setting(
+                "automatic_extract_all", "bool", default=False
+            ),
+        )
 
 
 def handle_machine_description(
@@ -127,7 +137,7 @@ def main() -> None:
         if instance.is_connected("trigger_in"):
             instance.receive("trigger_in")
 
-        settings = read_settings(instance)
+        settings = VisualizationSettings.from_instance(instance)
 
         is_running = True
         try:
