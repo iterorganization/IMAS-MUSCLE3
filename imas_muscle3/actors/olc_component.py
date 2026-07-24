@@ -49,7 +49,9 @@ class OLCSettings:
     @classmethod
     def from_instance(cls, instance: Instance) -> "OLCSettings":
         return cls(
-            rulesets=instance.get_setting("rulesets", "str", default="PDS-OLC"),
+            rulesets=instance.get_setting(
+                "rulesets", "str", default="PDS-OLC"
+            ),
             extra_rule_dirs=instance.get_setting(
                 "extra_rule_dirs", "str", default=""
             ),
