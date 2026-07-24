@@ -130,20 +130,25 @@ class SinkSettings:
     once on its first reuse (settings never change across reuses)."""
 
     dd_version: Optional[str]
+    """Which IMAS DD version should be used."""
     sink_mode: str
+    """DBEntry open mode for the sink (e.g. 'x', 'w', 'a')."""
     sink_uri: str
+    """Which DBEntry URI the data should be saved to."""
     avoid_name_collision: bool
+    """Append an incremental suffix to sink_uri instead of failing when it
+    already exists."""
 
-
-def read_sink_settings(instance: Instance) -> SinkSettings:
-    return SinkSettings(
-        dd_version=get_setting_optional(instance, "dd_version"),
-        sink_mode=instance.get_setting("sink_mode", "str", default="x"),
-        sink_uri=instance.get_setting("sink_uri", "str"),
-        avoid_name_collision=instance.get_setting(
-            "avoid_name_collision", "bool", default=True
-        ),
-    )
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "SinkSettings":
+        return cls(
+            dd_version=get_setting_optional(instance, "dd_version"),
+            sink_mode=instance.get_setting("sink_mode", "str", default="x"),
+            sink_uri=instance.get_setting("sink_uri", "str"),
+            avoid_name_collision=instance.get_setting(
+                "avoid_name_collision", "bool", default=True
+            ),
+        )
 
 
 @dataclass
@@ -152,22 +157,30 @@ class SourceSettings:
     read once on its first reuse (settings never change across reuses)."""
 
     iterative: bool
+    """Send one slice per timestamp in the source range, instead of the
+    full (optionally t_min/t_max-bounded) IDS in one go."""
     dd_version: Optional[str]
+    """Which IMAS DD version should be used."""
     source_uri: str
+    """Which DBEntry URI the data should be loaded from."""
     interpolation_method: int
+    """Which IMAS interpolation method to use for load, defaults to
+    CLOSEST_INTERP."""
     t_min: Optional[float]
+    """Left boundary of loaded time range."""
     t_max: Optional[float]
+    """Right boundary of loaded time range."""
 
-
-def read_source_settings(instance: Instance) -> SourceSettings:
-    return SourceSettings(
-        iterative=instance.get_setting("iterative", "bool", default=True),
-        dd_version=get_setting_optional(instance, "dd_version"),
-        source_uri=instance.get_setting("source_uri", "str"),
-        interpolation_method=fix_interpolation_method(instance),
-        t_min=get_setting_optional(instance, "t_min"),
-        t_max=get_setting_optional(instance, "t_max"),
-    )
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "SourceSettings":
+        return cls(
+            iterative=instance.get_setting("iterative", "bool", default=True),
+            dd_version=get_setting_optional(instance, "dd_version"),
+            source_uri=instance.get_setting("source_uri", "str"),
+            interpolation_method=fix_interpolation_method(instance),
+            t_min=get_setting_optional(instance, "t_min"),
+            t_max=get_setting_optional(instance, "t_max"),
+        )
 
 
 @dataclass
@@ -177,24 +190,33 @@ class SinkSourceSettings:
     reuses)."""
 
     dd_version: Optional[str]
+    """Which IMAS DD version should be used."""
     sink_mode: str
+    """DBEntry open mode for the sink (e.g. 'x', 'w', 'a')."""
     sink_uri: Optional[str]
+    """Which DBEntry URI the data should be saved to; unset if this
+    instance only acts as a source."""
     source_uri: str
+    """Which DBEntry URI the data should be loaded from."""
     avoid_name_collision: bool
+    """Append an incremental suffix to sink_uri instead of failing when it
+    already exists."""
     interpolation_method: int
+    """Which IMAS interpolation method to use for load, defaults to
+    CLOSEST_INTERP."""
 
-
-def read_sink_source_settings(instance: Instance) -> SinkSourceSettings:
-    return SinkSourceSettings(
-        dd_version=get_setting_optional(instance, "dd_version"),
-        sink_mode=instance.get_setting("sink_mode", "str", default="x"),
-        sink_uri=get_setting_optional(instance, "sink_uri"),
-        source_uri=instance.get_setting("source_uri", "str"),
-        avoid_name_collision=instance.get_setting(
-            "avoid_name_collision", "bool", default=True
-        ),
-        interpolation_method=fix_interpolation_method(instance),
-    )
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "SinkSourceSettings":
+        return cls(
+            dd_version=get_setting_optional(instance, "dd_version"),
+            sink_mode=instance.get_setting("sink_mode", "str", default="x"),
+            sink_uri=get_setting_optional(instance, "sink_uri"),
+            source_uri=instance.get_setting("source_uri", "str"),
+            avoid_name_collision=instance.get_setting(
+                "avoid_name_collision", "bool", default=True
+            ),
+            interpolation_method=fix_interpolation_method(instance),
+        )
 
 
 def muscled_sink() -> None:
@@ -207,7 +229,7 @@ def muscled_sink() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            settings = read_sink_settings(instance)
+            settings = SinkSettings.from_instance(instance)
             sink_db_entry = get_sink_db_entry(
                 settings.sink_uri,
                 sink_mode=settings.sink_mode,
@@ -238,7 +260,7 @@ def muscled_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            settings = read_source_settings(instance)
+            settings = SourceSettings.from_instance(instance)
             source_db_entry = DBEntry(
                 settings.source_uri, "r", dd_version=settings.dd_version
             )
@@ -301,7 +323,7 @@ def muscled_sink_source() -> None:
     first_run = True
     while instance.reuse_instance():
         if first_run:
-            settings = read_sink_source_settings(instance)
+            settings = SinkSourceSettings.from_instance(instance)
             if settings.sink_uri is not None:
                 sink_db_entry = get_sink_db_entry(
                     settings.sink_uri,
