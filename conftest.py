@@ -1,6 +1,11 @@
+from typing import List
+
 import imas
 import numpy
 import pytest
+from imas import DBEntry
+from imas.ids_defs import CLOSEST_INTERP
+from libmuscle import Message
 
 
 @pytest.fixture
@@ -67,3 +72,19 @@ def pf_active():
     pfa.ids_properties.homogeneous_time = 0  # INT_0D
     pfa.time = [0.0, 1.0, 2.0]
     return pfa
+
+
+def slice_messages(
+    ids: imas.ids_toplevel.IDSToplevel, ids_name: str
+) -> List[Message]:
+    """Build one Message per timeslice of `ids`, chaining next_timestamp the
+    way a real source component would."""
+    messages = []
+    times = list(ids.time)
+    with DBEntry("imas:memory?path=/", "w") as db:
+        db.put(ids)
+        for i, t in enumerate(times):
+            next_t = times[i + 1] if i + 1 < len(times) else None
+            data = db.get_slice(ids_name, t, CLOSEST_INTERP).serialize()
+            messages.append(Message(t, data=data, next_timestamp=next_t))
+    return messages

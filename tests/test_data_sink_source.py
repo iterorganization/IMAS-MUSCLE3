@@ -1,353 +1,201 @@
+from pathlib import Path
+from typing import List
+
+import imas
 import pytest
 import ymmsl
 from imas import DBEntry
+from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
+from libmuscle.pytest import MuscleTester
+
+from conftest import slice_messages
 
 
-def test_source_to_sink(tmp_path, core_profiles):
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    data_sink_path = (tmp_path / "sink_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    sink_uri = f"imas:hdf5?path={data_sink_path}"
+def _receive_all(tester, port_name: str) -> List[Message]:
+    """Receive from a port until a message has no next_timestamp."""
+    messages = []
+    while True:
+        msg = tester.receive(port_name)
+        messages.append(msg)
+        if msg.next_timestamp is None:
+            break
+    return messages
+
+
+def _deserialize(ids_name: str, data: bytes) -> imas.ids_toplevel.IDSToplevel:
+    ids = imas.IDSFactory("4.0.0").new(ids_name)
+    ids.deserialize(data)
+    return ids
+
+
+def test_source_sends_all_slices(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
+) -> None:
+    source_uri = f"imas:hdf5?path={(tmp_path / 'source_data').absolute()}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
-    # make config
-    ymmsl_text = f"""
+
+    config = f"""
 ymmsl_version: v0.2
-models:
-  test_model:
-    components:
-      source_component:
-        description: source component
-        implementation: source_component
-        ports:
-          o_i: [core_profiles_out]
-      sink_component:
-        description: sink component
-        implementation: sink_component
-        ports:
-          f_init: [core_profiles_in]
-    conduits:
-      source_component.core_profiles_out: sink_component.core_profiles_in
-settings:
-  source_component.source_uri: {source_uri}
-  sink_component.sink_uri: {sink_uri}
 programs:
-  sink_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.sink_component
   source_component:
+    ports:
+      o_i: [core_profiles_out]
     executable: python
     args: -u -m imas_muscle3.actors.source_component
-resources:
-  source_component:
-    threads: 1
-  sink_component:
-    threads: 1
+settings:
+  source_component.source_uri: {source_uri}
 """
+    tester = muscle3_tester.start_implementation(config, "source_component")
 
-    config = ymmsl.load(ymmsl_text)
-
-    # set up
-    run_dir = RunDir(tmp_path / "run")
-
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
-
-    # check that all went well
-    assert success
-
-    assert data_sink_path.exists()
-    with DBEntry(sink_uri, "r") as entry:
-        assert all(entry.get("core_profiles").time == core_profiles.time)
+    messages = _receive_all(tester, "core_profiles_out")
+    received_times = [msg.timestamp for msg in messages]
+    assert received_times == list(core_profiles.time)
+    for msg in messages:
+        result = _deserialize("core_profiles", msg.data)
+        assert list(result.time) == [msg.timestamp]
 
 
 @pytest.mark.parametrize("use_sink", [True, False])
-def test_source_to_hybrid_to_sink(tmp_path, core_profiles, use_sink):
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    data_sink_path = (tmp_path / "sink_component_data").absolute()
-    data_hybrid_source_path = (
-        tmp_path / "source_hybrid_component_data"
-    ).absolute()
-    data_hybrid_sink_path = (
-        tmp_path / "sink_hybrid_component_data"
-    ).absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    sink_uri = f"imas:hdf5?path={data_sink_path}"
-    hybrid_source_uri = f"imas:hdf5?path={data_hybrid_source_path}"
-    hybrid_sink_uri = f"imas:hdf5?path={data_hybrid_sink_path}"
-    with DBEntry(source_uri, "w") as entry:
-        entry.put(core_profiles)
+def test_hybrid_component(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles, use_sink: bool
+) -> None:
+    hybrid_source_uri = (
+        f"imas:hdf5?path={(tmp_path / 'hybrid_source_data').absolute()}"
+    )
+    hybrid_sink_path = (tmp_path / "hybrid_sink_data").absolute()
+    hybrid_sink_uri = f"imas:hdf5?path={hybrid_sink_path}"
     with DBEntry(hybrid_source_uri, "w") as entry:
         entry.put(core_profiles)
-    # make config
-    ymmsl_text = f"""
-    ymmsl_version: v0.2
-    models:
-      test_model:
-        components:
-          source_component:
-            description: source component
-            implementation: source_component
-            ports:
-              o_i: [core_profiles_out]
-          sink_component:
-            description: sink component
-            implementation: sink_component
-            ports:
-              f_init: [core_profiles_in]
-          hybrid_component:
-            description: hybrid component
-            implementation: hybrid_component
-            ports:
-              f_init: [core_profiles_in]
-              o_f: [core_profiles_out]
-        conduits:
-          source_component.core_profiles_out: hybrid_component.core_profiles_in
-          hybrid_component.core_profiles_out: sink_component.core_profiles_in
-    settings:
-      source_component.source_uri: {source_uri}
-      sink_component.sink_uri: {sink_uri}
-      hybrid_component.source_uri: {hybrid_source_uri}
-      {f"hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ""}
-    programs:
-      sink_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.sink_component
-      source_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.source_component
-      hybrid_component:
-        executable: python
-        args: -u -m imas_muscle3.actors.sink_source_component
-    resources:
-      source_component:
-        threads: 1
-      sink_component:
-        threads: 1
-      hybrid_component:
-        threads: 1
-    """
 
-    config = ymmsl.load(ymmsl_text)
+    sink_setting = (
+        f"  hybrid_component.sink_uri: {hybrid_sink_uri}" if use_sink else ""
+    )
+    config = f"""
+ymmsl_version: v0.2
+programs:
+  hybrid_component:
+    ports:
+      f_init: [core_profiles_in]
+      o_f: [core_profiles_out]
+    executable: python
+    args: -u -m imas_muscle3.actors.sink_source_component
+settings:
+  hybrid_component.source_uri: {hybrid_source_uri}
+{sink_setting}
+"""
+    tester = muscle3_tester.start_implementation(config, "hybrid_component")
 
-    # set up
-    run_dir = RunDir(tmp_path / "run")
+    for msg in slice_messages(core_profiles, "core_profiles"):
+        tester.send("core_profiles_in", msg)
+        reply = tester.receive("core_profiles_out")
+        result = _deserialize("core_profiles", reply.data)
+        # hybrid's own source_uri drives the O_F payload, at the timestamp
+        # dictated by what came in on F_INIT
+        assert result.time[0] == msg.timestamp
 
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
+    # Shut the implementation down so its sink DBEntry is flushed and closed
+    # before we read it back.
+    muscle3_tester.cleanup()
 
-    # check that all went well
-    assert success
-
-    assert data_sink_path.exists()
-    with DBEntry(sink_uri, "r") as entry:
-        assert all(entry.get("core_profiles").time == core_profiles.time)
     if use_sink:
-        assert data_hybrid_sink_path.exists()
+        assert hybrid_sink_path.exists()
         with DBEntry(hybrid_sink_uri, "r") as entry:
             assert all(entry.get("core_profiles").time == core_profiles.time)
     else:
-        assert not data_hybrid_sink_path.exists()
+        assert not hybrid_sink_path.exists()
 
 
-def test_source_with_time_range(tmp_path, core_profiles):
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    data_sink_path = (tmp_path / "sink_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    sink_uri = f"imas:hdf5?path={data_sink_path}"
+def test_source_with_time_range(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
+) -> None:
+    source_uri = f"imas:hdf5?path={(tmp_path / 'source_data').absolute()}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
-    # make config
-    ymmsl_text = f"""
+
+    config = f"""
 ymmsl_version: v0.2
-models:
-  test_model:
-    components:
-      source_component:
-        description: source component
-        implementation: source_component
-        ports:
-          o_i: [core_profiles_out]
-      sink_component:
-        description: sink component
-        implementation: sink_component
-        ports:
-          f_init: [core_profiles_in]
-    conduits:
-      source_component.core_profiles_out: sink_component.core_profiles_in
+programs:
+  source_component:
+    ports:
+      o_i: [core_profiles_out]
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
 settings:
   source_component.source_uri: {source_uri}
   source_component.t_min: 0.5
   source_component.t_max: 1.5
-  sink_component.sink_uri: {sink_uri}
-programs:
-  sink_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.sink_component
-  source_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.source_component
-resources:
-  source_component:
-    threads: 1
-  sink_component:
-    threads: 1
 """
+    tester = muscle3_tester.start_implementation(config, "source_component")
 
-    config = ymmsl.load(ymmsl_text)
-
-    # set up
-    run_dir = RunDir(tmp_path / "run")
-
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
-
-    # check that all went well
-    assert success
-
-    assert data_sink_path.exists()
-    with DBEntry(sink_uri, "r") as entry:
-        assert all(core_profiles.time == [0, 1, 2])
-        assert all(entry.get("core_profiles").time == [1])
+    assert all(core_profiles.time == [0, 1, 2])
+    messages = _receive_all(tester, "core_profiles_out")
+    assert [msg.timestamp for msg in messages] == [1]
+    result = _deserialize("core_profiles", messages[0].data)
+    assert list(result.time) == [1]
 
 
-def test_non_iterative_source_with_time_range(tmp_path, core_profiles):
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    data_sink_path = (tmp_path / "sink_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    sink_uri = f"imas:hdf5?path={data_sink_path}"
+def test_non_iterative_source_with_time_range(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
+) -> None:
+    source_uri = f"imas:hdf5?path={(tmp_path / 'source_data').absolute()}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(core_profiles)
-    # make config
-    ymmsl_text = f"""
+
+    config = f"""
 ymmsl_version: v0.2
-models:
-  test_model:
-    components:
-      source_component:
-        description: source component
-        implementation: source_component
-        ports:
-          o_i: [core_profiles_out]
-      sink_component:
-        description: sink component
-        implementation: sink_component
-        ports:
-          f_init: [core_profiles_in]
-    conduits:
-      source_component.core_profiles_out: sink_component.core_profiles_in
+programs:
+  source_component:
+    ports:
+      o_i: [core_profiles_out]
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
 settings:
   source_component.source_uri: {source_uri}
   source_component.iterative: false
   source_component.t_min: 0.5
   source_component.t_max: 2.5
-  sink_component.sink_uri: {sink_uri}
-programs:
-  sink_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.sink_component
-  source_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.source_component
-resources:
-  source_component:
-    threads: 1
-  sink_component:
-    threads: 1
 """
+    tester = muscle3_tester.start_implementation(config, "source_component")
 
-    config = ymmsl.load(ymmsl_text)
-
-    # set up
-    run_dir = RunDir(tmp_path / "run")
-
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
-
-    # check that all went well
-    assert success
-
-    assert data_sink_path.exists()
-    with DBEntry(sink_uri, "r") as entry:
-        assert all(core_profiles.time == [0, 1, 2])
-        assert all(entry.get("core_profiles").time == [1, 2])
+    assert all(core_profiles.time == [0, 1, 2])
+    messages = _receive_all(tester, "core_profiles_out")
+    assert len(messages) == 1
+    result = _deserialize("core_profiles", messages[0].data)
+    assert list(result.time) == [1, 2]
 
 
-def test_source_without_time_array(tmp_path, iron_core, pf_active):
+def test_source_without_time_array(
+    muscle3_tester: MuscleTester, tmp_path: Path, iron_core, pf_active
+) -> None:
     """
     Test if t_array in source is taken from pf_active even if
     iron_core is first in list
     """
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    data_sink_path = (tmp_path / "sink_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    sink_uri = f"imas:hdf5?path={data_sink_path}"
+    source_uri = f"imas:hdf5?path={(tmp_path / 'source_data').absolute()}"
     with DBEntry(source_uri, "w") as entry:
         entry.put(iron_core)
         entry.put(pf_active)
-    # make config
-    ymmsl_text = f"""
+
+    config = f"""
 ymmsl_version: v0.2
-models:
-  test_model:
-    components:
-      source_component:
-        description: source component
-        implementation: source_component
-        ports:
-          o_i: [iron_core_out, pf_active_out]
-      sink_component:
-        description: sink component
-        implementation: sink_component
-        ports:
-          f_init: [iron_core_in, pf_active_in]
-    conduits:
-      source_component.iron_core_out: sink_component.iron_core_in
-      source_component.pf_active_out: sink_component.pf_active_in
-settings:
-  source_component.source_uri: {source_uri}
-  sink_component.sink_uri: {sink_uri}
 programs:
-  sink_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.sink_component
   source_component:
+    ports:
+      o_i: [iron_core_out, pf_active_out]
     executable: python
     args: -u -m imas_muscle3.actors.source_component
-resources:
-  source_component:
-    threads: 1
-  sink_component:
-    threads: 1
+settings:
+  source_component.source_uri: {source_uri}
 """
+    tester = muscle3_tester.start_implementation(config, "source_component")
 
-    config = ymmsl.load(ymmsl_text)
-
-    # set up
-    run_dir = RunDir(tmp_path / "run")
-
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
-
-    # check that all went well
-    assert success
-
-    assert data_sink_path.exists()
-    with DBEntry(sink_uri, "r") as entry:
-        assert all(pf_active.time == [0, 1, 2])
-        assert all(entry.get("pf_active").time == [0, 1, 2])
+    assert all(pf_active.time == [0, 1, 2])
+    pf_messages = _receive_all(tester, "pf_active_out")
+    _receive_all(tester, "iron_core_out")
+    assert [msg.timestamp for msg in pf_messages] == list(pf_active.time)
 
 
 def ls_snapshots(run_dir, instance=None):
@@ -358,9 +206,15 @@ def ls_snapshots(run_dir, instance=None):
     )
 
 
-def test_source_checkpoints(tmp_path, pf_active):
+def test_source_checkpoints(tmp_path: Path, pf_active) -> None:
     """
-    Test if checkpointing works as intended
+    Test if checkpointing works as intended.
+
+    This stays on the plain Manager/RunDir setup rather than MuscleTester:
+    checkpoints apply to the whole workflow, and the tester component that
+    MuscleTester wires in does not declare checkpoint support, so the
+    manager rejects any config with a `checkpoints:` section as soon as the
+    tester tries to connect.
     """
     data_source_path = (tmp_path / "source_component_data").absolute()
     data_sink_path = (tmp_path / "sink_component_data").absolute()
@@ -404,7 +258,6 @@ resources:
   sink_component:
     threads: 1
 checkpoints:
-  # at_end: true
   simulation_time:
   - every: 0.5
 """
@@ -431,66 +284,38 @@ checkpoints:
             assert all(entry.get("pf_active").time == expected_time)
 
 
-def test_increment_existing_sink(tmp_path, core_profiles):
-    data_source_path = (tmp_path / "source_component_data").absolute()
-    source_uri = f"imas:hdf5?path={data_source_path}"
-    with DBEntry(source_uri, "w") as entry:
-        entry.put(core_profiles)
-    # make config
-    ymmsl_text = f"""
+def test_increment_existing_sink(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
+) -> None:
+    sink_path = (tmp_path / "sink_data").absolute()
+    sink_uri = f"imas:hdf5?path={sink_path}"
+    # pre-create the sink path so the sink component has to avoid a collision
+    with DBEntry(sink_uri, "w"):
+        pass
+
+    config = f"""
 ymmsl_version: v0.2
-models:
-  test_model:
-    components:
-      source_component:
-        description: source component
-        implementation: source_component
-        ports:
-          o_i: [core_profiles_out]
-      sink_component:
-        description: sink component
-        implementation: sink_component
-        ports:
-          f_init: [core_profiles_in]
-    conduits:
-      source_component.core_profiles_out: sink_component.core_profiles_in
-settings:
-  source_component.source_uri: {source_uri}
-  sink_component.sink_uri: {source_uri}
-  sink_component.sink_mode: x
 programs:
   sink_component:
+    ports:
+      f_init: [core_profiles_in]
     executable: python
     args: -u -m imas_muscle3.actors.sink_component
-  source_component:
-    executable: python
-    args: -u -m imas_muscle3.actors.source_component
-resources:
-  source_component:
-    threads: 1
-  sink_component:
-    threads: 1
+settings:
+  sink_component.sink_uri: {sink_uri}
+  sink_component.sink_mode: x
 """
+    tester = muscle3_tester.start_implementation(config, "sink_component")
 
-    config = ymmsl.load(ymmsl_text)
+    for msg in slice_messages(core_profiles, "core_profiles"):
+        tester.send("core_profiles_in", msg)
 
-    # set up
-    run_dir = RunDir(tmp_path / "run")
+    # Shut the implementation down so its sink DBEntry is flushed and closed
+    # before we read it back.
+    muscle3_tester.cleanup()
 
-    # launch MUSCLE Manager with simulation
-    manager = Manager(config, run_dir)
-    manager.start_instances()
-    success = manager.wait()
-
-    # check that all went well
-    assert success
-
-    assert data_source_path.exists()
-    with DBEntry(source_uri, "r") as entry:
-        assert all(entry.get("core_profiles").time == core_profiles.time)
-
-    new_sink_path = data_source_path.with_name(
-        f"{data_source_path.stem}_1{data_source_path.suffix}"
+    new_sink_path = sink_path.with_name(
+        f"{sink_path.stem}_1{sink_path.suffix}"
     )
     assert new_sink_path.exists()
     new_sink_uri = f"imas:hdf5?path={new_sink_path}"
