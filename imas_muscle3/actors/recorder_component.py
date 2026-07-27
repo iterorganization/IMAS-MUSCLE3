@@ -34,19 +34,21 @@ class RecorderSettings:
     read once per reuse."""
 
     config: Path
+    """Path to the recorder config."""
     store_path: Path
+    """Where to write the recordings. Defaults to the instance's run
+    folder."""
 
-
-def read_settings(instance: Instance) -> RecorderSettings:
-    """``store_path`` defaults to the instance's run folder."""
-    config = Path(instance.get_setting("config", "str"))
-    store_path_setting = get_setting_optional(instance, "store_path")
-    store_path = (
-        Path(str(store_path_setting))
-        if store_path_setting is not None
-        else Path.cwd()
-    )
-    return RecorderSettings(config=config, store_path=store_path)
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "RecorderSettings":
+        config = Path(instance.get_setting("config", "str"))
+        store_path_setting = get_setting_optional(instance, "store_path")
+        store_path = (
+            Path(str(store_path_setting))
+            if store_path_setting is not None
+            else Path.cwd()
+        )
+        return cls(config=config, store_path=store_path)
 
 
 def _serve(
@@ -145,7 +147,7 @@ def main() -> None:
             )
             break
 
-        settings = read_settings(instance)
+        settings = RecorderSettings.from_instance(instance)
         settings.store_path.mkdir(parents=True, exist_ok=True)
         if not resuming:
             # A fresh run starts clean; a resumed one keeps what's already

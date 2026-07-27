@@ -5,6 +5,7 @@ MUSCLE3 actor for visualization
 import contextlib
 import logging
 import time
+from dataclasses import dataclass
 from typing import Dict
 
 import holoviews as hv
@@ -26,6 +27,55 @@ logger = logging.getLogger()
 
 pn.extension(notifications=True)
 hv.extension("bokeh")
+
+
+@dataclass
+class VisualizationSettings:
+    """Every setting the visualization actor reads, gathered in one place
+    and read once per reuse."""
+
+    plot_file_path: str
+    """Path to write the plot/dashboard file to."""
+    port: int
+    """Port for the visualization server."""
+    throttle_interval: float
+    """Minimum time (s) between plot refreshes."""
+    keep_alive: bool
+    """Keep the visualization server running after the last reuse."""
+    open_browser: bool
+    """Open a browser tab pointed at the visualization server on start."""
+    automatic_mode: bool
+    """Run without waiting for manual plot interaction."""
+    extract_all: bool
+    """Extract all available data instead of a curated subset."""
+
+    @classmethod
+    def from_instance(cls, instance: Instance) -> "VisualizationSettings":
+        return cls(
+            plot_file_path=instance.get_setting("plot_file_path", "str"),
+            port=instance.get_setting("port", "int", default=0),
+            # FIXME: there is an issue when the plotting takes much longer
+            # than it takes for data to arrive from the MUSCLE actor. As a
+            # remedy, throttle_interval sets a plotting throttle interval.
+            # Fetched untyped and coerced: ymmsl settings written as e.g.
+            # `0` parse as int, but libmuscle's "float" type check rejects
+            # those.
+            throttle_interval=float(
+                instance.get_setting("throttle_interval", default=0.1)
+            ),
+            keep_alive=instance.get_setting(
+                "keep_alive", "bool", default=False
+            ),
+            open_browser=instance.get_setting(
+                "open_browser", "bool", default=True
+            ),
+            automatic_mode=instance.get_setting(
+                "automatic_mode", "bool", default=False
+            ),
+            extract_all=instance.get_setting(
+                "automatic_extract_all", "bool", default=False
+            ),
+        )
 
 
 def handle_machine_description(
@@ -77,7 +127,6 @@ def main() -> None:
         for p in get_port_list(instance, Operator.S)
         if not p.endswith("_md_in")
     ]
-    keep_alive = False
     while instance.reuse_instance():
         if instance.resuming():
             msg = instance.load_snapshot()
@@ -88,28 +137,7 @@ def main() -> None:
         if instance.is_connected("trigger_in"):
             instance.receive("trigger_in")
 
-        plot_file_path = instance.get_setting("plot_file_path", "str")
-        # If port is not specified, use a random available port
-        port = instance.get_setting("port", default=0)
-        # FIXME: there is an issue when the plotting takes much longer
-        # than it takes for data to arrive from the MUSCLE actor. As a
-        # remedy, set a plotting throttle interval.
-        throttle_interval = instance.get_setting(
-            "throttle_interval", default=0.1
-        )
-        keep_alive = instance.get_setting("keep_alive", default=False)
-        open_browser = instance.get_setting("open_browser", default=True)
-        automatic_mode = instance.get_setting("automatic_mode", default=False)
-        extract_all = instance.get_setting(
-            "automatic_extract_all", default=False
-        )
-
-        # for mypy
-        assert port is not None
-        assert open_browser is not None
-        assert extract_all is not None
-        assert automatic_mode is not None
-        assert throttle_interval is not None
+        settings = VisualizationSettings.from_instance(instance)
 
         is_running = True
         try:
@@ -118,13 +146,13 @@ def main() -> None:
                     md_dict = handle_machine_description(instance, first_run)
                     if first_run:
                         visualization_actor = VisualizationActor(
-                            plot_file_path,
-                            port,
+                            settings.plot_file_path,
+                            settings.port,
                             md_dict,
-                            open_browser,
-                            extract_all,
-                            automatic_mode,
-                            keep_alive=bool(keep_alive),
+                            settings.open_browser,
+                            settings.extract_all,
+                            settings.automatic_mode,
+                            keep_alive=settings.keep_alive,
                         )
                         stack.enter_context(visualization_actor)
                         first_run = False
@@ -140,7 +168,10 @@ def main() -> None:
                         if msg.next_timestamp is None:
                             is_running = False
                     current_time = time.time()
-                    if current_time - last_trigger_time >= throttle_interval:
+                    if (
+                        current_time - last_trigger_time
+                        >= settings.throttle_interval
+                    ):
                         visualization_actor.state.param.trigger("data")
                         last_trigger_time = current_time
                     visualization_actor.update_time(temp_ids.time[-1])
@@ -165,7 +196,7 @@ def main() -> None:
     # Finalize once, after the last reuse, so the server survives across
     # iterations when driven by trigger_in.
     if visualization_actor is not None:
-        if keep_alive:
+        if settings.keep_alive:
             visualization_actor.notify_done()
         else:
             visualization_actor.stop_server()
