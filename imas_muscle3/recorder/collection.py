@@ -84,9 +84,7 @@ class LiveState:
     def update(self, datasets: Dict[str, xr.Dataset]) -> None:
         for name, ds in datasets.items():
             self.data[name] = (
-                _combine([self.data[name], ds])
-                if name in self.data
-                else ds
+                _combine([self.data[name], ds]) if name in self.data else ds
             )
 
 
