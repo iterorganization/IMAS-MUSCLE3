@@ -21,6 +21,7 @@ from imas_muscle3.recorder.base import (
     RecorderFactory,
     RecorderState,
 )
+from imas_muscle3.recorder.zarr_recorder import _combine
 from imas_muscle3.visualization.base_state import BaseState
 
 logger = logging.getLogger()
@@ -83,9 +84,7 @@ class LiveState:
     def update(self, datasets: Dict[str, xr.Dataset]) -> None:
         for name, ds in datasets.items():
             self.data[name] = (
-                xr.concat([self.data[name], ds], dim="time")
-                if name in self.data
-                else ds
+                _combine([self.data[name], ds]) if name in self.data else ds
             )
 
 
