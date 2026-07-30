@@ -193,6 +193,7 @@ rules.unresolved-import = "ignore"
 # ordinary files and resolves fine); these modules just re-export or
 # subclass its generic State/Plotter/recorder machinery.
 include = [
+    "imas_muscle3/recorder/actor.py",
     "imas_muscle3/recorder/base.py",
     "imas_muscle3/recorder/collection.py",
     "imas_muscle3/recorder/zarr_recorder.py",
