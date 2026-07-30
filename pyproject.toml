@@ -64,7 +64,7 @@ dependencies = [
     # domain-agnostic base that imas_muscle3 subclasses/wraps for IMAS.
     # Not on PyPI yet; pulled from git like ymmsl2svg is for muscle3-dashboard
     # itself.
-    "muscle3-dashboard[recording] @ git+https://github.com/multiscale/muscle3-dashboard.git@feature/idle_shutdown"
+    "muscle3-dashboard[recording] @ git+https://github.com/multiscale/muscle3-dashboard.git@feature/recorder_logic_in_dashboard"
 ]
 
 [project.optional-dependencies]
