@@ -6,6 +6,7 @@ See :doc:`/actor_recorder` for usage; shared machinery is in
 :mod:`imas_muscle3.recorder`.
 """
 
+import functools
 import logging
 import shutil
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from imas_muscle3.recorder.zarr_recorder import ZarrRecorder
 from imas_muscle3.utils import (
     get_port_list,
     get_setting_optional,
+    ids_from_message,
     ids_name_from_port,
 )
 
@@ -38,17 +40,39 @@ class RecorderSettings:
     store_path: Path
     """Where to write the recordings. Defaults to the instance's run
     folder."""
+    automatic_extract: bool
+    """Fill in extraction via `BaseState.automatic_extract` for a `State`
+    that does not implement its own `extract` (see :ref:`actor_recorder`)."""
+    automatic_extract_fields: Optional[List[str]]
+    """Restrict extraction to these full paths (``<ids_name>/<path>``).
+    Empty/unset: keep everything the config extracts."""
 
     @classmethod
     def from_instance(cls, instance: Instance) -> "RecorderSettings":
         config = Path(instance.get_setting("config", "str"))
+        automatic_extract = instance.get_setting(
+            "automatic_extract", "bool", default=False
+        )
+
+        fields_setting = get_setting_optional(
+            instance, "automatic_extract_fields"
+        )
+        automatic_extract_fields = (
+            str(fields_setting).split() if fields_setting else None
+        )
+
         store_path_setting = get_setting_optional(instance, "store_path")
         store_path = (
             Path(str(store_path_setting))
             if store_path_setting is not None
             else Path.cwd()
         )
-        return cls(config=config, store_path=store_path)
+        return cls(
+            config=config,
+            store_path=store_path,
+            automatic_extract=automatic_extract,
+            automatic_extract_fields=automatic_extract_fields,
+        )
 
 
 def _serve(
@@ -131,8 +155,12 @@ def main() -> None:
 
     while instance.reuse_instance():
         s_ports = get_port_list(instance, Operator.S)
-        # Validate all port -> IDS mappings up front so a bad config fails.
-        ids_names = {p: ids_name_from_port(p) for p in s_ports}
+        # Validate all port -> IDS mappings up front so a bad config fails,
+        # each becoming a deserializer bound to that port's IDS name.
+        deserializers = {
+            p: functools.partial(ids_from_message, ids_name_from_port(p))
+            for p in s_ports
+        }
 
         resuming = instance.resuming()
         snapshot_state: Optional[Dict[str, RecorderState]] = None
@@ -157,7 +185,12 @@ def main() -> None:
                 shutil.rmtree(settings.store_path / port, ignore_errors=True)
 
         collection = RecorderCollection(
-            settings.store_path, settings.config, ids_names, ZarrRecorder
+            settings.store_path,
+            settings.config,
+            deserializers,
+            ZarrRecorder,
+            fields=settings.automatic_extract_fields,
+            automatic_extract=settings.automatic_extract,
         )
         if snapshot_state is not None:
             collection.restore_state(snapshot_state)

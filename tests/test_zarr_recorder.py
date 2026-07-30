@@ -1,3 +1,5 @@
+import functools
+
 import numpy as np
 import xarray as xr
 from libmuscle import Message
@@ -7,10 +9,13 @@ from imas_muscle3.recorder.zarr_recorder import (
     group_name,
     read_root_attrs,
 )
+from imas_muscle3.utils import ids_from_message
+
+_deserialize = functools.partial(ids_from_message, "equilibrium")
 
 
 def _open(tmp_path, name):
-    rec = ZarrRecorder(tmp_path, "equilibrium", lambda ids: {}, "cfg.py")
+    rec = ZarrRecorder(tmp_path, _deserialize, lambda ids: {}, "cfg.py")
     rec._open_occurrence(tmp_path / name)
     return rec
 
@@ -121,7 +126,7 @@ def test_reopen_occurrence_rehydrates_buffer_for_later_rebuild(tmp_path):
     rec1._append("x/y", _single_1d(0.0, np.ones(8)))
 
     # Resume: a brand-new ZarrRecorder, as a fresh process would build.
-    rec2 = ZarrRecorder(tmp_path, "equilibrium", lambda ids: {}, "cfg.py")
+    rec2 = ZarrRecorder(tmp_path, _deserialize, lambda ids: {}, "cfg.py")
     rec2._reopen_occurrence(tmp_path / "0000")
     assert list(rec2._buffers["x.y"][0]["value"].values[0]) == [1.0] * 8
 
@@ -145,7 +150,7 @@ def test_reopen_occurrence_rehydrates_buffer_for_later_rebuild(tmp_path):
 def test_reopen_occurrence_on_missing_store_starts_empty(tmp_path):
     """An occurrence that was opened but never written to (empty timeline)
     has no store on disk yet; resuming it must not fail."""
-    rec = ZarrRecorder(tmp_path, "equilibrium", lambda ids: {}, "cfg.py")
+    rec = ZarrRecorder(tmp_path, _deserialize, lambda ids: {}, "cfg.py")
     rec._reopen_occurrence(tmp_path / "0000")
     assert rec._buffers == {}
     assert rec._sig == {}
@@ -163,7 +168,7 @@ def test_zarr_recorder_writes_and_stamps(tmp_path, equilibrium):
             )
         }
 
-    rec = ZarrRecorder(tmp_path, "equilibrium", extract, profile="cfg.py")
+    rec = ZarrRecorder(tmp_path, _deserialize, extract, profile="cfg.py")
     rec.handle(Message(0.0, None, data=equilibrium.serialize()))
     rec.close()
 

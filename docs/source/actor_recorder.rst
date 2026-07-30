@@ -37,6 +37,13 @@ Available Settings
 
   - **store_path** (str): root for the output. Defaults to the instance's
     run folder, where the dashboard looks for recorder stores.
+  - **automatic_extract** (bool): fill in extraction via
+    ``BaseState.automatic_extract`` when ``config``'s ``State`` doesn't
+    implement its own ``extract`` (see `Automatic extraction`_ below).
+  - **automatic_extract_fields** (str): whitespace-separated full paths
+    (``<ids_name>/<path>``, or the config's own keys) to restrict the
+    recording to. Works with any config, not just an ``automatic_extract``
+    one; default: keep everything the config extracts.
 
 Available Ports
 ---------------
@@ -91,6 +98,54 @@ still only reads the ``State`` half and ignores ``Plotter``, but the exact
 same file can then be pointed at by a visualization actor, or read by a
 dashboard, to plot precisely what was recorded, with no separate extraction
 logic to keep in sync.
+
+Automatic extraction
+---------------------
+
+A ``config`` file still always has to exist -- in particular, a ``Plotter``
+is not something the recorder or a dashboard can invent for you, so one
+always has to be hand-written. What can be automatic is the ``State`` behind
+it: if ``config``'s ``State`` does not implement its own ``extract`` (for
+example, one written only to hold data for a ``Plotter``, with no extraction
+logic of its own) and ``automatic_extract: true`` is set, extraction falls
+back to ``BaseState.automatic_extract`` -- the same discovery-and-extract
+logic the live visualization actor's own automatic mode uses, with no
+IDS-specific code required:
+
+.. code-block:: python
+
+    from imas_muscle3.visualization.base_state import BaseState
+    from imas_muscle3.visualization.base_plotter import BasePlotter
+
+
+    class State(BaseState):
+        pass  # extraction is filled in automatically
+
+
+    class Plotter(BasePlotter):
+        def get_dashboard(self):
+            ...
+
+.. code-block:: yaml
+
+    settings:
+      rec.config: /path/to/plot_file.py
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: equilibrium.time_slice[0].global_quantities.ip
+
+This fallback is opt-in -- without ``automatic_extract: true``, a ``State``
+that doesn't implement ``extract`` fails loudly, since it might simply be a
+mistake rather than an intentional automatic-mode config.
+
+Since automatic extraction has no way to know in advance which quantities you
+care about, it discovers and records *everything*
+``BaseState.automatic_extract`` finds unless ``automatic_extract_fields``
+restricts it to a handful of named ones. Note the dots, not slashes:
+``automatic_extract``'s discovered full paths (e.g.
+``equilibrium/time_slice[0]/global_quantities/ip``) are flattened to ``.``
+before recording, since Zarr rejects ``/`` in a variable name --
+``automatic_extract_fields`` (and the on-disk group name) must match that
+same dotted form.
 
 **Config snapshotting**
 

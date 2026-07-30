@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 import xarray as xr
 from libmuscle import Message
@@ -9,6 +11,7 @@ from imas_muscle3.recorder.collection import (
     load_extract_config,
     snapshot_config,
 )
+from imas_muscle3.utils import ids_from_message
 
 # --- config loading ---------------------------------------------------------
 
@@ -51,6 +54,65 @@ def test_load_extract_config_rejects_other_files(tmp_path):
     config.write_text("x = 1\n")
     with pytest.raises(NameError):
         load_extract_config(str(config))
+
+
+_BARE_STATE_CONFIG = (
+    "from imas_muscle3.visualization.base_state import BaseState\n"
+    "class State(BaseState):\n"
+    "    pass\n"
+)
+
+
+def test_load_extract_state_without_extract_rejected_by_default(tmp_path):
+    """A State that doesn't implement `extract` fails loudly unless
+    `automatic_extract` is explicitly requested -- it might just be a typo,
+    not an automatic-mode config."""
+    config = tmp_path / "plot_file.py"
+    config.write_text(_BARE_STATE_CONFIG)
+    with pytest.raises(NameError):
+        load_extract_config(str(config))
+
+
+def test_load_extract_state_without_extract_falls_back_to_automatic(
+    tmp_path, equilibrium
+):
+    config = tmp_path / "plot_file.py"
+    config.write_text(_BARE_STATE_CONFIG)
+    extract = load_extract_config(str(config), automatic_extract=True)
+    out = extract(equilibrium)
+
+    # automatic_extract's slashed full paths are flattened to dots (Zarr
+    # rejects "/" in a variable name), both as dict keys and as each
+    # dataset's own data variable name.
+    key = "equilibrium.time_slice[0].global_quantities.ip"
+    assert key in out
+    assert list(out[key].data_vars) == [key]
+    assert float(out[key][key].values[0]) == pytest.approx(1e6)
+
+
+_TWO_FIELD_CONFIG = (
+    "import xarray as xr\n"
+    "def extract(ids):\n"
+    "    t = float(ids.time[0])\n"
+    "    return {\n"
+    "        'a': xr.Dataset({'v': ('time', [1.0])}, coords={'time': [t]}),\n"
+    "        'b': xr.Dataset({'v': ('time', [2.0])}, coords={'time': [t]}),\n"
+    "    }\n"
+)
+
+
+def test_load_extract_config_no_fields_keeps_everything(tmp_path, equilibrium):
+    config = tmp_path / "config.py"
+    config.write_text(_TWO_FIELD_CONFIG)
+    extract = load_extract_config(str(config))
+    assert set(extract(equilibrium)) == {"a", "b"}
+
+
+def test_load_extract_config_fields_restricts_output(tmp_path, equilibrium):
+    config = tmp_path / "config.py"
+    config.write_text(_TWO_FIELD_CONFIG)
+    extract = load_extract_config(str(config), fields=["a"])
+    assert set(extract(equilibrium)) == {"a"}
 
 
 def test_snapshot_config_copies_next_to_data(tmp_path):
@@ -104,8 +166,8 @@ def extract(ids):
 class _RecordingRecorder(Recorder):
     """A no-op Recorder that just remembers what it was asked to write."""
 
-    def __init__(self, store_dir, ids_name, extract, profile, log):
-        super().__init__(store_dir, ids_name, extract, profile)
+    def __init__(self, store_dir, deserialize, extract, profile, log):
+        super().__init__(store_dir, deserialize, extract, profile)
         self._log = log
 
     def _open_occurrence(self, base):
@@ -128,19 +190,45 @@ def test_collection_routes_per_port_and_updates_live_state(
     store_path.mkdir()
     log = []
 
-    def make_recorder(store_dir, ids_name, extract, profile):
-        return _RecordingRecorder(store_dir, ids_name, extract, profile, log)
+    def make_recorder(store_dir, deserialize, extract, profile):
+        return _RecordingRecorder(
+            store_dir, deserialize, extract, profile, log
+        )
 
     collection = RecorderCollection(
-        store_path, config, {"equilibrium_in": "equilibrium"}, make_recorder
+        store_path,
+        config,
+        {"equilibrium_in": functools.partial(ids_from_message, "equilibrium")},
+        make_recorder,
     )
     assert collection.config_snapshot == store_path / "config.py"
     assert set(collection.live_state) == {"equilibrium_in"}
     assert collection.live_state["equilibrium_in"].data == {}
 
+
+def test_collection_fields_restrict_what_gets_recorded(tmp_path, equilibrium):
+    config = tmp_path / "config.py"
+    config.write_text(_TWO_FIELD_CONFIG)
+    store_path = tmp_path / "store"
+    store_path.mkdir()
+    log = []
+
+    def make_recorder(store_dir, deserialize, extract, profile):
+        return _RecordingRecorder(
+            store_dir, deserialize, extract, profile, log
+        )
+
+    collection = RecorderCollection(
+        store_path,
+        config,
+        {"equilibrium_in": functools.partial(ids_from_message, "equilibrium")},
+        make_recorder,
+        fields=["a"],
+    )
     collection.handle(
         "equilibrium_in", Message(0.0, None, data=equilibrium.serialize())
     )
 
     assert len(log) == 1
-    assert set(collection.live_state["equilibrium_in"].data) == {"equilibrium"}
+    assert set(log[0]) == {"a"}
+    assert set(collection.live_state["equilibrium_in"].data) == {"a"}
