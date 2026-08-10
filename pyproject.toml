@@ -167,13 +167,10 @@ rules.unresolved-import = "ignore"
 [[tool.ty.overrides]]
 # muscle3-dashboard is editable-installed via a PEP 660 meta path finder,
 # which ty's static resolver can't see (a real `pip install` lays down
-# ordinary files and resolves fine); these modules just re-export or
-# subclass its generic State/Plotter/recorder machinery.
+# ordinary files and resolves fine); these modules import its generic
+# State/Plotter/recorder machinery directly.
 include = [
-    "imas_muscle3/recorder/actor.py",
-    "imas_muscle3/recorder/base.py",
-    "imas_muscle3/recorder/collection.py",
-    "imas_muscle3/recorder/zarr_recorder.py",
+    "imas_muscle3/actors/recorder_component.py",
     "imas_muscle3/visualization/base_plotter.py",
 ]
 rules.unresolved-import = "ignore"

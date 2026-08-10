@@ -12,8 +12,9 @@ into the IDS its name identifies.
 import functools
 import logging
 
-from imas_muscle3.recorder.actor import run_recorder_actor
-from imas_muscle3.recorder.zarr_recorder import ZarrRecorder
+from muscle3_dashboard.recorder.actor import run_recorder_actor
+from muscle3_dashboard.recorder.zarr_recorder import ZarrRecorder
+
 from imas_muscle3.utils import ids_from_message, ids_name_from_port
 
 logger = logging.getLogger()

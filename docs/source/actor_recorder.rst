@@ -128,6 +128,37 @@ without ``extract`` fails loudly rather than silently guessing. With no
 are flattened with ``.`` instead of ``/`` (Zarr rejects ``/`` in variable
 names), so ``automatic_extract_fields`` must use that same dotted form.
 
+A few simple cases:
+
+.. code-block:: yaml
+
+    # Record a single scalar: just Ip.
+    settings:
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: equilibrium.time_slice[0].global_quantities.ip
+
+.. code-block:: yaml
+
+    # Record everything discoverable from one IDS: drop
+    # automatic_extract_fields entirely.
+    components:
+      rec:
+        implementation: recorder
+        ports:
+          s: [pf_active_in]
+    settings:
+      rec.automatic_extract: true
+
+.. code-block:: yaml
+
+    # Record a handful of specific fields spanning two IDSs: whitespace-
+    # separated, one dotted path each.
+    settings:
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: >-
+        equilibrium.time_slice[0].global_quantities.ip
+        pf_active.coil[0].current.data
+
 **Config snapshotting**
 
 On startup the recorder copies the config file next to the data

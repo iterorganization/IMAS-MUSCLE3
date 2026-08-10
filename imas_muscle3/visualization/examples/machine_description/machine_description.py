@@ -14,9 +14,9 @@ from imas_muscle3.visualization.base_state import BaseState
 
 
 class State(BaseState):
-    def extract(self, message):
-        if message.metadata.name == "equilibrium":
-            self.extract_equilibrium(message)
+    def extract(self, ids):
+        if ids.metadata.name == "equilibrium":
+            self.extract_equilibrium(ids)
 
     def extract_equilibrium(self, ids):
         ts = ids.time_slice[0]

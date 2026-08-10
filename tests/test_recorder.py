@@ -8,8 +8,8 @@ from imas import DBEntry
 from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
+from muscle3_dashboard.recorder.base import Recorder
 
-from imas_muscle3.recorder.base import Recorder
 from imas_muscle3.utils import ids_from_message, ids_name_from_port
 
 # --- port -> IDS name -----------------------------------------------------

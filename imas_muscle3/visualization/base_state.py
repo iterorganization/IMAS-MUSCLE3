@@ -145,16 +145,15 @@ class BaseState(_GenericBaseState):
             f"Discovered {len(new_variables)} variables in IDS '{ids_name}'."
         )
 
-    def automatic_extract(self, message: IDSToplevel) -> None:
+    def automatic_extract(self, ids: IDSToplevel) -> None:
         """Automatically extract data for visualized variables from the
         given IDS. If extract_all is enabled, data for all discovered
         variables will be extracted, otherwise, only currently visualized
         data will be extracted.
 
         Args:
-            message: The IDS to extract data from.
+            ids: The IDS to extract data from.
         """
-        ids = message
         ids_name = ids.metadata.name
         if ids_name not in self._discovery_done:
             self._discover_variables(ids)
