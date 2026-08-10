@@ -102,29 +102,18 @@ logic to keep in sync.
 Automatic extraction
 ---------------------
 
-A ``config`` file still always has to exist -- in particular, a ``Plotter``
-is not something the recorder or a dashboard can invent for you, so one
-always has to be hand-written. What can be automatic is the ``State`` behind
-it: if ``config``'s ``State`` does not implement its own ``extract`` (for
-example, one written only to hold data for a ``Plotter``, with no extraction
-logic of its own) and ``automatic_extract: true`` is set, extraction falls
-back to ``BaseState.automatic_extract`` -- the same discovery-and-extract
-logic the live visualization actor's own automatic mode uses, with no
-IDS-specific code required:
+If ``config``'s ``State`` doesn't implement ``extract`` and
+``automatic_extract: true`` is set, extraction falls back to
+``BaseState.automatic_extract``, discovering and recording IDS fields with
+no IDS-specific code required:
 
 .. code-block:: python
 
     from imas_muscle3.visualization.base_state import BaseState
-    from imas_muscle3.visualization.base_plotter import BasePlotter
 
 
     class State(BaseState):
         pass  # extraction is filled in automatically
-
-
-    class Plotter(BasePlotter):
-        def get_dashboard(self):
-            ...
 
 .. code-block:: yaml
 
@@ -133,19 +122,11 @@ IDS-specific code required:
       rec.automatic_extract: true
       rec.automatic_extract_fields: equilibrium.time_slice[0].global_quantities.ip
 
-This fallback is opt-in -- without ``automatic_extract: true``, a ``State``
-that doesn't implement ``extract`` fails loudly, since it might simply be a
-mistake rather than an intentional automatic-mode config.
-
-Since automatic extraction has no way to know in advance which quantities you
-care about, it discovers and records *everything*
-``BaseState.automatic_extract`` finds unless ``automatic_extract_fields``
-restricts it to a handful of named ones. Note the dots, not slashes:
-``automatic_extract``'s discovered full paths (e.g.
-``equilibrium/time_slice[0]/global_quantities/ip``) are flattened to ``.``
-before recording, since Zarr rejects ``/`` in a variable name --
-``automatic_extract_fields`` (and the on-disk group name) must match that
-same dotted form.
+The fallback is opt-in -- without ``automatic_extract: true``, a ``State``
+without ``extract`` fails loudly rather than silently guessing. With no
+``automatic_extract_fields``, everything discoverable gets recorded; paths
+are flattened with ``.`` instead of ``/`` (Zarr rejects ``/`` in variable
+names), so ``automatic_extract_fields`` must use that same dotted form.
 
 **Config snapshotting**
 

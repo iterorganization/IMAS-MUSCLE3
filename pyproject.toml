@@ -60,10 +60,7 @@ dependencies = [
     "hvplot",
     "xarray",
     "zarr",
-    # State/BaseState/BasePlotter and the Zarr-backed recorder: shared,
-    # domain-agnostic base that imas_muscle3 subclasses/wraps for IMAS.
-    # Not on PyPI yet; pulled from git like ymmsl2svg is for muscle3-dashboard
-    # itself.
+    # Shared State/BaseState/BasePlotter + Zarr recorder base; not on PyPI yet.
     "muscle3-dashboard[recording] @ git+https://github.com/multiscale/muscle3-dashboard.git@feature/recorder_logic_in_dashboard"
 ]
 
@@ -85,29 +82,9 @@ test = [
     "pytest-randomly",
 ]
 dashboard = [
-    # Turns this venv into a fully dashboard-capable one (graph card +
-    # recorder plots), on top of the [recording] pieces already required
-    # unconditionally above. Not pip-installable as a plain extra -- see the
-    # NOTE below -- this list exists to document/pin the exact refs needed.
-    # ../../setup_files/setup_imas_muscle3.sh runs the actual recipe below.
-    #
-    # NOTE: `pip install -e .[dashboard]` does NOT work, with or without
-    # --no-deps (the latter just skips installing the extra's deps
-    # entirely). ymmsl2svg's git branch depends on ymmsl-python's
-    # feature/timelines branch, which self-reports as a pre-0.17 dev version
-    # despite being newer than the 0.17.0 release -- so a normal resolve of
-    # this extra conflicts with this project's (and muscle3's) `ymmsl>=0.17`
-    # and raises ResolutionImpossible. Instead, after the base install,
-    # force-install just these two pinned refs, bypassing dependency
-    # resolution so pip never has to reconcile both ymmsl constraints:
-    #
-    #   pip install -e .
-    #   pip install "svg.py" click
-    #   pip install --no-deps "ymmsl2svg @ git+https://github.com/DaanVanVugt/ymmsl2svg.git@feat/conduit-hover-labels"
-    #   pip install --no-deps "ymmsl @ git+https://github.com/multiscale/ymmsl-python.git@feature/timelines"
-    #
-    # `pip check` will then report a (harmless, in-practice-fine)
-    # ymmsl<0.17 mismatch against muscle3/imas-muscle3's declared floor.
+    # Not pip-installable as a plain extra (ymmsl2svg needs a conflicting
+    # pre-release ymmsl); see ../../setup_files/setup_imas_muscle3.sh for the
+    # force-install recipe this list documents/pins.
     "ymmsl2svg @ git+https://github.com/DaanVanVugt/ymmsl2svg.git@feat/conduit-hover-labels",
 ]
 linting = [
