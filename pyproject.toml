@@ -61,7 +61,7 @@ dependencies = [
     "xarray",
     "zarr",
     # Shared State/BaseState/BasePlotter + Zarr recorder base; not on PyPI yet.
-    "muscle3-dashboard[recording] @ git+https://github.com/multiscale/muscle3-dashboard.git@feature/recorder_logic_in_dashboard"
+    "muscle3-dashboard[recording] @ git+https://github.com/multiscale/muscle3-dashboard.git"
 ]
 
 [project.optional-dependencies]
