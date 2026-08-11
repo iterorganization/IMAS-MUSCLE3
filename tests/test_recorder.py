@@ -1,13 +1,16 @@
+import functools
+
 import pytest
 import xarray as xr
 import ymmsl
+import zarr
 from imas import DBEntry
 from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
+from muscle3_dashboard.recorder.base import Recorder
 
-from imas_muscle3.recorder.base import Recorder
-from imas_muscle3.utils import ids_name_from_port
+from imas_muscle3.utils import ids_from_message, ids_name_from_port
 
 # --- port -> IDS name -----------------------------------------------------
 
@@ -28,8 +31,8 @@ def test_ids_name_from_port_rejects_unknown():
 class _FakeRecorder(Recorder):
     """Records which occurrence bases were opened; writes nothing to disk."""
 
-    def __init__(self, store_dir, ids_name, extract, profile, opened):
-        super().__init__(store_dir, ids_name, extract, profile)
+    def __init__(self, store_dir, deserialize, extract, profile, opened):
+        super().__init__(store_dir, deserialize, extract, profile)
         self._opened = opened
 
     def _open_occurrence(self, base):
@@ -44,7 +47,11 @@ class _FakeRecorder(Recorder):
 
 def _recorder(tmp_path, opened):
     return _FakeRecorder(
-        tmp_path, "equilibrium", lambda ids: {}, "cfg.py", opened
+        tmp_path,
+        functools.partial(ids_from_message, "equilibrium"),
+        lambda ids: {},
+        "cfg.py",
+        opened,
     )
 
 
@@ -196,6 +203,97 @@ def test_records_two_timelines(tmp_path, equilibrium, core_profiles):
         assert [o.name for o in occurrences] == ["0000.zarr"]
         ds = xr.open_zarr(occurrences[0], group=ids_name, consolidated=False)
         assert list(ds.time.values) == list(equilibrium.time)
+
+
+# --- integration: automatic_extract fills in a State with no `extract` -----
+
+# A config file with a bare `State` -- no `extract` override, as one written
+# only to hold data for a `Plotter` -- and no `Plotter` either, since this
+# test only exercises the recorder, not a dashboard.
+_BARE_STATE_CONFIG = """
+from imas_muscle3.visualization.base_state import BaseState
+
+
+class State(BaseState):
+    pass
+"""
+
+
+def _automatic_ymmsl(eq_uri, store_path, config_path, field):
+    return f"""
+ymmsl_version: v0.2
+models:
+  test_recorder:
+    components:
+      eq_source:
+        description: equilibrium source component
+        implementation: source_component
+        ports:
+          o_i: [equilibrium_out]
+      rec:
+        description: recorder component
+        implementation: recorder_component
+        ports:
+          s: [equilibrium_in]
+    conduits:
+      eq_source.equilibrium_out: rec.equilibrium_in
+settings:
+  eq_source.source_uri: {eq_uri}
+  rec.store_path: {store_path}
+  rec.config: {config_path}
+  rec.automatic_extract: true
+  rec.automatic_extract_fields: {field}
+programs:
+  recorder_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.recorder_component
+  source_component:
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
+resources:
+  test_recorder.eq_source:
+    threads: 1
+  test_recorder.rec:
+    threads: 1
+"""
+
+
+def test_records_with_automatic_extract_for_bare_state(tmp_path, equilibrium):
+    """`rec.config`'s `State` implements no `extract` of its own;
+    `automatic_extract` fills it in, and `automatic_extract_fields` keeps
+    the recording to one named quantity instead of everything
+    BaseState.automatic_extract discovers."""
+    eq_uri = f"imas:hdf5?path={(tmp_path / 'eq_data').absolute()}"
+    with DBEntry(eq_uri, "w") as entry:
+        entry.put(equilibrium)
+    config_path = tmp_path / "plot_file.py"
+    config_path.write_text(_BARE_STATE_CONFIG)
+
+    # automatic_extract's slashed full paths are flattened to dots (Zarr
+    # rejects "/" in a variable name); `automatic_extract_fields` and the
+    # on-disk group/variable name all use that same dotted form.
+    field = "equilibrium.time_slice[0].global_quantities.ip"
+    store_path = (tmp_path / "store").absolute()
+    config = ymmsl.load(
+        _automatic_ymmsl(eq_uri, store_path, config_path, field)
+    )
+    manager = Manager(config, RunDir(tmp_path / "run"))
+    manager.start_instances()
+    assert manager.wait()
+
+    occurrences = sorted((store_path / "equilibrium_in").glob("*.zarr"))
+    assert [o.name for o in occurrences] == ["0000.zarr"]
+
+    root = zarr.open_group(str(occurrences[0]), mode="r")
+    assert list(root.group_keys()) == [field]
+
+    ds = xr.open_zarr(occurrences[0], group=field, consolidated=False)
+    assert list(ds.time.values) == list(equilibrium.time)
+    expected_ip = [
+        float(equilibrium.time_slice[i].global_quantities.ip)
+        for i in range(len(equilibrium.time))
+    ]
+    assert list(ds[field].values) == expected_ip
 
 
 # --- integration: checkpoint + resume ---------------------------------------

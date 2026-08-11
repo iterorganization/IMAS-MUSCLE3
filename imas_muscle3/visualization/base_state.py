@@ -1,7 +1,5 @@
 import logging
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator
 
 import imas
 import numpy as np
@@ -13,49 +11,26 @@ from imas.ids_metadata import IDSType
 from imas.ids_primitive import IDSNumericArray, IDSPrimitive
 from imas.ids_structure import IDSStructure
 from imas.ids_toplevel import IDSToplevel
+from muscle3_dashboard.visualization.base_state import (
+    BaseState as _GenericBaseState,
+)
+from muscle3_dashboard.visualization.base_state import Dim, Variable
 
 logger = logging.getLogger()
 
-
-class Dim(Enum):
-    """Enum for variable dimensionality."""
-
-    ZERO_D = "0D"
-    ONE_D = "1D"
-    TWO_D = "2D"
+__all__ = ["BaseState", "Dim", "Variable"]
 
 
-@dataclass
-class Variable:
-    """Represents a single discoverable variable from an IDS."""
-
-    ids_name: str
-    path: str
-    dimension: Dim
-    coord_names: List[str] = field(default_factory=list)
-    is_visualized: bool = False
-
-    @property
-    def full_path(self) -> str:
-        """Returns the full path for UI display (ids_name/path)."""
-        return f"{self.ids_name}/{self.path}"
-
-
-class BaseState(param.Parameterized):
-    """Abstract container for simulation state. Holds live simulation data
-    as well as data from a machine description.
+class BaseState(_GenericBaseState):
+    """Abstract container for IMAS simulation state: discovers and extracts
+    variables by walking an IDS tree. See
+    :class:`muscle3_dashboard.visualization.base_state.BaseState` for the
+    domain-agnostic contract this implements.
     """
 
-    data = param.Dict(
-        default={}, doc="Mapping of IDS name to live IDS data objects."
-    )
     md = param.Dict(
         default={},
-        doc="Mapping of IDS name to machine description data objects.",
-    )
-    variables = param.Dict(
-        default={},
-        doc=("Mapping of a variable's full path to a Variable object"),
+        doc="Mapping of IDS name to machine description IDS objects.",
     )
 
     def __init__(
@@ -64,11 +39,8 @@ class BaseState(param.Parameterized):
         auto: bool = False,
         extract_all: bool = False,
     ) -> None:
-        super().__init__()  # type: ignore[no-untyped-call]
-        self.extract_all = extract_all
-        self.auto = auto
+        super().__init__({}, auto=auto, extract_all=extract_all)
         self.md = md_dict
-        self._discovery_done: set[str] = set()
 
     def tree_iter(self, node: IDSBase) -> Iterator[IDSBase]:
         """Tree iterator that iterates through all leaf nodes, and
@@ -160,7 +132,7 @@ class BaseState(param.Parameterized):
                 ]
 
             new_variables[full_path] = Variable(
-                ids_name=ids_name,
+                source_name=ids_name,
                 path=path,
                 dimension=dim,
                 coord_names=coord_names,
@@ -173,36 +145,16 @@ class BaseState(param.Parameterized):
             f"Discovered {len(new_variables)} variables in IDS '{ids_name}'."
         )
 
-    def extract_data(self, ids: IDSToplevel) -> None:
-        """Extract data from an IDS and store it into the data object.
-
-        Args:
-            ids: The IDS to extract data from.
-        """
-        if self.auto:
-            self.automatic_extract(ids)
-        self.extract(ids)
-
-    def extract(self, ids: IDSToplevel) -> None:
-        """Extract data from an IDS and store it into the data object. Must be
-        implemented by subclasses.
-
-        Args:
-            ids: The IDS to extract data from.
-        """
-        raise NotImplementedError(
-            "A state class needs to implement an `extract` method"
-        )
-
-    def automatic_extract(self, ids: IDSToplevel) -> None:
+    def automatic_extract(self, message: IDSToplevel) -> None:
         """Automatically extract data for visualized variables from the
         given IDS. If extract_all is enabled, data for all discovered
         variables will be extracted, otherwise, only currently visualized
         data will be extracted.
 
         Args:
-            ids: The IDS to extract data from.
+            message: The IDS to extract data from.
         """
+        ids = message
         ids_name = ids.metadata.name
         if ids_name not in self._discovery_done:
             self._discover_variables(ids)
@@ -211,13 +163,13 @@ class BaseState(param.Parameterized):
             vars_to_extract = [
                 var
                 for var in self.variables.values()
-                if var.ids_name == ids_name
+                if var.source_name == ids_name
             ]
         else:
             vars_to_extract = [
                 var
                 for var in self.variables.values()
-                if var.ids_name == ids_name and var.is_visualized
+                if var.source_name == ids_name and var.is_visualized
             ]
 
         for var in vars_to_extract:

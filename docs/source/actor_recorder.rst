@@ -37,6 +37,13 @@ Available Settings
 
   - **store_path** (str): root for the output. Defaults to the instance's
     run folder, where the dashboard looks for recorder stores.
+  - **automatic_extract** (bool): fill in extraction via
+    ``BaseState.automatic_extract`` when ``config``'s ``State`` doesn't
+    implement its own ``extract`` (see `Automatic extraction`_ below).
+  - **automatic_extract_fields** (str): whitespace-separated full paths
+    (``<ids_name>/<path>``, or the config's own keys) to restrict the
+    recording to. Works with any config, not just an ``automatic_extract``
+    one; default: keep everything the config extracts.
 
 Available Ports
 ---------------
@@ -91,6 +98,66 @@ still only reads the ``State`` half and ignores ``Plotter``, but the exact
 same file can then be pointed at by a visualization actor, or read by a
 dashboard, to plot precisely what was recorded, with no separate extraction
 logic to keep in sync.
+
+Automatic extraction
+---------------------
+
+If ``config``'s ``State`` doesn't implement ``extract`` and
+``automatic_extract: true`` is set, extraction falls back to
+``BaseState.automatic_extract``, discovering and recording IDS fields with
+no IDS-specific code required:
+
+.. code-block:: python
+
+    from imas_muscle3.visualization.base_state import BaseState
+
+
+    class State(BaseState):
+        pass  # extraction is filled in automatically
+
+.. code-block:: yaml
+
+    settings:
+      rec.config: /path/to/plot_file.py
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: equilibrium.time_slice[0].global_quantities.ip
+
+The fallback is opt-in -- without ``automatic_extract: true``, a ``State``
+without ``extract`` fails loudly rather than silently guessing. With no
+``automatic_extract_fields``, everything discoverable gets recorded; paths
+are flattened with ``.`` instead of ``/`` (Zarr rejects ``/`` in variable
+names), so ``automatic_extract_fields`` must use that same dotted form.
+
+A few simple cases:
+
+.. code-block:: yaml
+
+    # Record a single scalar: just Ip.
+    settings:
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: equilibrium.time_slice[0].global_quantities.ip
+
+.. code-block:: yaml
+
+    # Record everything discoverable from one IDS: drop
+    # automatic_extract_fields entirely.
+    components:
+      rec:
+        implementation: recorder
+        ports:
+          s: [pf_active_in]
+    settings:
+      rec.automatic_extract: true
+
+.. code-block:: yaml
+
+    # Record a handful of specific fields spanning two IDSs: whitespace-
+    # separated, one dotted path each.
+    settings:
+      rec.automatic_extract: true
+      rec.automatic_extract_fields: >-
+        equilibrium.time_slice[0].global_quantities.ip
+        pf_active.coil[0].current.data
 
 **Config snapshotting**
 
