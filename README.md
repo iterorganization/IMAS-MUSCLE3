@@ -6,6 +6,7 @@ It contains:
 * **Data sink**: Save timeslices to a DBEntry on the `F_INIT` port. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_sink_source.html))
 * **Data sink_source**: Load and send a timeslice from a DBEntry on the `O_F` port based on an incoming timeslice on the `F_INIT` port. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_sink_source.html))
 * **Accumulator (buffer) actors**: Gather messages on `S` port and send out the combination on `O_F`. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_accumulator.html))
+* **Iterator actor**: Disassemble a full multi-timeslice IDS received on `F_INIT` and send the individual timeslices out one by one on `O_I`. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_iterator.html))
 * **OLC (IMAS-Validator) actor**: Perform validation checks on data on the `F_INIT` port, generate reports. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_olc.html))
 * **Recorder actor**: Tap the live traffic of a running workflow on the `S` port, without disturbing the coupling, and record it to a Zarr store. ([documentation](https://imas-muscle3.readthedocs.io/en/latest/actor_recorder.html))
 * **Visualization actor**: Visualize incoming IDS data in real-time, receiving timeslices 

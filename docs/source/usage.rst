@@ -23,5 +23,6 @@ Using IMAS-MUSCLE3
     actor_recorder
     actor_olc
     actor_accumulator
+    actor_iterator
     actor_visualization
     actor_passthrough

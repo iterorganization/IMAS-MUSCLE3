@@ -1,33 +1,13 @@
 from pathlib import Path
-from typing import List
 
-import imas
 import pytest
 import ymmsl
 from imas import DBEntry
-from libmuscle import Message
 from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 from libmuscle.pytest import MuscleTester
 
-from conftest import slice_messages
-
-
-def _receive_all(tester, port_name: str) -> List[Message]:
-    """Receive from a port until a message has no next_timestamp."""
-    messages = []
-    while True:
-        msg = tester.receive(port_name)
-        messages.append(msg)
-        if msg.next_timestamp is None:
-            break
-    return messages
-
-
-def _deserialize(ids_name: str, data: bytes) -> imas.ids_toplevel.IDSToplevel:
-    ids = imas.IDSFactory("4.0.0").new(ids_name)
-    ids.deserialize(data)
-    return ids
+from conftest import deserialize, receive_all, slice_messages
 
 
 def test_source_sends_all_slices(
@@ -50,11 +30,11 @@ settings:
 """
     tester = muscle3_tester.start_implementation(config, "source_component")
 
-    messages = _receive_all(tester, "core_profiles_out")
+    messages = receive_all(tester, "core_profiles_out")
     received_times = [msg.timestamp for msg in messages]
     assert received_times == list(core_profiles.time)
     for msg in messages:
-        result = _deserialize("core_profiles", msg.data)
+        result = deserialize("core_profiles", msg.data)
         assert list(result.time) == [msg.timestamp]
 
 
@@ -91,7 +71,7 @@ settings:
     for msg in slice_messages(core_profiles, "core_profiles"):
         tester.send("core_profiles_in", msg)
         reply = tester.receive("core_profiles_out")
-        result = _deserialize("core_profiles", reply.data)
+        result = deserialize("core_profiles", reply.data)
         # hybrid's own source_uri drives the O_F payload, at the timestamp
         # dictated by what came in on F_INIT
         assert result.time[0] == msg.timestamp
@@ -131,9 +111,9 @@ settings:
     tester = muscle3_tester.start_implementation(config, "source_component")
 
     assert all(core_profiles.time == [0, 1, 2])
-    messages = _receive_all(tester, "core_profiles_out")
+    messages = receive_all(tester, "core_profiles_out")
     assert [msg.timestamp for msg in messages] == [1]
-    result = _deserialize("core_profiles", messages[0].data)
+    result = deserialize("core_profiles", messages[0].data)
     assert list(result.time) == [1]
 
 
@@ -161,9 +141,9 @@ settings:
     tester = muscle3_tester.start_implementation(config, "source_component")
 
     assert all(core_profiles.time == [0, 1, 2])
-    messages = _receive_all(tester, "core_profiles_out")
+    messages = receive_all(tester, "core_profiles_out")
     assert len(messages) == 1
-    result = _deserialize("core_profiles", messages[0].data)
+    result = deserialize("core_profiles", messages[0].data)
     assert list(result.time) == [1, 2]
 
 
@@ -193,8 +173,8 @@ settings:
     tester = muscle3_tester.start_implementation(config, "source_component")
 
     assert all(pf_active.time == [0, 1, 2])
-    pf_messages = _receive_all(tester, "pf_active_out")
-    _receive_all(tester, "iron_core_out")
+    pf_messages = receive_all(tester, "pf_active_out")
+    receive_all(tester, "iron_core_out")
     assert [msg.timestamp for msg in pf_messages] == list(pf_active.time)
 
 
