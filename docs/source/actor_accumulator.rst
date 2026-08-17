@@ -18,4 +18,5 @@ All IDS's are available for the accumulator actor. They will be active if connec
 
 General
 -------
-The accumulator actor is not bound to a specific DD version.
+The accumulator actor is not bound to a specific DD version. See the
+:ref:`iterator actor <actor_iterator>` for the reverse operation.
