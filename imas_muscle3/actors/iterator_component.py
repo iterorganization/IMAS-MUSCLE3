@@ -26,8 +26,8 @@ from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
 from imas_muscle3.actors.accumulator_component import sanity_check_ports
-from imas_muscle3.data_sink_source import fix_interpolation_method
 from imas_muscle3.utils import (
+    fix_interpolation_method,
     get_port_list,
     get_setting_optional,
     ids_from_message,

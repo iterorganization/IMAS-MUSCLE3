@@ -1,11 +1,11 @@
-from typing import Any, List
+from typing import Any
 
-import imas
 import pytest
 from imas import DBEntry
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
+from conftest import deserialize, receive_all
 from imas_muscle3.actors.iterator_component import (
     IteratorSettings,
     determine_t_array,
@@ -38,22 +38,6 @@ class _FakeInstance:
         raise KeyError(name)
 
 
-def _deserialize(ids_name: str, data: bytes) -> imas.ids_toplevel.IDSToplevel:
-    ids = imas.IDSFactory("4.0.0").new(ids_name)
-    ids.deserialize(data)
-    return ids
-
-
-def _receive_all(tester, port_name: str) -> List[Message]:
-    messages = []
-    while True:
-        msg = tester.receive(port_name)
-        messages.append(msg)
-        if msg.next_timestamp is None:
-            break
-    return messages
-
-
 def _start(muscle3_tester: MuscleTester, setting_line: str) -> MuscleTester:
     config = f"""
 ymmsl_version: v0.2
@@ -81,12 +65,12 @@ def test_time_source_ids(
     )
     tester.send("equilibrium_in", Message(0.0, data=equilibrium.serialize()))
 
-    cp_messages = _receive_all(tester, "core_profiles_out")
-    eq_messages = _receive_all(tester, "equilibrium_out")
+    cp_messages = receive_all(tester, "core_profiles_out")
+    eq_messages = receive_all(tester, "equilibrium_out")
     assert [m.timestamp for m in cp_messages] == list(core_profiles.time)
     assert [m.timestamp for m in eq_messages] == list(core_profiles.time)
     for msg in cp_messages:
-        result = _deserialize("core_profiles", msg.data)
+        result = deserialize("core_profiles", msg.data)
         assert list(result.time) == [msg.timestamp]
 
 
@@ -104,7 +88,7 @@ def test_n_timeslices(
     )
     tester.send("equilibrium_in", Message(0.0, data=equilibrium.serialize()))
 
-    cp_messages = _receive_all(tester, "core_profiles_out")
+    cp_messages = receive_all(tester, "core_profiles_out")
     assert [m.timestamp for m in cp_messages] == [0.0, 1.0, 2.0]
 
 
@@ -114,7 +98,7 @@ def test_auto_infers_time_source_ids_with_single_connected_ids(
     tester = muscle3_tester.start_implementation(SINGLE_IDS_CONFIG, "iterator")
     tester.send("equilibrium_in", Message(0.0, data=equilibrium.serialize()))
 
-    messages = _receive_all(tester, "equilibrium_out")
+    messages = receive_all(tester, "equilibrium_out")
     assert [m.timestamp for m in messages] == list(equilibrium.time)
 
 
