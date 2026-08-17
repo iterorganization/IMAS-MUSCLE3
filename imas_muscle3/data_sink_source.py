@@ -58,17 +58,13 @@ from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 from imas import DBEntry, IDSFactory
-from imas.ids_defs import (
-    CLOSEST_INTERP,
-    IDS_TIME_MODE_INDEPENDENT,
-    LINEAR_INTERP,
-    PREVIOUS_INTERP,
-)
+from imas.ids_defs import IDS_TIME_MODE_INDEPENDENT
 from imas_core.exception import ImasCoreBackendException
 from libmuscle import Instance, InstanceFlags, Message
 from ymmsl.v0_2 import Operator
 
 from imas_muscle3.utils import (
+    fix_interpolation_method,
     get_port_list,
     get_setting_optional,
     increment_suffix,
@@ -462,19 +458,6 @@ def sanity_check_ports(instance: Instance) -> None:
             "Component needs a DBEntry URI to act as source. "
             "Add source_uri in the ymmsl settings file."
         )
-
-
-def fix_interpolation_method(instance: Instance) -> int:
-    setting = instance.get_setting("interpolation_method", default="closest")
-    if setting == "closest":
-        interp = CLOSEST_INTERP
-    elif setting == "previous":
-        interp = PREVIOUS_INTERP
-    elif setting == "linear":
-        interp = LINEAR_INTERP
-    else:
-        interp = CLOSEST_INTERP
-    return interp
 
 
 def time_array_from_IDS(

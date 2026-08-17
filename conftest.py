@@ -74,6 +74,23 @@ def pf_active():
     return pfa
 
 
+def deserialize(ids_name: str, data: bytes) -> imas.ids_toplevel.IDSToplevel:
+    ids = imas.IDSFactory("4.0.0").new(ids_name)
+    ids.deserialize(data)
+    return ids
+
+
+def receive_all(tester, port_name: str) -> List[Message]:
+    """Receive from a port until a message has no next_timestamp."""
+    messages = []
+    while True:
+        msg = tester.receive(port_name)
+        messages.append(msg)
+        if msg.next_timestamp is None:
+            break
+    return messages
+
+
 def slice_messages(
     ids: imas.ids_toplevel.IDSToplevel, ids_name: str
 ) -> List[Message]:

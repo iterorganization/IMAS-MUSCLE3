@@ -3,6 +3,7 @@ from typing import List, Optional, TypeVar, cast
 from urllib.parse import urlparse, urlunparse
 
 from imas import IDSFactory
+from imas.ids_defs import CLOSEST_INTERP, LINEAR_INTERP, PREVIOUS_INTERP
 from imas.ids_toplevel import IDSToplevel
 from libmuscle import Instance
 
@@ -51,6 +52,19 @@ def ids_name_from_port(port_name: str) -> str:
             f"carries, optionally with an '_in' suffix."
         )
     return ids_name
+
+
+def fix_interpolation_method(instance: Instance) -> int:
+    setting = instance.get_setting("interpolation_method", default="closest")
+    if setting == "closest":
+        interp = CLOSEST_INTERP
+    elif setting == "previous":
+        interp = PREVIOUS_INTERP
+    elif setting == "linear":
+        interp = LINEAR_INTERP
+    else:
+        interp = CLOSEST_INTERP
+    return interp
 
 
 def ids_from_message(ids_name: str, data: bytes) -> IDSToplevel:
