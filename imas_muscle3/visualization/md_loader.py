@@ -1,14 +1,12 @@
 """Loads machine-description IDSs for a recorder's dashboard replay view.
 
-The live visualization actor receives machine description over dedicated
-MUSCLE3 ports (see ``imas_muscle3.actors.visualization_component
-.handle_machine_description``); a recorder's replay tab has no such port to
-receive from. ``muscle3_dashboard.components.recorder_viewer`` has no notion
-of machine description at all -- it just forwards a recorder's settings to a
-plot file's optional ``init_state(settings) -> dict`` function. This module
-is the IMAS-flavored implementation an IMAS-based plot file wires up to that
-hook: it knows the setting is called ``md`` and how to parse it (
-``ids_name=imas_uri`` pairs, whitespace-separated).
+A recorder's replay tab has no live MUSCLE3 port to receive machine
+description from. ``muscle3_dashboard.components.recorder_viewer`` has no
+notion of machine description at all -- it just forwards a recorder's
+settings to a plot file's optional ``init_state(settings) -> dict``
+function. This module is the IMAS-flavored implementation an IMAS-based
+plot file wires up to that hook: it knows the setting is called ``md`` and
+how to parse it (``ids_name=imas_uri`` pairs, whitespace-separated).
 """
 
 import logging

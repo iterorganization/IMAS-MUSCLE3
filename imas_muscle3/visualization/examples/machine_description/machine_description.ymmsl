@@ -6,34 +6,25 @@ model:
       implementation: source_component
       ports:
         o_i: [equilibrium_out]
-    source_component_md:
-      implementation: source_component
+    rec:
+      implementation: recorder
       ports:
-        o_i: [wall_out, pf_active_out]
-    visualization_component:
-      implementation: visualization_component
-      ports:
-        s: [equilibrium_in, pf_active_md_in, wall_md_in]
+        s: [equilibrium_in]
   conduits:
-    source_component.equilibrium_out: visualization_component.equilibrium_in
-    source_component_md.wall_out: visualization_component.wall_md_in
-    source_component_md.pf_active_out: visualization_component.pf_active_md_in
+    source_component.equilibrium_out: rec.equilibrium_in
 settings:
-  source_component.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
-  source_component_md.source_uri: imas:hdf5?path=/home/ITER/blokhus/public/imasdb/ITER/4/666666/3/
-  visualization_component.plot_file_path: /home/ITER/blokhus/projects/IMAS-MUSCLE3/imas_muscle3/visualization/examples/machine_description/machine_description.py
-  visualization_component.keep_alive: true
+  source_component.source_uri: imas:hdf5?path=/path/to/your/imasdb
+  rec.config: imas_muscle3/visualization/examples/machine_description/machine_description.py
+  rec.md: wall=imas:hdf5?path=/path/to/your/imasdb
 implementations:
-  visualization_component:
+  recorder:
     executable: python
-    args: -u -m imas_muscle3.actors.visualization_component
+    args: -u -m imas_muscle3.actors.recorder_component
   source_component:
     executable: python
     args: -u -m imas_muscle3.actors.source_component
 resources:
   source_component:
     threads: 1
-  source_component_md:
-    threads: 1
-  visualization_component:
+  rec:
     threads: 1
