@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 imas_muscle3/_version.py
+uv.lock
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

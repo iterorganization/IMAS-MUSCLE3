@@ -1,15 +1,9 @@
-from importlib.metadata import version
 from pathlib import Path
 
 import pytest
 import yaml
 import ymmsl
-
-ymmsl_version_tuple = tuple(map(int, version("ymmsl").split(".")[:2]))
-skip_import_tests = pytest.mark.skipif(
-    ymmsl_version_tuple < (0, 16),
-    reason="Entry points not implemented in yMMSL",
-)
+from ymmsl.v0_2 import Configuration, Reference, resolve
 
 components = [
     "source_component",
@@ -39,12 +33,8 @@ def test_all_actor_modules_are_registered() -> None:
     assert modules == set(components)
 
 
-@skip_import_tests
 @pytest.mark.parametrize("component_name", components)
 def test_import_component(component_name: str) -> None:
-    # local import to avoid ImportError for older ymmsl versions
-    from ymmsl.v0_2 import Configuration, Reference, resolve
-
     config = ymmsl.load_as(
         Configuration,
         f"""
