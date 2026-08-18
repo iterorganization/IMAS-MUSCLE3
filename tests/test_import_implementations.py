@@ -1,36 +1,37 @@
 from pathlib import Path
+from typing import Set
 
 import pytest
-import yaml
 import ymmsl
 from ymmsl.v0_2 import Configuration, Reference, resolve
 
-components = [
-    "source_component",
-    "sink_component",
-    "sink_source_component",
-    "olc_component",
-    "accumulator_component",
-    "iterator_component",
-    "passthrough_component",
-    "recorder_component",
-    "visualization_component",
-]
+import imas_muscle3.actors
+
+
+def actor_modules() -> Set[str]:
+    """Every actor module in imas_muscle3.actors, private ones excluded."""
+    return {
+        path.stem
+        for path in Path(imas_muscle3.actors.__file__).parent.glob("*.py")
+        if not path.stem.startswith("_")
+    }
+
+
+def registered_programs() -> Set[str]:
+    """Every program the ymmsl.module entry point exposes."""
+    return set(
+        ymmsl.load_as(Configuration, imas_muscle3.actors.ACTORS).programs
+    )
+
+
+# parametrize off the modules on disk, so a new actor is covered by
+# test_import_component as soon as it is added
+components = sorted(actor_modules())
 
 
 def test_all_actor_modules_are_registered() -> None:
-    """Every module in imas_muscle3.actors is exposed as a ymmsl program."""
-    import imas_muscle3.actors
-
-    modules = {
-        path.stem
-        for path in Path(imas_muscle3.actors.__file__).parent.glob("*.py")
-        if path.stem != "__init__"
-    }
-    registered = set(yaml.safe_load(imas_muscle3.actors.ACTORS)["programs"])
-    assert modules == registered
-    # the parametrized test below covers exactly these
-    assert modules == set(components)
+    """Modules and exposed programs match, in both directions."""
+    assert actor_modules() == registered_programs()
 
 
 @pytest.mark.parametrize("component_name", components)
