@@ -81,12 +81,6 @@ test = [
     "pytest-xdist",
     "pytest-randomly",
 ]
-dashboard = [
-    # Not pip-installable as a plain extra (ymmsl2svg needs a conflicting
-    # pre-release ymmsl); see ../../setup_files/setup_imas_muscle3.sh for the
-    # force-install recipe this list documents/pins.
-    "ymmsl2svg @ git+https://github.com/DaanVanVugt/ymmsl2svg.git@feat/conduit-hover-labels",
-]
 linting = [
     "ty==0.0.53",
     "ruff~=0.15.0",
