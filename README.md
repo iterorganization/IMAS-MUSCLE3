@@ -57,17 +57,3 @@ models:
         description: Core profiles source
         implementation: source_component
 ```
-
-Each imported implementation carries its own description and supported settings.
-Check the actor specific documentation pages to find the relevant ports, settings, etc.
-
-Importing requires MUSCLE3 0.9.1 or newer, which is where yMMSL gained the entry
-points this relies on. On older versions, define the implementations yourself in
-your ymmsl file:
-
-```yaml
-implementations:
-  *component_name*:
-    executable: python
-    args: -u -m imas_muscle3.actors.*component_name*
-```
