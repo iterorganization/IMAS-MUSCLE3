@@ -6,17 +6,17 @@ model:
       implementation: source_component
       ports:
         o_i: [equilibrium_out, pf_active_out]
-    rec:
+    recorder:
       implementation: recorder
       ports:
         s: [equilibrium_in, pf_active_in]
   conduits:
-    source_component.equilibrium_out: rec.equilibrium_in
-    source_component.pf_active_out: rec.pf_active_in
+    source_component.equilibrium_out: recorder.equilibrium_in
+    source_component.pf_active_out: recorder.pf_active_in
 settings:
   source_component.source_uri: imas:hdf5?path=/path/to/your/imasdb
-  rec.config: imas_muscle3/visualization/examples/pds/pds.py
-  rec.md: >-
+  recorder.config: imas_muscle3/visualization/examples/pds/pds.py
+  recorder.md: >-
     wall=imas:hdf5?path=/path/to/your/imasdb
     pf_active=imas:hdf5?path=/path/to/your/imasdb
 implementations:
@@ -29,5 +29,5 @@ implementations:
 resources:
   source_component:
     threads: 1
-  rec:
+  recorder:
     threads: 1

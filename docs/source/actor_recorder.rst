@@ -3,10 +3,21 @@
 Recorder actor
 ==============
 
-A terminal (sink-only) actor that taps the live traffic of a running workflow
-without disturbing the coupling: wire it as an extra receiver on existing
-conduits. Every connected ``S`` port is an independent timeline, its name the
-IDS it carries (an optional ``_in`` suffix is stripped). Each received IDS is
+Records IMAS data flowing through a running workflow so it can be plotted
+with ``muscle3-dashboard``, live or after the run ends — without touching
+the workflow's own coupling.
+
+.. note::
+
+   `muscle3-dashboard <https://github.com/multiscale/muscle3-dashboard>`_
+   is a separate, MUSCLE3-generic web viewer that turns a recorder's stored
+   data into live and post-run plots. This actor writes the stores;
+   ``muscle3-dashboard`` is what you point at a run folder to view them.
+
+Under the hood, it's a terminal (sink-only) actor: wire it as an extra
+receiver on existing conduits and it taps the traffic passing through them.
+Every connected ``S`` port is an independent timeline, its name the IDS it
+carries (an optional ``_in`` suffix is stripped). Each received IDS is
 reduced to plot-ready ``xarray`` datasets by the ``config`` file and appended
 to a Zarr store that can be read back — also mid-run, for live views. Each
 outer-loop iteration gets its own store:
@@ -74,7 +85,14 @@ Define a ``State(BaseState)`` class implementing ``extract(self, ids)`` —
 the same class a ``muscle3-dashboard`` plot file uses. The recorder builds
 a *fresh* ``State`` instance for every received message, calls its
 ``extract(self, ids)``, and records whatever ended up in ``self.data``
-from that one call.
+from that one call::
+
+    class State(BaseState):
+        def extract(self, ids):
+            self.data["ip"] = xr.Dataset(
+                {"ip": ("time", [ids.time_slice[0].global_quantities.ip])},
+                coords={"time": [ids.time[0]]},
+            )
 
 Because the instance is fresh each time, a ``State`` that accumulates
 across calls only accumulates *within* one ``extract`` call. Both message
