@@ -8,30 +8,18 @@ from ymmsl.v0_2 import Configuration, Reference, resolve
 import imas_muscle3.actors
 
 
-def actor_modules() -> Set[str]:
-    """Every actor module in imas_muscle3.actors, private ones excluded."""
-    return {
-        path.stem
-        for path in Path(imas_muscle3.actors.__file__).parent.glob("*.py")
-        if not path.stem.startswith("_")
-    }
-
-
-def registered_programs() -> Set[str]:
-    """Every program the ymmsl.module entry point exposes."""
-    return set(
-        ymmsl.load_as(Configuration, imas_muscle3.actors.ACTORS).programs
-    )
-
-
-# parametrize off the modules on disk, so a new actor is covered by
+# parametrize based on modules on disk, so a new actor is covered by
 # test_import_component as soon as it is added
-components = sorted(actor_modules())
-
+components = sorted(
+    path.stem
+    for path in Path(imas_muscle3.actors.__file__).parent.glob("*.py")
+    if not path.stem.startswith("_")
+)
 
 def test_all_actor_modules_are_registered() -> None:
     """Modules and exposed programs match, in both directions."""
-    assert actor_modules() == registered_programs()
+    registered_programs = ymmsl.load_as(Configuration, imas_muscle3.actors.ACTORS).programs
+    assert set(components) == registered_programs.keys()
 
 
 @pytest.mark.parametrize("component_name", components)
