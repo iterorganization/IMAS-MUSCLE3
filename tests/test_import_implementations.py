@@ -1,12 +1,10 @@
 from pathlib import Path
-from typing import Set
 
 import pytest
 import ymmsl
 from ymmsl.v0_2 import Configuration, Reference, resolve
 
 import imas_muscle3.actors
-
 
 # parametrize based on modules on disk, so a new actor is covered by
 # test_import_component as soon as it is added
@@ -16,9 +14,12 @@ components = sorted(
     if not path.stem.startswith("_")
 )
 
+
 def test_all_actor_modules_are_registered() -> None:
     """Modules and exposed programs match, in both directions."""
-    registered_programs = ymmsl.load_as(Configuration, imas_muscle3.actors.ACTORS).programs
+    registered_programs = ymmsl.load_as(
+        Configuration, imas_muscle3.actors.ACTORS
+    ).programs
     assert set(components) == registered_programs.keys()
 
 
