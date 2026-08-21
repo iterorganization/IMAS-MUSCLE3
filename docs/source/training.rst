@@ -40,13 +40,8 @@ Exercise 1a: Setting Up Your First Visualization
       We will start by running the visualization actor for a simple example configuration. 
       First, create a yMMSL configuration file that sets up a simple visualization pipeline with:
 
-<<<<<<< Updated upstream
-      1. A :ref:`source actor <actor_sink_source>` that sends the equilibrium IDS
-      2. A :ref:`visualization actor <actor_visualization>` that receives and plots the data.
-=======
       1. A :ref:`source actor <actor_source>` that sends the equilibrium IDS
       2. A :ref:`recorder actor <actor_recorder>` that receives and records the data.
->>>>>>> Stashed changes
 
       Use the following settings in the yMMSL:
       

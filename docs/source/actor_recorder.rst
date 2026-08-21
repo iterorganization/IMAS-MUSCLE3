@@ -167,8 +167,6 @@ On startup the recorder copies the config file next to the data
 these stores prefers this snapshot over the run's ``<rec>.config`` setting,
 so a recorded run keeps plotting with the exact code that produced it even
 after the original file is edited.
-<<<<<<< Updated upstream
-=======
 
 Machine description
 --------------------
@@ -241,4 +239,3 @@ More complex configs combining several IDSs, machine description, and
 mixed plot types are in ``imas_muscle3/visualization/examples`` (e.g.
 ``pds``, which also produces the recorded contour and profile plots shown
 via the same mechanism).
->>>>>>> Stashed changes
