@@ -9,8 +9,9 @@ programs:
     args: -u -m imas_muscle3.actors.source_component
     description: |
       Loads IDSs from a data entry and sends their timeslices out one by
-      one on the O_I ports, named <ids_name>_out. Occurrence per port:
-      <port_name>_occ.
+      one on the O_I ports, named `<ids_name>_out`. The IMAS occurrence
+      to read is set per port with the `<port_name>_occ` setting, e.g.
+      `equilibrium_out_occ`, and defaults to 0.
     supported_settings:
       source_uri: str Mandatory. IMAS URI to load from.
       dd_version: str DD version to convert to. Defaults to the stored
@@ -25,8 +26,10 @@ programs:
     executable: {sys.executable}
     args: -u -m imas_muscle3.actors.sink_component
     description: |
-      Saves every IDS received on the F_INIT ports, named <ids_name>_in,
-      to a data entry. Occurrence per port: <port_name>_occ.
+      Saves every IDS received on the F_INIT ports, named
+      `<ids_name>_in`, to a data entry. The IMAS occurrence to write is
+      set per port with the `<port_name>_occ` setting, e.g.
+      `equilibrium_in_occ`, and defaults to 0.
     supported_settings:
       sink_uri: str Mandatory. IMAS URI to save to.
       dd_version: str DD version to convert to. Defaults to the incoming
@@ -41,7 +44,9 @@ programs:
     description: |
       Receives IDSs on F_INIT, optionally saves them, and sends out
       stored data for the closest timeslice on O_F. Ports are named
-      <ids_name>_in and <ids_name>_out, occurrence <port_name>_occ.
+      `<ids_name>_in` and `<ids_name>_out`. The IMAS occurrence to read
+      or write is set per port with the `<port_name>_occ` setting, e.g.
+      `equilibrium_out_occ`, and defaults to 0.
     supported_settings:
       source_uri: str Mandatory. IMAS URI to load from.
       sink_uri: str IMAS URI to save to. Unset means do not store.
@@ -58,7 +63,7 @@ programs:
     args: -u -m imas_muscle3.actors.olc_component
     description: |
       Operational Limit Checking through IMAS-Validator on the IDSs
-      arriving on the F_INIT ports, named <ids_name>_in. Multi-IDS
+      arriving on the F_INIT ports, named `<ids_name>_in`. Multi-IDS
       validation only for messages sharing a timestamp. Failures are
       reported as HTML and text in the working directory.
     supported_settings:
@@ -74,9 +79,9 @@ programs:
     description: |
       Accumulates the timeslices arriving on the S ports into one full
       IDS per IDS name and sends those out on O_F, so an actor can run
-      serially within a workflow. Ports are named <ids_name>_in and
-      <ids_name>_out, and every input needs a matching output. The
-      optional t_next S port centralizes the stopping condition.
+      serially within a workflow. Ports are named `<ids_name>_in` and
+      `<ids_name>_out`, and every input needs a matching output. The
+      optional `t_next` S port centralizes the stopping condition.
       Constant or predictable timestepping is advised, since actors
       whose final timeslice cannot be predicted may deadlock.
   iterator_component:
@@ -85,8 +90,8 @@ programs:
     description: |
       Opposite of the accumulator: disassembles the full IDS received on
       each F_INIT port and sends its timeslices out one by one on O_I,
-      chaining next_timestamp. Ports are named <ids_name>_in and
-      <ids_name>_out, and every input needs a matching output.
+      chaining `next_timestamp`. Ports are named `<ids_name>_in` and
+      `<ids_name>_out`, and every input needs a matching output.
     supported_settings:
       time_source_ids: str Input IDS whose time range determines the
         output timeslices. Required when more than one is connected,
@@ -100,20 +105,21 @@ programs:
     args: -u -m imas_muscle3.actors.passthrough_component
     description: |
       Forwards IDSs unchanged, to bridge workflows or bypass an actor
-      without editing the coupling. Per IDS name, <ids_name>_in_f
-      (F_INIT) is forwarded once to <ids_name>_out_f, and
-      <ids_name>_in_s (S) one message at a time to <ids_name>_out_i.
-      F_INIT takes precedence on O_F when both inputs are connected.
-      Startup fails on an output without a matching input.
+      without editing the coupling. Per IDS name, `<ids_name>_in_f`
+      (F_INIT) is forwarded once to `<ids_name>_out_f`, and
+      `<ids_name>_in_s` (S) one message at a time to
+      `<ids_name>_out_i`. F_INIT takes precedence on O_F when both
+      inputs are connected. Startup fails on an output without a
+      matching input.
   recorder_component:
     executable: {sys.executable}
     args: -u -m imas_muscle3.actors.recorder_component
     description: |
       Sink-only tap on the live traffic of a running workflow: wire it
       as an extra receiver on existing conduits. Each connected S port,
-      named <ids_name>_in, is an independent timeline, recorded to a
+      named `<ids_name>_in`, is an independent timeline, recorded to a
       live-tailable Zarr store at
-      <store_path>/<port>/<iteration_number>.zarr.
+      `<store_path>/<port>/<iteration_number>.zarr`.
     supported_settings:
       config: str Mandatory. Python file defining the extraction, as an
         extract function or a State class.
@@ -128,10 +134,10 @@ programs:
     args: -u -m imas_muscle3.actors.visualization_component
     description: |
       Live web-based visualization of the IDSs arriving on the S ports,
-      using Panel. Plotting logic comes from the plot_file_path script,
-      which supplies a State and a Plotter class. Ports are named
-      <ids_name>_in for timeslices and <ids_name>_md_in for machine
-      description IDSs. Still a prototype.
+      using Panel. Plotting logic comes from the `plot_file_path`
+      script, which supplies a State and a Plotter class. Ports are
+      named `<ids_name>_in` for timeslices and `<ids_name>_md_in` for
+      machine description IDSs. Still a prototype.
     supported_settings:
       plot_file_path: str Mandatory. Python script with the State and
         Plotter classes defining the plotting logic.
