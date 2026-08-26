@@ -167,3 +167,75 @@ On startup the recorder copies the config file next to the data
 these stores prefers this snapshot over the run's ``<rec>.config`` setting,
 so a recorded run keeps plotting with the exact code that produced it even
 after the original file is edited.
+
+Machine description
+--------------------
+
+Static machine description IDSs (e.g. ``wall``, ``pf_active`` geometry)
+aren't part of a workflow's live traffic, so there's no ``S`` port for
+them. Instead, a plot file that needs one defines a module-level
+``init_state(settings) -> dict`` hook; a dashboard opening this recorder's
+tab calls it with the recorder's own ``<rec>.*`` settings (prefix
+stripped) and passes the result as ``State``'s constructor argument.
+
+``imas_muscle3.visualization.md_loader`` is a ready-made ``init_state`` for
+IMAS plot files: import it and set the recorder's ``md`` setting to
+whitespace-separated ``ids_name=imas_uri`` pairs.
+
+.. code-block:: python
+
+    from imas_muscle3.visualization.base_plotter import BasePlotter
+    from imas_muscle3.visualization.base_state import BaseState
+    from imas_muscle3.visualization.md_loader import init_state  # noqa: F401
+
+
+    class State(BaseState):
+        def extract(self, ids):
+            ...  # self.md["wall"] is available once the dashboard loads it
+
+
+    class Plotter(BasePlotter):
+        ...
+
+.. code-block:: yaml
+
+    settings:
+      rec.config: /path/to/plot_file.py
+      rec.md: wall=imas:hdf5?path=/path/to/imasdb
+
+An entry that fails to parse or load is skipped (logged), not fatal, so a
+typo'd machine description setting doesn't blank the whole tab.
+
+Example
+-------
+
+A minimal recorder that plots the plasma current (Ip) of an equilibrium
+IDS over time, via a :ref:`source actor <actor_source>` sending live
+traffic:
+
+.. literalinclude:: ../../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl
+   :language: yaml
+   :caption: simple_1d_plot.ymmsl
+
+The ``config`` file defines the ``State``/``Plotter`` pair described above:
+``State.extract`` pulls the plasma current and time out of each incoming
+equilibrium IDS; ``Plotter.get_dashboard`` returns a `HoloViews DynamicMap
+<https://holoviews.org/reference/containers/bokeh/DynamicMap.html>`_ that
+redraws whenever new data arrives.
+
+.. literalinclude:: ../../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.py
+   :language: python
+   :caption: simple_1d_plot.py
+
+Start the workflow, then point ``muscle_dashboard`` at its run folder to
+watch the Ip curve build up live, or come back to it after the run ends:
+
+.. code-block:: bash
+
+    muscle_manager --start-all simple_1d_plot.ymmsl
+    muscle_dashboard <run folder>
+
+More complex configs combining several IDSs, machine description, and
+mixed plot types are in ``imas_muscle3/visualization/examples`` (e.g.
+``pds``, which also produces the recorded contour and profile plots shown
+via the same mechanism).

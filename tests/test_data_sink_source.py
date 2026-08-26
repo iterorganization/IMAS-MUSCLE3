@@ -117,6 +117,32 @@ settings:
     assert list(result.time) == [1]
 
 
+def test_source_with_dt(
+    muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
+) -> None:
+    source_uri = f"imas:hdf5?path={(tmp_path / 'source_data').absolute()}"
+    with DBEntry(source_uri, "w") as entry:
+        entry.put(core_profiles)
+
+    config = f"""
+ymmsl_version: v0.2
+programs:
+  source_component:
+    ports:
+      o_i: [core_profiles_out]
+    executable: python
+    args: -u -m imas_muscle3.actors.source_component
+settings:
+  source_component.source_uri: {source_uri}
+  source_component.dt: 0.5
+"""
+    tester = muscle3_tester.start_implementation(config, "source_component")
+
+    assert all(core_profiles.time == [0, 1, 2])
+    messages = receive_all(tester, "core_profiles_out")
+    assert [msg.timestamp for msg in messages] == [0, 0.5, 1, 1.5, 2]
+
+
 def test_non_iterative_source_with_time_range(
     muscle3_tester: MuscleTester, tmp_path: Path, core_profiles
 ) -> None:
