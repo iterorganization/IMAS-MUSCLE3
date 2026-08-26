@@ -2,6 +2,10 @@
 Example that plots the following:
 - First wall and divertor from machine description IDS.
 - Boundary outline from an equilibrium IDS
+
+The wall IDS isn't part of the recorded traffic: it's loaded on demand from
+the `md` setting (see `imas_muscle3.visualization.md_loader`) when a
+dashboard opens this recorder's tab.
 """
 
 import holoviews as hv
@@ -11,6 +15,7 @@ import xarray as xr
 
 from imas_muscle3.visualization.base_plotter import BasePlotter
 from imas_muscle3.visualization.base_state import BaseState
+from imas_muscle3.visualization.md_loader import init_state  # noqa: F401
 
 
 class State(BaseState):
