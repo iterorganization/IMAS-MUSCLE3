@@ -309,6 +309,7 @@ def muscled_source() -> None:
                 t_min=settings.t_min,
                 t_max=settings.t_max,
                 iterative=False,
+                dt=settings.dt,
             )
 
         if instance.should_save_final_snapshot():
@@ -370,6 +371,7 @@ def handle_source(
     t_max: Optional[float] = None,
     next_timestamp: Optional[float] = None,
     iterative: bool = True,
+    dt: Optional[float] = None,
 ) -> None:
     """Loop through source ids_names and send all outgoing messages"""
     if db_entry is None:
@@ -389,6 +391,15 @@ def handle_source(
             if t_min is None and t_max is None:
                 slice_out = db_entry.get(
                     ids_name=ids_name,
+                    occurrence=occ,
+                )
+            elif dt is not None:
+                slice_out = db_entry.get_sample(
+                    ids_name=ids_name,
+                    tmin=-1e20 if t_min is None else t_min,
+                    tmax=1e20 if t_max is None else t_max,
+                    dtime=dt,
+                    interpolation_method=interp_method,
                     occurrence=occ,
                 )
             else:
