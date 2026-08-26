@@ -19,6 +19,8 @@ Using IMAS-MUSCLE3
     :caption: Actors
     :maxdepth: 1
 
+    actor_source
+    actor_sink
     actor_sink_source
     actor_recorder
     actor_olc

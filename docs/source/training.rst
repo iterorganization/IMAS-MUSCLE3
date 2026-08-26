@@ -39,7 +39,7 @@ Exercise 1a: Setting Up Your First Recording
       We will start by running the recorder actor for a simple example configuration.
       First, create a yMMSL configuration file that sets up a simple recording pipeline with:
 
-      1. A :ref:`source actor <actor_sink_source>` that sends the equilibrium IDS
+      1. A :ref:`source actor <actor_source>` that sends the equilibrium IDS
       2. A :ref:`recorder actor <actor_recorder>` that receives and records the data.
 
       Use the following settings in the yMMSL:

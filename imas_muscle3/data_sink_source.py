@@ -16,6 +16,8 @@ Muscled data sink and/or source actor.
     source_uri: which db entry uri the data should be loaded from
     t_min: left boundary of loaded time range
     t_max: right boundary of loaded time range
+    dt: optional fixed time step, generates an evenly-spaced time array
+    instead of using the source IDS's native timestamps
     interpolation_method: which imas interpolation method to use for load,
     defaults to CLOSEST_INTERP
     dd_version: which IMAS DD version should be used
@@ -166,6 +168,10 @@ class SourceSettings:
     """Left boundary of loaded time range."""
     t_max: Optional[float]
     """Right boundary of loaded time range."""
+    dt: Optional[float]
+    """Optional fixed time step. When set, an evenly-spaced time array is
+    generated over the (t_min/t_max-bounded) source range instead of using
+    the source IDS's native timestamps."""
 
     @classmethod
     def from_instance(cls, instance: Instance) -> "SourceSettings":
@@ -176,6 +182,7 @@ class SourceSettings:
             interpolation_method=fix_interpolation_method(instance),
             t_min=get_setting_optional(instance, "t_min"),
             t_max=get_setting_optional(instance, "t_max"),
+            dt=get_setting_optional(instance, "dt"),
         )
 
 
@@ -470,6 +477,9 @@ def time_array_from_IDS(
             t_min = max(t_min, t_array[0])
             t_max = 1e20 if settings.t_max is None else settings.t_max
             t_max = min(t_max, t_array[-1])
+            if settings.dt is not None:
+                n_steps = int(round((t_max - t_min) / settings.dt))
+                return [t_min + i * settings.dt for i in range(n_steps + 1)]
             t_array = [t for t in t_array if t_min <= t <= t_max]
             return t_array
     raise ValueError("No IDS with valid time array found.")

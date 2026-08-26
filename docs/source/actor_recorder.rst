@@ -222,7 +222,7 @@ Example
 -------
 
 A minimal recorder that plots the plasma current (Ip) of an equilibrium
-IDS over time, via a :ref:`source actor <actor_sink_source>` sending live
+IDS over time, via a :ref:`source actor <actor_source>` sending live
 traffic:
 
 .. literalinclude:: ../../imas_muscle3/visualization/examples/simple_1d_plot/simple_1d_plot.ymmsl
