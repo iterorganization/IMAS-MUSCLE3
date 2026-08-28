@@ -129,30 +129,5 @@ programs:
         when config's State has no extract. Defaults to false.
       automatic_extract_fields: str Whitespace-separated dotted paths to
         restrict the recording to. Defaults to everything extracted.
-  visualization_component:
-    executable: {sys.executable}
-    args: -u -m imas_muscle3.actors.visualization_component
-    description: |
-      Live web-based visualization of the IDSs arriving on the S ports,
-      using Panel. Plotting logic comes from the `plot_file_path`
-      script, which supplies a State and a Plotter class. Ports are
-      named `<ids_name>_in` for timeslices and `<ids_name>_md_in` for
-      machine description IDSs. Still a prototype.
-    supported_settings:
-      plot_file_path: str Mandatory. Python script with the State and
-        Plotter classes defining the plotting logic.
-      port: int Port for the visualization server. Defaults to 0, a
-        random available port.
-      throttle_interval: float Minimum seconds between plot refreshes.
-        Defaults to 0.1.
-      keep_alive: bool Leave the server running after the last message,
-        instead of stopping it. Defaults to false.
-      open_browser: bool Open a browser tab on startup. Defaults to
-        true.
-      automatic_mode: bool Offer time-dependent quantities through a
-        dropdown, picking a plot automatically. Defaults to false.
-      automatic_extract_all: bool With automatic_mode, extract all
-        time-dependent quantities up front rather than on selection.
-        Costly for large IDSs. Defaults to false.
 """
 """yMMSL configuration for all actors exposed by IMAS-MUSCLE3."""
