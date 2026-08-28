@@ -40,12 +40,18 @@ pytest
 ```
 
 # How to use
-To add an actor to your MUSCLE3 workflow, add the following to the implementations in your ymmsl file:
+To add an actor to your MUSCLE3 workflow, import its implementation directly:
 
-```bash
-implementations:
-  *component_name*:
-    executable: python
-    args: -u -m imas_muscle3.actors.*component_name*
+```yaml
+ymmsl_version: v0.2
+imports:
+- from imas_muscle3 import implementation source_component
+models:
+  mymodel:
+    components:
+      mysource:
+        ports:
+          o_i: core_profiles_out
+        description: Core profiles source
+        implementation: source_component
 ```
-Check the actor specific documentation pages to find the relevant ports, settings, etc.
