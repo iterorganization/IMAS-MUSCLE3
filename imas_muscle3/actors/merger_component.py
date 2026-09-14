@@ -86,42 +86,21 @@ def check_time(ids_name: str, base: IDSToplevel, overlay: IDSToplevel) -> None:
         ("base", base, base_port(ids_name)),
         ("overlay", overlay, overlay_port(ids_name)),
     ):
-        homogeneous = int(ids.ids_properties.homogeneous_time)
-        if homogeneous != IDS_TIME_MODE_HOMOGENEOUS:
+        if ids.ids_properties.homogeneous_time != IDS_TIME_MODE_HOMOGENEOUS:
             raise RuntimeError(
                 f"merger: the {role} '{ids_name}' on '{port}' is not in "
-                "homogeneous time mode, so its root /time is not the time "
-                "base of its data. This actor merges homogeneous IDSs only."
+                "homogeneous time mode."
             )
 
-    base_time = np.asarray(base.time, dtype=float)
-    overlay_time = np.asarray(overlay.time, dtype=float)
-
-    if base_time.size == 0 or overlay_time.size == 0:
-        empty = "base" if base_time.size == 0 else "overlay"
+    if base.time.size == 0 or overlay.time.size == 0:
+        empty = "base" if base.time.size == 0 else "overlay"
         raise RuntimeError(
-            f"merger: the {empty} '{ids_name}' has an empty root /time; "
-            "there is no time base to merge on"
+            f"merger: the {empty} '{ids_name}' has an empty time node."
         )
 
-    if base_time.shape != overlay_time.shape:
+    if not np.array_equal(base.time, overlay.time):
         raise RuntimeError(
-            f"merger: '{ids_name}' base has {base_time.size} time step(s) "
-            f"({base_time[0]:g}..{base_time[-1]:g}), overlay has "
-            f"{overlay_time.size} "
-            f"({overlay_time[0]:g}..{overlay_time[-1]:g}). Both sides must "
-            "be on the same time base."
-        )
-
-    differing = np.flatnonzero(base_time != overlay_time)
-    if differing.size:
-        i = int(differing[0])
-        raise RuntimeError(
-            f"merger: '{ids_name}' the two time bases have "
-            f"{base_time.size} step(s) each but differ from step {i} on: "
-            f"base {float(base_time[i])!r} vs overlay "
-            f"{float(overlay_time[i])!r} ({differing.size} step(s) differ "
-            "in total)"
+            f"merger: the base and overlay '{ids_name}' are not on the same "
         )
 
 
