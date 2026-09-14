@@ -70,15 +70,6 @@ def active_ids_names(instance: Instance) -> List[str]:
     return active
 
 
-def deserialize(data: bytes, ids_name: str, port: str) -> IDSToplevel:
-    """The IDS carried by a message received on `port`."""
-    if data is None:
-        raise RuntimeError(
-            f"merger: no data received on '{port}': nothing to merge"
-        )
-    return ids_from_message(ids_name, data)
-
-
 def check_time(ids_name: str, base: IDSToplevel, overlay: IDSToplevel) -> None:
     """Refuse anything but two IDSs sharing one homogeneous time base."""
 
@@ -167,10 +158,17 @@ def main() -> None:
                     overlay_msg.timestamp,
                 )
 
-            base = deserialize(base_msg.data, ids_name, base_port(ids_name))
-            overlay = deserialize(
-                overlay_msg.data, ids_name, overlay_port(ids_name)
-            )
+            for msg, port in (
+                (base_msg, base_port(ids_name)),
+                (overlay_msg, overlay_port(ids_name)),
+            ):
+                if not msg.data:
+                    raise RuntimeError(
+                        f"merger: no data received on '{port}'. "
+                    )
+
+            base = ids_from_message(ids_name, base_msg.data)
+            overlay = ids_from_message(ids_name, overlay_msg.data)
 
             check_time(ids_name, base, overlay)
             merge(base, overlay, ids_name)
