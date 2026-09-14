@@ -1,0 +1,196 @@
+"""
+MUSCLE3 actor overlaying one IDS on top of another.
+
+Two IDSs of the same kind arrive per IDS name -- a base and an overlay --
+and the merged result goes out: every node the overlay has a value for is
+written over the base, and everything the overlay is silent about keeps the
+base's value. The two IDSs must already be on the same time base.
+"""
+
+import logging
+from typing import List
+
+import numpy as np
+from imas import IDSFactory
+from imas.ids_defs import IDS_TIME_MODE_HOMOGENEOUS
+from imas.ids_struct_array import IDSStructArray
+from imas.ids_structure import IDSStructure
+from imas.ids_toplevel import IDSToplevel
+from libmuscle import Instance, InstanceFlags, Message
+from ymmsl.v0_2 import Operator
+
+from imas_muscle3.utils import ids_from_message
+
+logger = logging.getLogger()
+
+IDS_NAMES = IDSFactory().ids_names()
+
+
+def base_port(ids_name: str) -> str:
+    return f"{ids_name}_base"
+
+
+def overlay_port(ids_name: str) -> str:
+    return f"{ids_name}_overlay"
+
+
+def out_port(ids_name: str) -> str:
+    return f"{ids_name}_out"
+
+
+def active_ids_names(instance: Instance) -> List[str]:
+    """The IDS names this instance is wired for. An IDS needs all three of its
+    ports connected.
+    """
+    active = []
+    for ids_name in IDS_NAMES:
+        ports = [
+            base_port(ids_name),
+            overlay_port(ids_name),
+            out_port(ids_name),
+        ]
+        connected = [p for p in ports if instance.is_connected(p)]
+        if not connected:
+            continue
+        if len(connected) != len(ports):
+            missing = [p for p in ports if p not in connected]
+            raise RuntimeError(
+                f"merger: '{ids_name}' is only half wired: "
+                f"{', '.join(connected)} connected, but "
+                f"{', '.join(missing)} not. Connect all three, or none."
+            )
+        active.append(ids_name)
+
+    if not active:
+        raise RuntimeError(
+            "merger: nothing is connected. Wire <ids_name>_base, "
+            "<ids_name>_overlay and <ids_name>_out for at least one IDS."
+        )
+    logger.info("merger: merging %s", ", ".join(active))
+    return active
+
+
+def check_time(ids_name: str, base: IDSToplevel, overlay: IDSToplevel) -> None:
+    """Refuse anything but two IDSs sharing one homogeneous time base."""
+
+    for role, ids, port in (
+        ("base", base, base_port(ids_name)),
+        ("overlay", overlay, overlay_port(ids_name)),
+    ):
+        if ids.ids_properties.homogeneous_time != IDS_TIME_MODE_HOMOGENEOUS:
+            raise RuntimeError(
+                f"merger: the {role} '{ids_name}' on '{port}' is not in "
+                "homogeneous time mode."
+            )
+
+    if base.time.size == 0 or overlay.time.size == 0:
+        empty = "base" if base.time.size == 0 else "overlay"
+        raise RuntimeError(
+            f"merger: the {empty} '{ids_name}' has an empty time node."
+        )
+
+    if not np.array_equal(base.time, overlay.time):
+        raise RuntimeError(
+            f"merger: the base and overlay '{ids_name}' are not on the same "
+        )
+
+
+def merge(base, overlay, ids_name: str, path: str = "") -> None:
+    """Write every filled node of `overlay` into `base`, in place."""
+
+    for child in overlay:
+        if not child.has_value:
+            continue
+        name = child.metadata.name
+        here = f"{path}/{name}" if path else name
+        target = base[name]
+
+        if isinstance(child, IDSStructArray):
+            if len(child) > len(target):
+                raise RuntimeError(
+                    f"merger: '{ids_name}' the overlay's {here} has "
+                    f"{len(child)} element(s) but the base's has "
+                    f"{len(target)}. Merging would have to invent the "
+                    "missing base elements, so it stops here instead: "
+                    "either have the base supply them, or take this IDS "
+                    "straight from its producer without merging."
+                )
+            for i, item in enumerate(child):
+                merge(target[i], item, ids_name, f"{here}({i + 1})")
+        elif isinstance(child, IDSStructure):
+            merge(target, child, ids_name, here)
+        else:
+            base[name] = child.value
+
+
+def main() -> None:
+    """Create instance and merge each overlay IDS onto its base IDS."""
+    logger.info("Starting merger actor")
+    instance = Instance(
+        {
+            Operator.F_INIT: [base_port(n) for n in IDS_NAMES]
+            + [overlay_port(n) for n in IDS_NAMES],
+            Operator.O_F: [out_port(n) for n in IDS_NAMES],
+        },
+        flags=InstanceFlags.KEEPS_NO_STATE_FOR_NEXT_USE,
+    )
+
+    while instance.reuse_instance():
+        ids_names = active_ids_names(instance)
+
+        received = {
+            ids_name: (
+                instance.receive(base_port(ids_name)),
+                instance.receive(overlay_port(ids_name)),
+            )
+            for ids_name in ids_names
+        }
+
+        for ids_name in ids_names:
+            base_msg, overlay_msg = received[ids_name]
+
+            if base_msg.timestamp != overlay_msg.timestamp:
+                logger.warning(
+                    "merger: '%s' base timestamp is at t=%s but overlay is at "
+                    "t=%s; sending the base's timestamp",
+                    ids_name,
+                    base_msg.timestamp,
+                    overlay_msg.timestamp,
+                )
+
+            for msg, port in (
+                (base_msg, base_port(ids_name)),
+                (overlay_msg, overlay_port(ids_name)),
+            ):
+                if not msg.data:
+                    raise RuntimeError(
+                        f"merger: no data received on '{port}'. "
+                    )
+
+            base = ids_from_message(ids_name, base_msg.data)
+            overlay = ids_from_message(ids_name, overlay_msg.data)
+
+            check_time(ids_name, base, overlay)
+            merge(base, overlay, ids_name)
+            logger.info(
+                "merger: merged '%s' on %d time step(s)",
+                ids_name,
+                np.asarray(base.time).size,
+            )
+
+            instance.send(
+                out_port(ids_name),
+                Message(
+                    base_msg.timestamp,
+                    base_msg.next_timestamp,
+                    base.serialize(),
+                ),
+            )
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+    )
+    main()

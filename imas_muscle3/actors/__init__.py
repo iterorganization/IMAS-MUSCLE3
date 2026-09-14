@@ -111,6 +111,14 @@ programs:
       `<ids_name>_out_i`. F_INIT takes precedence on O_F when both
       inputs are connected. Startup fails on an output without a
       matching input.
+  merger_component:
+    executable: {sys.executable}
+    args: -u -m imas_muscle3.actors.merger_component
+    description: |
+      Overlays one IDS on another and sends the result out: every node the
+      overlay has a value for is written over the base. Ports are named
+      `<ids_name>_base` and `<ids_name>_overlay` (F_INIT) and
+      `<ids_name>_out` (O_F).
   recorder_component:
     executable: {sys.executable}
     args: -u -m imas_muscle3.actors.recorder_component

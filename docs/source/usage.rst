@@ -27,3 +27,4 @@ Using IMAS-MUSCLE3
     actor_accumulator
     actor_iterator
     actor_passthrough
+    actor_merger
