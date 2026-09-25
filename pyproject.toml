@@ -87,6 +87,11 @@ linting = [
 [project.urls]
 homepage = "https://github.com/iterorganization/IMAS-MUSCLE3"
 
+# Make the actors importable in yMMSL files, e.g.
+# `from imas_muscle3.actors import implementation source_component`
+[project.entry-points."ymmsl.module"]
+"imas_muscle3.actors" = "imas_muscle3.programs:YMMSL_CONFIG"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["imas_muscle3*"]
