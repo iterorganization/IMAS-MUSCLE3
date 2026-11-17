@@ -153,7 +153,7 @@ models:
         description: recorder component
         implementation: recorder_component
         ports:
-          s: [equilibrium_in, core_profiles_in]
+          f_init: [equilibrium_in, core_profiles_in]
     conduits:
       eq_source.equilibrium_out: rec.equilibrium_in
       cp_source.core_profiles_out: rec.core_profiles_in
@@ -235,7 +235,7 @@ models:
         description: recorder component
         implementation: recorder_component
         ports:
-          s: [equilibrium_in]
+          f_init: [equilibrium_in]
     conduits:
       eq_source.equilibrium_out: rec.equilibrium_in
 settings:
@@ -323,7 +323,7 @@ models:
         description: recorder component
         implementation: recorder_component
         ports:
-          s: [equilibrium_in]
+          f_init: [equilibrium_in]
     conduits:
       eq_source.equilibrium_out: rec.equilibrium_in
 settings:

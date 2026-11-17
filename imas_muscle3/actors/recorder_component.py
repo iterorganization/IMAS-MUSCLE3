@@ -3,7 +3,7 @@
 received IDS to a live-tailable Zarr store, one per occurrence.
 
 See :doc:`/actor_recorder` for usage. All the MUSCLE3 wiring (settings,
-checkpoint/resume, multi-port draining) is domain-agnostic and lives in
+checkpoint/resume, end-of-stream) is domain-agnostic and lives in
 :func:`muscle3_dashboard.recorder.actor.run_recorder_actor`; this module
 supplies only the IMAS-specific piece, deserializing each port's raw bytes
 into the IDS its name identifies.

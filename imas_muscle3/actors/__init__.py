@@ -116,10 +116,12 @@ programs:
     args: -u -m imas_muscle3.actors.recorder_component
     description: |
       Sink-only tap on the live traffic of a running workflow: wire it
-      as an extra receiver on existing conduits. Each connected S port,
-      named `<ids_name>_in`, is an independent timeline, recorded to a
+      as an extra receiver on existing conduits. Each connected F_INIT
+      port, named `<ids_name>_in`, is a timeline, recorded to a
       live-tailable Zarr store at
-      `<store_path>/<port>/<iteration_number>.zarr`.
+      `<store_path>/<port>/<iteration_number>.zarr`. Every reuse
+      iteration receives one message per port, so all ports must receive
+      the same number of messages.
     supported_settings:
       config: str Mandatory. Python file defining the extraction, as an
         extract function or a State class.
@@ -129,5 +131,8 @@ programs:
         when config's State has no extract. Defaults to false.
       automatic_extract_fields: str Whitespace-separated dotted paths to
         restrict the recording to. Defaults to everything extracted.
+      record_interval: float Minimum simulation time between recorded
+        messages; the first and last message of each occurrence are
+        always recorded. Defaults to 0, recording every message.
 """
 """yMMSL configuration for all actors exposed by IMAS-MUSCLE3."""
