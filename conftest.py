@@ -8,6 +8,7 @@ from imas.ids_defs import CLOSEST_INTERP
 from libmuscle import Message
 
 DD_VERSION = "4.0.0"
+TIMEOUT = 30
 
 
 @pytest.fixture

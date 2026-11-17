@@ -3,7 +3,7 @@ import pytest
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
-from conftest import DD_VERSION, slice_messages
+from conftest import DD_VERSION, TIMEOUT, slice_messages
 from imas_muscle3.actors.passthrough_component import _validate_ports
 
 CONFIG = """
@@ -32,6 +32,7 @@ def _start(muscle3_tester: MuscleTester, **ports) -> MuscleTester:
             o_i_ports=ports.get("o_i", ""),
         ),
         "passthrough",
+        default_timeout=TIMEOUT,
     )
 
 

@@ -5,7 +5,7 @@ from imas import DBEntry
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
-from conftest import deserialize, receive_all
+from conftest import TIMEOUT, deserialize, receive_all
 from imas_muscle3.actors.iterator_component import (
     IteratorSettings,
     determine_t_array,
@@ -51,7 +51,9 @@ programs:
 settings:
   {setting_line}
 """
-    return muscle3_tester.start_implementation(config, "iterator")
+    return muscle3_tester.start_implementation(
+        config, "iterator", default_timeout=TIMEOUT
+    )
 
 
 def test_time_source_ids(
@@ -95,7 +97,9 @@ def test_n_timeslices(
 def test_auto_infers_time_source_ids_with_single_connected_ids(
     muscle3_tester: MuscleTester, equilibrium
 ) -> None:
-    tester = muscle3_tester.start_implementation(SINGLE_IDS_CONFIG, "iterator")
+    tester = muscle3_tester.start_implementation(
+        SINGLE_IDS_CONFIG, "iterator", default_timeout=TIMEOUT
+    )
     tester.send("equilibrium_in", Message(0.0, data=equilibrium.serialize()))
 
     messages = receive_all(tester, "equilibrium_out")

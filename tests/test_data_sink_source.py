@@ -7,7 +7,7 @@ from libmuscle.manager.manager import Manager
 from libmuscle.manager.run_dir import RunDir
 from libmuscle.pytest import MuscleTester
 
-from conftest import deserialize, receive_all, slice_messages
+from conftest import TIMEOUT, deserialize, receive_all, slice_messages
 
 
 def test_source_sends_all_slices(
@@ -28,7 +28,9 @@ programs:
 settings:
   source_component.source_uri: {source_uri}
 """
-    tester = muscle3_tester.start_implementation(config, "source_component")
+    tester = muscle3_tester.start_implementation(
+        config, "source_component", default_timeout=TIMEOUT
+    )
 
     messages = receive_all(tester, "core_profiles_out")
     received_times = [msg.timestamp for msg in messages]
@@ -66,7 +68,9 @@ settings:
   hybrid_component.source_uri: {hybrid_source_uri}
 {sink_setting}
 """
-    tester = muscle3_tester.start_implementation(config, "hybrid_component")
+    tester = muscle3_tester.start_implementation(
+        config, "hybrid_component", default_timeout=TIMEOUT
+    )
 
     for msg in slice_messages(core_profiles, "core_profiles"):
         tester.send("core_profiles_in", msg)
@@ -108,7 +112,9 @@ settings:
   source_component.t_min: 0.5
   source_component.t_max: 1.5
 """
-    tester = muscle3_tester.start_implementation(config, "source_component")
+    tester = muscle3_tester.start_implementation(
+        config, "source_component", default_timeout=TIMEOUT
+    )
 
     assert all(core_profiles.time == [0, 1, 2])
     messages = receive_all(tester, "core_profiles_out")
@@ -136,7 +142,9 @@ settings:
   source_component.source_uri: {source_uri}
   source_component.dt: 0.5
 """
-    tester = muscle3_tester.start_implementation(config, "source_component")
+    tester = muscle3_tester.start_implementation(
+        config, "source_component", default_timeout=TIMEOUT
+    )
 
     assert all(core_profiles.time == [0, 1, 2])
     messages = receive_all(tester, "core_profiles_out")
@@ -164,7 +172,9 @@ settings:
   source_component.t_min: 0.5
   source_component.t_max: 2.5
 """
-    tester = muscle3_tester.start_implementation(config, "source_component")
+    tester = muscle3_tester.start_implementation(
+        config, "source_component", default_timeout=TIMEOUT
+    )
 
     assert all(core_profiles.time == [0, 1, 2])
     messages = receive_all(tester, "core_profiles_out")
@@ -196,7 +206,9 @@ programs:
 settings:
   source_component.source_uri: {source_uri}
 """
-    tester = muscle3_tester.start_implementation(config, "source_component")
+    tester = muscle3_tester.start_implementation(
+        config, "source_component", default_timeout=TIMEOUT
+    )
 
     assert all(pf_active.time == [0, 1, 2])
     pf_messages = receive_all(tester, "pf_active_out")
@@ -311,7 +323,9 @@ settings:
   sink_component.sink_uri: {sink_uri}
   sink_component.sink_mode: x
 """
-    tester = muscle3_tester.start_implementation(config, "sink_component")
+    tester = muscle3_tester.start_implementation(
+        config, "sink_component", default_timeout=TIMEOUT
+    )
 
     for msg in slice_messages(core_profiles, "core_profiles"):
         tester.send("core_profiles_in", msg)

@@ -3,7 +3,7 @@ import pytest
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
-from conftest import DD_VERSION, slice_messages
+from conftest import DD_VERSION, TIMEOUT, slice_messages
 
 CONFIG = """
 ymmsl_version: v0.2
@@ -37,7 +37,9 @@ def test_accumulator(
     if use_t_next:
         s_ports += ", t_next"
     tester = muscle3_tester.start_implementation(
-        CONFIG.format(s_ports=s_ports), "accumulator"
+        CONFIG.format(s_ports=s_ports),
+        "accumulator",
+        default_timeout=TIMEOUT,
     )
 
     cp_messages = slice_messages(core_profiles, "core_profiles")
