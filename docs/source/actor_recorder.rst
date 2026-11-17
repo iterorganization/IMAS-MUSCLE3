@@ -55,6 +55,11 @@ Available Settings
     (``<ids_name>/<path>``, or the config's own keys) to restrict the
     recording to. Works with any config, not just an ``automatic_extract``
     one; default: keep everything the config extracts.
+  - **record_interval** (float): minimum simulation time between recorded
+    messages. Messages in between are received but not extracted or written,
+    trading time resolution for less recording overhead. The first and last
+    message of each occurrence are always recorded. Default: ``0``, record
+    every message.
 
 Available Ports
 ---------------
@@ -179,6 +184,24 @@ On startup the recorder copies the config file next to the data
 these stores prefers this snapshot over the run's ``<rec>.config`` setting,
 so a recorded run keeps plotting with the exact code that produced it even
 after the original file is edited.
+
+**Recording interval**
+
+Extracting and writing every message can slow down a workflow with many
+short time steps. ``record_interval`` thins out the recording: a message is
+only recorded once at least ``record_interval`` of simulation time has
+passed since the last recorded one. The skipped messages are still
+received, so the senders are never held up, but are not deserialized,
+extracted or written.
+
+.. code-block:: yaml
+
+    settings:
+      rec.config: /path/to/plot_file.py
+      rec.record_interval: 0.5  # record at most every 0.5 s of simulation time
+
+The first and last message of each occurrence are always recorded, so the
+initial and final states are kept regardless of the interval.
 
 Machine description
 --------------------

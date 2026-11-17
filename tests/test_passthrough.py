@@ -3,7 +3,7 @@ import pytest
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
-from conftest import slice_messages
+from conftest import DD_VERSION, slice_messages
 from imas_muscle3.actors.passthrough_component import _validate_ports
 
 CONFIG = """
@@ -36,7 +36,7 @@ def _start(muscle3_tester: MuscleTester, **ports) -> MuscleTester:
 
 
 def _equilibrium(times):
-    eq = imas.IDSFactory("4.0.0").equilibrium()
+    eq = imas.IDSFactory(DD_VERSION).equilibrium()
     eq.ids_properties.homogeneous_time = 0
     eq.time = times
     eq.time_slice.resize(len(times))

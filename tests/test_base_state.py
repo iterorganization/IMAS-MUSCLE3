@@ -5,11 +5,13 @@ import imas
 import numpy as np
 import pytest
 
+from conftest import DD_VERSION
+
 
 def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
     """Create a single-time-slice equilibrium IDS with all fields required
     by pds.py."""
-    eq = imas.IDSFactory("4.0.0").equilibrium()
+    eq = imas.IDSFactory(DD_VERSION).equilibrium()
     eq.ids_properties.homogeneous_time = 0
     eq.time = [t]
     eq.time_slice.resize(1)
@@ -49,7 +51,7 @@ def _make_pds_equilibrium_slice(t, n_points=5, n_profile=10):
 def _make_pds_pf_active_slice(t, n_coils=3):
     """Create a single-time-slice pf_active IDS with all fields required
     by pds.py."""
-    pfa = imas.IDSFactory("4.0.0").pf_active()
+    pfa = imas.IDSFactory(DD_VERSION).pf_active()
     pfa.ids_properties.homogeneous_time = 0
     pfa.time = [t]
     pfa.coil.resize(n_coils)

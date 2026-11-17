@@ -3,7 +3,7 @@ import pytest
 from libmuscle import Message
 from libmuscle.pytest import MuscleTester
 
-from conftest import slice_messages
+from conftest import DD_VERSION, slice_messages
 
 CONFIG = """
 ymmsl_version: v0.2
@@ -54,11 +54,11 @@ def test_accumulator(
             tester.send("t_next", Message(float(i), next_timestamp=next_t))
 
     cp_reply = tester.receive("core_profiles_out")
-    cp_result = imas.IDSFactory("4.0.0").core_profiles()
+    cp_result = imas.IDSFactory(DD_VERSION).core_profiles()
     cp_result.deserialize(cp_reply.data)
     assert all(cp_result.time == core_profiles.time)
 
     eq_reply = tester.receive("equilibrium_out")
-    eq_result = imas.IDSFactory("4.0.0").equilibrium()
+    eq_result = imas.IDSFactory(DD_VERSION).equilibrium()
     eq_result.deserialize(eq_reply.data)
     assert all(eq_result.time == equilibrium.time)

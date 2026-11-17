@@ -102,6 +102,7 @@ def test_recorder_state_roundtrip_resumes_same_occurrence(
         "last_time": 0.0,
         "prev_ended": False,
         "is_open": True,
+        "last_recorded": 0.0,
     }
 
     # A new process would build a fresh Recorder and restore its state.

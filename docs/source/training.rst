@@ -307,6 +307,7 @@ Exercise 2: Using Automatic Extraction
       - No fine grain control over what gets extracted
       - Unable to combine or derive data across quantities
       - Recording everything discoverable can be slow and memory-heavy
+        (``rec.record_interval`` can help by recording fewer time points)
 
       Repeat exercise 1a, but this time use a bare config file and add the
       following settings to the yMMSL:
