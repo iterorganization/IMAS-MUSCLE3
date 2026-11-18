@@ -116,7 +116,7 @@ Exercise 1b: Understanding the Basic Structure
       The ``State`` class **must** implement the ``extract(self, ids)`` method.
       The ``extract`` method for this example case:
 
-      - handles every IDS the recorder receives on its S port, one at a time. So first it checks if the incoming IDS is an equilibrium IDS.
+      - handles every IDS the recorder receives on its F_INIT ports, one at a time. So first it checks if the incoming IDS is an equilibrium IDS.
       - Extracts the plasma current of the time slice (``ids.time_slice[0].global_quantities.ip``) and
         its corresponding time value (``ids.time[0]``), and stores it in an Xarray dataset.
       - Either stores the first Xarray dataset entry in ``self.data`` or appends it to the existing Xarray dataset.
@@ -307,6 +307,7 @@ Exercise 2: Using Automatic Extraction
       - No fine grain control over what gets extracted
       - Unable to combine or derive data across quantities
       - Recording everything discoverable can be slow and memory-heavy
+        (``rec.record_interval`` can help by recording fewer time points)
 
       Repeat exercise 1a, but this time use a bare config file and add the
       following settings to the yMMSL:
@@ -380,7 +381,7 @@ Exercise 4: Loading Machine Descriptions
       - The plasma boundary outline (from the `equilibrium` IDS) as it changes over time.
       - The tokamak first wall and divertor (from the `wall` machine description IDS).
 
-      Unlike the live traffic on the recorder's ``S`` port, machine description
+      Unlike the live traffic on the recorder's ``F_INIT`` ports, machine description
       isn't streamed through MUSCLE3 at all: it's loaded on demand, straight from
       an IMAS URI, when a dashboard opens the recorder's tab. Add
       ``imas_muscle3.visualization.md_loader.init_state`` to your config file and

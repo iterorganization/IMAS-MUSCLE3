@@ -9,7 +9,7 @@ model:
     recorder:
       implementation: recorder
       ports:
-        s: [equilibrium_in]
+        f_init: [equilibrium_in]
   conduits:
     source_component.equilibrium_out: recorder.equilibrium_in
 settings:

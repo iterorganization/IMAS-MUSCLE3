@@ -7,10 +7,13 @@ from imas import DBEntry
 from imas.ids_defs import CLOSEST_INTERP
 from libmuscle import Message
 
+DD_VERSION = "4.0.0"
+TIMEOUT = 30
+
 
 @pytest.fixture
 def core_profiles():
-    cp = imas.IDSFactory("4.0.0").core_profiles()
+    cp = imas.IDSFactory(DD_VERSION).core_profiles()
     # Fill some properties:
     cp.ids_properties.homogeneous_time = 0  # INT_0D
     cp.ids_properties.comment = "Comment"  # STR_0D
@@ -47,7 +50,7 @@ def core_profiles():
 
 @pytest.fixture
 def equilibrium():
-    eq = imas.IDSFactory("4.0.0").equilibrium()
+    eq = imas.IDSFactory(DD_VERSION).equilibrium()
     # Fill some properties:
     eq.ids_properties.homogeneous_time = 0  # INT_0D
     eq.time = [0.0, 1.0, 2.0]
@@ -60,7 +63,7 @@ def equilibrium():
 
 @pytest.fixture
 def iron_core():
-    iron_core = imas.IDSFactory("4.0.0").iron_core()
+    iron_core = imas.IDSFactory(DD_VERSION).iron_core()
     iron_core.ids_properties.homogeneous_time = 0  # INT_0D
     iron_core.time = []
     return iron_core
@@ -68,14 +71,14 @@ def iron_core():
 
 @pytest.fixture
 def pf_active():
-    pfa = imas.IDSFactory("4.0.0").pf_active()
+    pfa = imas.IDSFactory(DD_VERSION).pf_active()
     pfa.ids_properties.homogeneous_time = 0  # INT_0D
     pfa.time = [0.0, 1.0, 2.0]
     return pfa
 
 
 def deserialize(ids_name: str, data: bytes) -> imas.ids_toplevel.IDSToplevel:
-    ids = imas.IDSFactory("4.0.0").new(ids_name)
+    ids = imas.IDSFactory(DD_VERSION).new(ids_name)
     ids.deserialize(data)
     return ids
 

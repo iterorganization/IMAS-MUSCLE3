@@ -16,8 +16,12 @@ the workflow's own coupling.
 
 Under the hood, it's a terminal (sink-only) actor: wire it as an extra
 receiver on existing conduits and it taps the traffic passing through them.
-Every connected ``S`` port is an independent timeline, its name the IDS it
-carries (an optional ``_in`` suffix is stripped). Each received IDS is
+Every connected ``F_INIT`` port is a timeline, its name the IDS it carries
+(an optional ``_in`` suffix is stripped). Each reuse iteration of the
+recorder receives one message on every port, and the recorder stops by
+itself once the senders close their ports. All ports of one recorder
+therefore advance together and must receive the same number of messages:
+record senders that run at different rates with one recorder each. Each received IDS is
 reduced to plot-ready ``xarray`` datasets by the ``config`` file and appended
 to a Zarr store that can be read back — also mid-run, for live views. Each
 outer-loop iteration gets its own store:
@@ -29,7 +33,7 @@ outer-loop iteration gets its own store:
       rec:
         implementation: recorder
         ports:
-          s: [equilibrium_in, pf_active_in]
+          f_init: [equilibrium_in, pf_active_in]
     settings:
       rec.config: /path/to/plot_file.py
     implementations:
@@ -55,11 +59,21 @@ Available Settings
     (``<ids_name>/<path>``, or the config's own keys) to restrict the
     recording to. Works with any config, not just an ``automatic_extract``
     one; default: keep everything the config extracts.
+  - **record_interval** (float): minimum simulation time between recorded
+    messages. Messages in between are received but not extracted or written,
+    trading time resolution for less recording overhead. The first and last
+    message of each occurrence are always recorded. Default: ``0``, record
+    every message.
 
 Available Ports
 ---------------
 
-  - **<ids_name>_in (S)**: Any incoming IDS's on the S port. Replace <ids_name> with the required ids i.e. equilibrium_in.
+  - **<ids_name>_in (F_INIT)**: Any incoming IDS's on the F_INIT port. Replace <ids_name> with the required ids i.e. equilibrium_in.
+
+.. note::
+
+   Earlier versions received on ``S`` ports. A recorder wired with ``s:``
+   ports now stops with an error; change them to ``f_init:``.
 
 Config file
 -----------
@@ -157,7 +171,7 @@ A few simple cases:
       rec:
         implementation: recorder
         ports:
-          s: [pf_active_in]
+          f_init: [pf_active_in]
     settings:
       rec.automatic_extract: true
 
@@ -180,11 +194,29 @@ these stores prefers this snapshot over the run's ``<rec>.config`` setting,
 so a recorded run keeps plotting with the exact code that produced it even
 after the original file is edited.
 
+**Recording interval**
+
+Extracting and writing every message can slow down a workflow with many
+short time steps. ``record_interval`` thins out the recording: a message is
+only recorded once at least ``record_interval`` of simulation time has
+passed since the last recorded one. The skipped messages are still
+received, so the senders are never held up, but are not deserialized,
+extracted or written.
+
+.. code-block:: yaml
+
+    settings:
+      rec.config: /path/to/plot_file.py
+      rec.record_interval: 0.5  # record at most every 0.5 s of simulation time
+
+The first and last message of each occurrence are always recorded, so the
+initial and final states are kept regardless of the interval.
+
 Machine description
 --------------------
 
 Static machine description IDSs (e.g. ``wall``, ``pf_active`` geometry)
-aren't part of a workflow's live traffic, so there's no ``S`` port for
+aren't part of a workflow's live traffic, so there's no ``F_INIT`` port for
 them. Instead, a plot file that needs one defines a module-level
 ``init_state(settings) -> dict`` hook; a dashboard opening this recorder's
 tab calls it with the recorder's own ``<rec>.*`` settings (prefix
